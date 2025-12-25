@@ -1,0 +1,217 @@
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Accessibility Buddy</title>
+    <style>
+        /* Skip to main content link */
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            background: #0066cc;
+            color: white;
+            padding: 8px;
+            text-decoration: none;
+            z-index: 100;
+            font-weight: bold;
+        }
+        .skip-link:focus {
+            top: 0;
+            outline: 3px solid #ffdd00;
+            outline-offset: 2px;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+            line-height: 1.5;
+        }
+        /* Focus indicators for better keyboard navigation */
+        a:focus, button:focus {
+            outline: 3px solid #0066cc;
+            outline-offset: 2px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #0066cc;
+            margin-top: 30px;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 2px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        .summary {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-left: 4px solid #0066cc;
+            margin-bottom: 30px;
+        }
+        .image-preview {
+            max-width: 400px;
+            max-height: 200px;
+            height: auto;
+            display: block;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .image-card {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .image-card h2 {
+            color: #0066cc;
+            margin-top: 0;
+            font-size: 1.3em;
+        }
+        .field {
+            margin-bottom: 15px;
+        }
+        .field-label {
+            font-weight: bold;
+            color: #666;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .field-value {
+            color: #333;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-left: 3px solid #0066cc;
+        }
+        .image-type {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+        .type-informative {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .type-decorative {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .type-functional {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        .type-generation_error {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .alt-text {
+            font-size: 1.1em;
+            font-style: italic;
+        }
+        .context-text {
+            font-size: 0.9em;
+            color: #555;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .error {
+            color: #721c24;
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #f5c6cb;
+        }
+        .stats-section {
+            margin: 20px 0;
+        }
+        .stats-section h3 {
+            color: #0066cc;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .stat-item {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #0066cc;
+        }
+        .stat-label {
+            font-weight: bold;
+            color: #666;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 1.3em;
+            color: #333;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .image-card {
+                padding: 15px;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <header class="header">
+        <h1>My Accessibility Buddy - Alt-Text Report</h1>
+        {LOGO_HTML}
+        <p style="text-align: left; max-width: 800px; margin: 20px auto; line-height: 1.6;">
+            MyAccessibilityBuddy is an AI-powered tool for generating WCAG 2.2 compliant alternative text for web images. It supports 24 EU languages with several LLMs: OpenAI GPT-4o, ECB-LLM like GPT-4o and GPT-5.1.
+        </p>
+        <p style="text-align: left; max-width: 800px; margin: 20px auto; padding: 10px; background-color: #fff3cd; border-left: 4px solid #ffc107; line-height: 1.6;">
+            ⚠️ <strong>For testing purposes only:</strong> Use with non confidential images. Avoid uploading personal or sensitive data. AI suggestions require human review before use. ⚠️
+        </p>
+    </header>
+    <main id="main-content">
+    <h2>Summary</h2>
+    <section class="summary" role="region" aria-label="Summary">
+{IMAGE_ANALYSIS_OVERVIEW_HTML}
+        {PAGE_TITLE_HTML}
+        {SOURCE_URL_HTML}
+        <p><strong>AI Model:</strong> {AI_PROVIDER} - {AI_MODEL}</p>
+        <p><strong>Translation Method:</strong> {TRANSLATION_METHOD_TEXT}</p>
+        <p><strong>Total Images Analyzed:</strong> {TOTAL_IMAGES}</p>
+        <p><strong>Total Processing Time:</strong> {TOTAL_PROCESSING_TIME} seconds</p>
+        <p><strong>Generated:</strong> {GENERATION_TIMESTAMP}</p>
+    </section>
+
+    <h2>Detailed Analysis</h2>
+{IMAGE_CARDS_HTML}
+    </main>
+
+
+</body></html>

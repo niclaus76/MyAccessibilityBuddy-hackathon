@@ -1,0 +1,595 @@
+"""
+FastAPI application for AutoAltText.
+
+Provides REST API endpoints for alt-text generation.
+"""
+
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
+from pydantic import BaseModel
+from typing import Optional, List
+import tempfile
+import os
+from pathlib import Path
+from datetime import datetime, timedelta
+import uuid
+import secrets
+from urllib.parse import urlencode
+
+# Import from the app module
+from app import (
+    analyze_image_with_openai,
+    load_and_merge_prompts,
+    load_config,
+    get_absolute_folder_path
+)
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="MyAccessibilityBuddy API",
+    description="WCAG 2.2 compliant alt-text generation API",
+    version="5.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
+)
+
+# Configure CORS to allow frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Load configuration on startup
+@app.on_event("startup")
+async def startup_event():
+    """Load configuration when API starts."""
+    load_config()
+
+
+# In-memory session storage for U2A credentials
+# In production, use Redis or a proper session store
+USER_SESSIONS = {}
+
+# OAuth2 state storage (for CSRF protection)
+# Maps state string -> session_id
+OAUTH_STATES = {}
+
+# Response models
+class AltTextResponse(BaseModel):
+    """Response model for alt-text generation."""
+    success: bool
+    alt_text: str
+    image_type: str
+    reasoning: Optional[str] = None
+    character_count: int
+    language: str
+    error: Optional[str] = None
+
+
+class HealthResponse(BaseModel):
+    """Response model for health check."""
+    status: str
+    version: str
+    llm_provider: str
+    service: str
+
+
+class AuthStatusResponse(BaseModel):
+    """Response model for auth status check."""
+    authenticated: bool
+    requires_u2a: bool
+    has_credentials: bool
+    login_url: Optional[str] = None
+
+
+# API Endpoints
+
+@app.get("/api/auth/status", response_model=AuthStatusResponse)
+async def auth_status(request: Request):
+    """
+    Check authentication status.
+
+    Returns:
+        AuthStatusResponse: Current authentication status
+    """
+    from config import settings
+
+    llm_provider = settings.get("llm_provider", "OpenAI")
+
+    # ECB-LLM uses CredentialManager for U2A authentication (no browser redirect needed)
+    # OpenAI uses API key
+    # Both are handled automatically by the backend, so no user action needed in Web UI
+    requires_u2a = False
+    has_credentials = True  # Backend handles authentication automatically
+    login_url = None
+
+    return AuthStatusResponse(
+        authenticated=True,
+        requires_u2a=requires_u2a,
+        has_credentials=has_credentials,
+        login_url=login_url
+    )
+
+
+@app.get("/api/auth/redirect")
+async def auth_redirect():
+    """
+    Initiate OAuth2 authorization code flow by redirecting to ECB login.
+
+    This endpoint:
+    1. Generates a random state for CSRF protection
+    2. Builds the OAuth2 authorization URL with required parameters
+    3. Redirects the user to ECB's login page
+    """
+    from config import settings
+
+    # Get OAuth2 configuration
+    ecb_llm_config = settings.get("ecb_llm", {})
+    authorize_url = ecb_llm_config.get("authorize_url")
+    client_id = os.environ.get('CLIENT_ID_U2A')
+
+    if not authorize_url or not client_id:
+        raise HTTPException(
+            status_code=500,
+            detail="OAuth2 configuration incomplete - missing authorize_url or client_id"
+        )
+
+    # Generate state for CSRF protection
+    state = secrets.token_urlsafe(32)
+
+    # Create temporary session
+    session_id = str(uuid.uuid4())
+    OAUTH_STATES[state] = {
+        "session_id": session_id,
+        "created_at": datetime.now()
+    }
+
+    # Clean up old states (older than 10 minutes)
+    cutoff_time = datetime.now() - timedelta(minutes=10)
+    expired_states = [
+        s for s, data in OAUTH_STATES.items()
+        if data["created_at"] < cutoff_time
+    ]
+    for s in expired_states:
+        del OAUTH_STATES[s]
+
+    # Build OAuth2 authorization URL
+    # Note: The callback URL must match what's registered in the ECB OAuth2 application
+    params = {
+        "client_id": client_id,
+        "response_type": "code",
+        "redirect_uri": "http://localhost:3001/callback",
+        "scope": ecb_llm_config.get("scope", "exdi-default.read"),
+        "state": state
+    }
+
+    auth_url = f"{authorize_url}?{urlencode(params)}"
+
+    return RedirectResponse(url=auth_url)
+
+
+@app.get("/callback")
+@app.get("/api/auth/callback")
+async def auth_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    """
+    OAuth2 callback endpoint that receives the authorization code.
+
+    This endpoint:
+    1. Validates the state parameter (CSRF protection)
+    2. Exchanges the authorization code for an access token
+    3. Stores the credentials in the session
+    4. Redirects back to the frontend
+
+    Args:
+        code: Authorization code from OAuth2 provider
+        state: State parameter for CSRF validation
+        error: Error message if authentication failed
+    """
+    import requests
+    import urllib3
+    from config import settings
+
+    # Disable SSL warnings for self-signed certificates
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    # Check for OAuth2 errors
+    if error:
+        return HTMLResponse(
+            content=f"""
+            <html>
+            <head><title>Authentication Failed</title></head>
+            <body>
+                <h1>Authentication Failed</h1>
+                <p>Error: {error}</p>
+                <p><a href="file:///home/developer/AutoAltText/frontend/home.html">Return to application</a></p>
+            </body>
+            </html>
+            """,
+            status_code=400
+        )
+
+    # Validate required parameters
+    if not code or not state:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing required parameters (code or state)"
+        )
+
+    # Validate state (CSRF protection)
+    if state not in OAUTH_STATES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid state parameter"
+        )
+
+    state_data = OAUTH_STATES[state]
+    session_id = state_data["session_id"]
+
+    # Clean up used state
+    del OAUTH_STATES[state]
+
+    try:
+        # Exchange authorization code for access token
+        ecb_llm_config = settings.get("ecb_llm", {})
+        token_url = ecb_llm_config.get("token_url")
+        client_id = os.environ.get('CLIENT_ID_U2A')
+        client_secret = os.environ.get('CLIENT_SECRET_U2A')
+
+        if not token_url or not client_id or not client_secret:
+            raise HTTPException(
+                status_code=500,
+                detail="OAuth2 configuration incomplete"
+            )
+
+        # Token exchange request
+        token_data = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "http://localhost:3001/callback",
+            "client_id": client_id,
+            "client_secret": client_secret
+        }
+
+        response = requests.post(
+            token_url,
+            data=token_data,
+            timeout=30,
+            verify=False  # Disable SSL verification for self-signed certs
+        )
+
+        if response.status_code != 200:
+            return HTMLResponse(
+                content=f"""
+                <html>
+                <head><title>Token Exchange Failed</title></head>
+                <body>
+                    <h1>Token Exchange Failed</h1>
+                    <p>Could not exchange authorization code for access token.</p>
+                    <p>Status: {response.status_code}</p>
+                    <p><a href="file:///home/developer/AutoAltText/frontend/home.html">Return to application</a></p>
+                </body>
+                </html>
+                """,
+                status_code=400
+            )
+
+        token_response = response.json()
+        access_token = token_response.get("access_token")
+        refresh_token = token_response.get("refresh_token")
+
+        if not access_token:
+            raise HTTPException(
+                status_code=500,
+                detail="No access token received"
+            )
+
+        # Store tokens in session
+        USER_SESSIONS[session_id] = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "created_at": datetime.now(),
+            "auth_method": "oauth2"
+        }
+
+        # Return HTML that sets cookie and redirects to frontend
+        html_content = f"""
+        <html>
+        <head>
+            <title>Authentication Successful</title>
+            <script>
+                // Set cookie
+                document.cookie = "session_id={session_id}; path=/; max-age=3600; SameSite=Lax";
+
+                // Redirect to frontend
+                setTimeout(function() {{
+                    window.location.href = "file:///home/developer/AutoAltText/frontend/home.html";
+                }}, 1000);
+            </script>
+        </head>
+        <body>
+            <h1>Authentication Successful!</h1>
+            <p>Redirecting to application...</p>
+            <p>If not redirected, <a href="file:///home/developer/AutoAltText/frontend/home.html">click here</a></p>
+        </body>
+        </html>
+        """
+
+        response = HTMLResponse(content=html_content)
+        response.set_cookie(
+            key="session_id",
+            value=session_id,
+            max_age=3600,
+            httponly=True,
+            samesite="lax",
+            domain="localhost"  # Allow cookie to work across both ports 8000 and 3001
+        )
+
+        return response
+
+    except requests.RequestException as e:
+        return HTMLResponse(
+            content=f"""
+            <html>
+            <head><title>Authentication Error</title></head>
+            <body>
+                <h1>Authentication Error</h1>
+                <p>Error communicating with authentication server: {str(e)}</p>
+                <p><a href="file:///home/developer/AutoAltText/frontend/home.html">Return to application</a></p>
+            </body>
+            </html>
+            """,
+            status_code=500
+        )
+    except Exception as e:
+        return HTMLResponse(
+            content=f"""
+            <html>
+            <head><title>Unexpected Error</title></head>
+            <body>
+                <h1>Unexpected Error</h1>
+                <p>An unexpected error occurred: {str(e)}</p>
+                <p><a href="file:///home/developer/AutoAltText/frontend/home.html">Return to application</a></p>
+            </body>
+            </html>
+            """,
+            status_code=500
+        )
+
+
+@app.get("/api/health", response_model=HealthResponse)
+async def health_check():
+    """
+    Health check endpoint.
+
+    Returns:
+        HealthResponse: API status and configuration info
+    """
+    from config import settings
+
+    return HealthResponse(
+        status="healthy",
+        version="5.0.0",
+        llm_provider=settings.get("llm_provider", "OpenAI"),
+        service="MyAccessibilityBuddy"
+    )
+
+
+@app.post("/api/generate-alt-text", response_model=AltTextResponse)
+async def generate_alt_text(
+    request: Request,
+    image: UploadFile = File(..., description="Image file to analyze"),
+    language: str = Form("en", description="Language code (en, it, de, fr, etc.)"),
+    context: Optional[str] = Form(None, description="Optional context about the image"),
+    model: str = Form("ecb-llm-gpt5.1", description="Model to use (openai-gpt4o, ecb-llm-gpt4o, ecb-llm-gpt5.1)")
+):
+    """
+    Generate WCAG 2.2 compliant alt-text for an image.
+
+    This endpoint uses the same CLI function (generate_alt_text_json) that handles
+    U2A authentication automatically via CredentialManager.
+
+    Args:
+        image: Uploaded image file
+        language: Target language for alt-text (default: en)
+        context: Optional context information about the image
+        model: Model selection that overrides config.json (openai-gpt4o, ecb-llm-gpt4o, ecb-llm-gpt5.1)
+
+    Returns:
+        AltTextResponse: Generated alt-text and metadata
+
+    Raises:
+        HTTPException: If image processing fails
+    """
+    from app import generate_alt_text_json, CONFIG
+    import shutil
+
+    # Parse model parameter to determine provider and model name
+    # Format: "openai-gpt4o" -> provider="OpenAI", model="gpt-4o"
+    #         "ecb-llm-gpt4o" -> provider="ECB-LLM", model="gpt-4o"
+    #         "ecb-llm-gpt5.1" -> provider="ECB-LLM", model="gpt-5.1"
+    model_parts = model.split('-')
+
+    if len(model_parts) >= 2 and model_parts[0] == 'openai':
+        # Format: openai-gptXX
+        llm_provider = 'OpenAI'
+        # Rejoin remaining parts with hyphen (e.g., "gpt4o" or "gpt-4o")
+        model_name = '-'.join(model_parts[1:])
+        # Normalize "gpt4o" to "gpt-4o"
+        if model_name == 'gpt4o':
+            model_name = 'gpt-4o'
+    elif len(model_parts) >= 3 and model_parts[0] == 'ecb' and model_parts[1] == 'llm':
+        # Format: ecb-llm-gptXX
+        llm_provider = 'ECB-LLM'
+        # Rejoin remaining parts with hyphen (e.g., "gpt4o" or "gpt-5.1")
+        model_name = '-'.join(model_parts[2:])
+        # Normalize "gpt4o" to "gpt-4o"
+        if model_name == 'gpt4o':
+            model_name = 'gpt-4o'
+    else:
+        # Default fallback (matches config.json defaults)
+        llm_provider = 'OpenAI'
+        model_name = 'gpt-4o'
+
+    # Temporarily override CONFIG settings for this request
+    original_provider = CONFIG.get('llm_provider')
+    original_model = CONFIG.get('model')
+    CONFIG['llm_provider'] = llm_provider
+    CONFIG['model'] = model_name
+
+    # Create temporary directories for processing
+    tmp_dir = tempfile.mkdtemp(prefix='myaccessibilitybuddy_')
+    tmp_images_dir = os.path.join(tmp_dir, 'images')
+    tmp_context_dir = os.path.join(tmp_dir, 'context')
+    tmp_output_dir = os.path.join(tmp_dir, 'output')
+
+    try:
+        # Validate image file
+        if not image.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=400,
+                detail="File must be an image"
+            )
+
+        # Create temporary subdirectories
+        os.makedirs(tmp_images_dir, exist_ok=True)
+        os.makedirs(tmp_context_dir, exist_ok=True)
+        os.makedirs(tmp_output_dir, exist_ok=True)
+
+        # Save uploaded image with original filename
+        image_filename = image.filename or 'uploaded_image.png'
+        tmp_image_path = os.path.join(tmp_images_dir, image_filename)
+
+        content = await image.read()
+        with open(tmp_image_path, 'wb') as f:
+            f.write(content)
+
+        # Save context to file if provided (must match image filename base name)
+        if context and context.strip():
+            context_filename = os.path.splitext(image_filename)[0] + '.txt'
+            tmp_context_path = os.path.join(tmp_context_dir, context_filename)
+            with open(tmp_context_path, 'w', encoding='utf-8') as f:
+                f.write(context.strip())
+
+        # Call the same function used by CLI with -g flag
+        # This handles U2A authentication via CredentialManager automatically
+        # Returns: (json_path, success) tuple
+        json_path, success = generate_alt_text_json(
+            image_filename=image_filename,
+            images_folder=tmp_images_dir,
+            context_folder=tmp_context_dir,
+            alt_text_folder=tmp_output_dir,
+            languages=[language]
+        )
+
+        if not success or not json_path:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate alt-text"
+            )
+
+        # Read the generated JSON file
+        import json
+        with open(json_path, 'r', encoding='utf-8') as f:
+            result = json.load(f)
+
+        # Extract alt-text for the requested language
+        proposed_alt_text = result.get('proposed_alt_text', '')
+
+        # Handle both single language (string) and multilingual (list of tuples) formats
+        if isinstance(proposed_alt_text, list):
+            # Multilingual: find the requested language
+            alt_text_str = next(
+                (text for lang_code, text in proposed_alt_text if lang_code.upper() == language.upper()),
+                proposed_alt_text[0][1] if proposed_alt_text else ''
+            )
+        else:
+            # Single language
+            alt_text_str = proposed_alt_text
+
+        # Extract reasoning (handle multilingual format)
+        reasoning_value = result.get('reasoning', '')
+        if isinstance(reasoning_value, list) and reasoning_value:
+            # Multilingual: find the requested language
+            reasoning_str = next(
+                (text for lang_code, text in reasoning_value if lang_code.upper() == language.upper()),
+                reasoning_value[0][1] if reasoning_value else ''
+            )
+        else:
+            reasoning_str = reasoning_value
+
+        # Calculate character count
+        char_count = len(alt_text_str) if alt_text_str else 0
+
+        return AltTextResponse(
+            success=True,
+            alt_text=alt_text_str,
+            image_type=result.get('image_type', 'informative'),
+            reasoning=reasoning_str,
+            character_count=char_count,
+            language=language,
+            error=None
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return AltTextResponse(
+            success=False,
+            alt_text="",
+            image_type="generation_error",
+            reasoning=None,
+            character_count=0,
+            language=language,
+            error=str(e)
+        )
+    finally:
+        # Restore original CONFIG settings
+        CONFIG['llm_provider'] = original_provider
+        CONFIG['model'] = original_model
+
+        # Clean up temporary directory and all its contents
+        try:
+            shutil.rmtree(tmp_dir)
+        except Exception:
+            pass
+
+
+@app.get("/api/languages")
+async def get_supported_languages():
+    """
+    Get list of supported languages.
+
+    Returns:
+        List of supported language codes and names
+    """
+    from config import settings
+
+    languages_config = settings.get("languages", {})
+    allowed_languages = languages_config.get("allowed", [])
+    default_language = languages_config.get("default", "en")
+
+    return {
+        "supported_languages": allowed_languages,
+        "default_language": default_language
+    }
+
+
+# Root redirect to docs
+@app.get("/")
+async def root():
+    """Redirect to API documentation."""
+    return {
+        "message": "AutoAltText API",
+        "version": "5.0.0",
+        "docs": "/api/docs",
+        "health": "/api/health"
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

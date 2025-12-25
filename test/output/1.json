@@ -1,0 +1,17 @@
+{
+  "web_site_url": "",
+  "image_id": "1.png",
+  "image_type": "informative",
+  "image_context": "Our monetary policy statement at a glance - September 2025",
+  "image_URL": "",
+  "image_tag_attribute": {
+    "tag": "unknown",
+    "attribute": "unknown"
+  },
+  "language": "en",
+  "reasoning": "1) The illustration shows a city skyline with the ECB building, a large compass-like dial on a road marked '2%' at the top, and a person holding a percentage symbol. 2) It visually represents the ECB steering or guiding monetary policy towards a 2% target, reinforcing the concept of a stable inflation goal. 3) Without this image, users would miss the visual metaphor of guidance toward a 2% objective, which supports understanding of the statement at a glance. 4) As a banner for a monetary policy statement, it is more than decorative: it conveys that 2% is the key target of ECB policy.",
+  "extended_description": "",
+  "current_alt_text": "",
+  "proposed_alt_text": "Illustration of ECB steering monetary policy toward a 2% target.",
+  "proposed_alt_text_length": 64
+}

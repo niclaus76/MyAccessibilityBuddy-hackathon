@@ -1,0 +1,3 @@
+"""Services module for AutoAltText backend."""
+
+# This file makes the services directory a Python package

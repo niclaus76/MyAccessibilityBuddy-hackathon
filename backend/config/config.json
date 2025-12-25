@@ -1,0 +1,191 @@
+{
+  "_comment_debug": "true or false - enables debug logging to files",
+  "debug_mode": true,
+  "_comment_logging": "Control console output by log level: DEBUG (technical details), INFO/progress (progress updates), WARNING/warnings (potential issues), ERROR/errors (failures)",
+  "logging": {
+    "show_debug": true,
+    "show_progress": true,
+    "show_warnings": true,
+    "show_errors": true
+  },
+  "_comment_llm": "llm_provider: OpenAI or ECB-LLM (U2A OAuth2 authentication only)",
+  "llm_provider": "ECB-LLM",
+  "_comment_model": "model: gpt-4o (for OpenAI) or gpt-4o, gpt-5.1 (for ECB-LLM only)",
+  "model": "gpt-5.1",
+  "_comment_translation_mode": "translation_mode: 'fast' (generate once in first language, then translate) or 'accurate' (generate fresh alt-text for each language). 'fast' is recommended for cost/speed.",
+  "translation_mode": "accurate",
+  "_comment_html_report_display": "HTML report display settings: control which fields are shown in the generated HTML report",
+  "html_report_display": {
+    "display_image_analysis_overview": true,
+    "display_image_type_distribution": true,
+    "display_html_tags_used": true,
+    "display_html_attributes_used": true,
+    "display_image_preview": true,
+    "display_image_type": true,
+    "display_current_alt_text": true,
+    "display_proposed_alt_text": true,
+    "display_image_tag_attribute": true,
+    "display_reasoning": true,
+    "display_context": true
+  },
+  "_comment_ecb_llm": "ECB-LLM U2A OAuth2 configuration: token_url, scope, authorize_url (OAuth2 authorization endpoint)",
+  "ecb_llm": {
+    "token_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/token",
+    "scope": "openid profile LLM.api.read",
+    "authorize_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/authorize"
+  },
+  "_comment_project_root": "Optional: Specify custom project root directory. If not set or 'auto', automatically detects as parent of backend/ folder. Use absolute path for custom location.",
+  "project_root": "auto",
+  "folders": {
+    "images": "input/images",
+    "context": "input/context",
+    "alt_text": "output/alt-text",
+    "reports": "output/reports",
+    "prompt": "prompt",
+    "logs": "logs"
+  },
+  "download": {
+    "_comment": "timeout: request timeout in seconds, delay_between_requests: delay between image downloads to avoid rate limiting",
+    "timeout": 30,
+    "delay_between_requests": 3,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  },
+  "image_extraction": {
+    "_comment": "Configure which HTML tags and attributes to use for finding images",
+    "tags": {
+      "img": true,
+      "picture": true,
+      "div": true,
+      "link": true,
+      "meta": true
+    },
+    "attributes": {
+      "src": true,
+      "data-src": true,
+      "data-image": true,
+      "data-image-webp": true,
+      "srcset": true,
+      "data-srcset": true,
+      "href": true,
+      "content": true
+    },
+    "css_background_images": true
+  },
+  "context": {
+    "_comment": "Context extraction configuration: max_text_length (max chars per text element), max_parent_levels (DOM levels to traverse), min_text_length (minimum chars to include), max_sibling_text_length (max chars from sibling elements)",
+    "max_text_length": 1000,
+    "max_parent_levels": 5,
+    "min_text_length": 20,
+    "max_sibling_text_length": 500
+  },
+  "prompt": {
+    "_comment": "Prompt template configuration: files (list of prompt template files to load), merge_separator (separator between multiple prompts), default_prompt (fallback prompt file)",
+    "files": [
+      "prompt_v3.txt"
+    ],
+    "merge_separator": "\n\n---\n\n",
+    "default_prompt": "prompt_v0.txt"
+  },
+  "languages": {
+    "_comment": "Supported languages for alt-text generation (EU official languages)",
+    "allowed": [
+      {
+        "code": "bg",
+        "name": "\u0411\u044a\u043b\u0433\u0430\u0440\u0441\u043a\u0438"
+      },
+      {
+        "code": "cs",
+        "name": "\u010ce\u0161tina"
+      },
+      {
+        "code": "da",
+        "name": "Dansk"
+      },
+      {
+        "code": "de",
+        "name": "Deutsch"
+      },
+      {
+        "code": "el",
+        "name": "E\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac"
+      },
+      {
+        "code": "en",
+        "name": "English"
+      },
+      {
+        "code": "es",
+        "name": "Espa\u00f1ol"
+      },
+      {
+        "code": "et",
+        "name": "Eesti keel"
+      },
+      {
+        "code": "fi",
+        "name": "Suomi"
+      },
+      {
+        "code": "fr",
+        "name": "Fran\u00e7ais"
+      },
+      {
+        "code": "ga",
+        "name": "Gaeilge"
+      },
+      {
+        "code": "hr",
+        "name": "Hrvatski"
+      },
+      {
+        "code": "hu",
+        "name": "Magyar"
+      },
+      {
+        "code": "it",
+        "name": "Italiano"
+      },
+      {
+        "code": "lt",
+        "name": "Lietuvi\u0173"
+      },
+      {
+        "code": "lv",
+        "name": "Latvie\u0161u"
+      },
+      {
+        "code": "mt",
+        "name": "Malti"
+      },
+      {
+        "code": "nl",
+        "name": "Nederlands"
+      },
+      {
+        "code": "pl",
+        "name": "Polski"
+      },
+      {
+        "code": "pt",
+        "name": "Portugu\u00eas"
+      },
+      {
+        "code": "ro",
+        "name": "Rom\u00e2n\u0103"
+      },
+      {
+        "code": "sk",
+        "name": "Sloven\u010dina"
+      },
+      {
+        "code": "sl",
+        "name": "Sloven\u0161\u010dina"
+      },
+      {
+        "code": "sv",
+        "name": "Svenska"
+      }
+    ],
+    "default": "en"
+  }
+}
