@@ -1,0 +1,37 @@
+{
+  "web_site_url": "",
+  "page_title": "",
+  "image_id": "1.png",
+  "image_type": "informative",
+  "image_context": "",
+  "image_URL": "",
+  "image_tag_attribute": {
+    "tag": "unknown",
+    "attribute": "unknown"
+  },
+  "language": "en",
+  "reasoning": "The image shows a person holding a percentage symbol on a path with a compass pointing to 2%. It provides a visual metaphor related to financial direction or goals and is essential for conveying the theme, as text alone may not convey the intended message.",
+  "extended_description": "",
+  "current_alt_text": "",
+  "proposed_alt_text": "Person with percentage symbol on road with compass pointing to 2%, symbolizing financial direction.",
+  "proposed_alt_text_length": 99,
+  "ai_model": {
+    "provider": "OpenAI",
+    "model": "gpt-4o"
+  },
+  "translation_method": "none",
+  "processing_time_seconds": 5.69,
+  "html_display": {
+    "display_proposed_alt_text": true,
+    "display_image_type": true,
+    "display_current_alt_text": true,
+    "display_image_tag_attribute": true,
+    "display_reasoning": true,
+    "display_context": true,
+    "display_image_preview": true,
+    "display_html_attributes_used": true,
+    "display_html_tags_used": true,
+    "display_image_type_distribution": true,
+    "display_image_analysis_overview": true
+  }
+}

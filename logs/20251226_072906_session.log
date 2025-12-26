@@ -1,0 +1,96 @@
+=== MyAccessibilityBuddy Log ===
+Start Time: 2025-12-26 07:29:06
+==================================================
+
+[07:29:06] DEBUG: Log file created: /app/logs/20251226_072906_session.log
+[07:29:06] DEBUG: Starting generate-json for image: 1.png
+[07:29:06] DEBUG: Images folder: /app/input/images
+[07:29:06] DEBUG: Language: en
+[07:29:06] DEBUG: Starting generate_alt_text_json for image: 1.png
+[07:29:06] DEBUG: Multiple languages requested: ['en']
+[07:29:06] DEBUG: Language 'en' (English) is supported
+[07:29:06] DEBUG: Target languages: ['en'], multilingual mode: False
+[07:29:06] DEBUG: Resolved folder 'images': input/images -> /app/input/images (project_root: /app)
+[07:29:06] DEBUG: Resolved folder 'context': input/context -> /app/input/context (project_root: /app)
+[07:29:06] DEBUG: Resolved folder 'prompt': prompt -> /app/prompt (project_root: /app)
+[07:29:06] DEBUG: Resolved folder 'alt_text': output/alt-text -> /app/output/alt-text (project_root: /app)
+[07:29:06] DEBUG: Using folders - images: /app/input/images, context: /app/input/context, prompt: /app/prompt, alt-text: /app/output/alt-text
+[07:29:06] DEBUG: Base filename: 1
+[07:29:06] DEBUG: Checking for image at: /app/input/images/1.png
+[07:29:06] DEBUG: Looking for context file at: /app/input/context/1.txt
+[07:29:06] WARNING: Context file '1.txt' not found
+[07:29:06] DEBUG: Loading prompts from folder: /app/prompt
+[07:29:06] DEBUG: Looking for prompt file: /app/prompt/prompt_v3.txt
+[07:29:06] DEBUG: Loaded prompt file: prompt_v3.txt
+[07:29:06] DEBUG: Successfully loaded and merged 1 prompt file(s): prompt_v3.txt
+[07:29:06] DEBUG: Creating JSON structure...
+[07:29:06] DEBUG: Language specified: en
+[07:29:06] DEBUG: Created prompt for en (English)
+[07:29:06] DEBUG: Starting LLM analysis for: /app/input/images/1.png
+[07:29:06] DEBUG: LLM provider configured: OpenAI
+[07:29:06] DEBUG: OpenAI credentials retrieved successfully
+[07:29:06] DEBUG: Using LLM provider: OpenAI
+[07:29:06] DEBUG: OpenAI client initialized
+[07:29:06] DEBUG: Image converted to data URL
+[07:29:06] DEBUG: Added user message with prompt and image
+[07:29:06] DEBUG: Using model: gpt-4o
+[07:29:11] DEBUG: OpenAI API response received
+[07:29:11] DEBUG: OpenAI response (first 500 chars): ```json
+{
+  "image_id": "1.png",
+  "image_type": "informative",
+  "image_context": "The context of the image",
+  "image_URL": "The image URL",
+  "reasoning": "The image shows a person holding a percentage symbol on a path with a compass pointing to 2%. It provides a visual metaphor related to financial direction or goals and is essential for conveying the theme, as text alone may not convey the intended message.",
+  "extended_description": "Illustration of a person holding a percentage symbol on...
+[07:29:11] DEBUG: Full response length: 830 characters
+[07:29:11] INFORMATION: Response from LLM contains additional text, extracting JSON block
+[07:29:11] INFORMATION: Successfully extracted and parsed JSON from response
+[07:29:11] DEBUG: LLM analysis successful - Type: informative, Alt-text: Person with percentage symbol on road with compass pointing to 2%, symbolizing financial direction.
+[07:29:11] DEBUG: Final result - Type: informative, Severity: INFORMATION, Alt-text: Person with percentage symbol on road with compass pointing to 2%, symbolizing financial direction.
+[07:29:11] DEBUG: Full JSON output:
+{
+  "web_site_url": "",
+  "page_title": "",
+  "image_id": "1.png",
+  "image_type": "informative",
+  "image_context": "",
+  "image_URL": "",
+  "image_tag_attribute": {
+    "tag": "unknown",
+    "attribute": "unknown"
+  },
+  "language": "en",
+  "reasoning": "The image shows a person holding a percentage symbol on a path with a compass pointing to 2%. It provides a visual metaphor related to financial direction or goals and is essential for conveying the theme, as text alone may not convey the intended message.",
+  "extended_description": "",
+  "current_alt_text": "",
+  "proposed_alt_text": "Person with percentage symbol on road with compass pointing to 2%, symbolizing financial direction.",
+  "proposed_alt_text_length": 99,
+  "ai_model": {
+    "provider": "OpenAI",
+    "model": "gpt-4o"
+  },
+  "translation_method": "none",
+  "processing_time_seconds": 5.69,
+  "html_display": {
+    "display_proposed_alt_text": true,
+    "display_image_type": true,
+    "display_current_alt_text": true,
+    "display_image_tag_attribute": true,
+    "display_reasoning": true,
+    "display_context": true,
+    "display_image_preview": true,
+    "display_html_attributes_used": true,
+    "display_html_tags_used": true,
+    "display_image_type_distribution": true,
+    "display_image_analysis_overview": true
+  }
+}
+[07:29:11] DEBUG: Saving JSON to: /app/output/alt-text/1.json
+[07:29:11] DEBUG: JSON file generated successfully: /app/output/alt-text/1.json
+[07:29:11] DEBUG: JSON generation completed successfully
+
+==================================================
+End Time: 2025-12-26 07:29:11
+Duration: 5s
+=== End of Log ===

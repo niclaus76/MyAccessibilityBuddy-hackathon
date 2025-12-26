@@ -1,0 +1,80 @@
+=== MyAccessibilityBuddy Log ===
+Start Time: 2025-12-26 07:27:31
+==================================================
+
+[07:27:31] DEBUG: Log file created: /app/logs/20251226_072731_session.log
+[07:27:31] DEBUG: Starting generate-json for image: 1.png
+[07:27:31] DEBUG: Images folder: /app/input/images
+[07:27:31] DEBUG: Language: en
+[07:27:31] DEBUG: Starting generate_alt_text_json for image: 1.png
+[07:27:31] DEBUG: Multiple languages requested: ['en']
+[07:27:31] DEBUG: Language 'en' (English) is supported
+[07:27:31] DEBUG: Target languages: ['en'], multilingual mode: False
+[07:27:31] DEBUG: Resolved folder 'images': input/images -> /app/input/images (project_root: /app)
+[07:27:31] DEBUG: Resolved folder 'context': input/context -> /app/input/context (project_root: /app)
+[07:27:31] DEBUG: Resolved folder 'prompt': prompt -> /app/prompt (project_root: /app)
+[07:27:31] DEBUG: Resolved folder 'alt_text': output/alt-text -> /app/output/alt-text (project_root: /app)
+[07:27:31] DEBUG: Using folders - images: /app/input/images, context: /app/input/context, prompt: /app/prompt, alt-text: /app/output/alt-text
+[07:27:31] DEBUG: Base filename: 1
+[07:27:31] DEBUG: Checking for image at: /app/input/images/1.png
+[07:27:31] DEBUG: Looking for context file at: /app/input/context/1.txt
+[07:27:31] WARNING: Context file '1.txt' not found
+[07:27:31] DEBUG: Loading prompts from folder: /app/prompt
+[07:27:31] DEBUG: Looking for prompt file: /app/prompt/prompt_v3.txt
+[07:27:31] DEBUG: Loaded prompt file: prompt_v3.txt
+[07:27:31] DEBUG: Successfully loaded and merged 1 prompt file(s): prompt_v3.txt
+[07:27:31] DEBUG: Creating JSON structure...
+[07:27:31] DEBUG: Language specified: en
+[07:27:31] DEBUG: Created prompt for en (English)
+[07:27:31] DEBUG: Starting LLM analysis for: /app/input/images/1.png
+[07:27:31] DEBUG: LLM provider configured: ECB-LLM
+[07:27:31] ERROR: ECB-LLM client not installed. Install with: pip install ecb_llm_client
+[07:27:31] ERROR: Failed to retrieve LLM credentials
+[07:27:31] ERROR: LLM analysis failed, marking as generation error
+[07:27:31] DEBUG: Final result - Type: generation_error, Severity: CRITICAL, Alt-text: Generation error
+[07:27:31] DEBUG: Full JSON output:
+{
+  "web_site_url": "",
+  "page_title": "",
+  "image_id": "1.png",
+  "image_type": "generation_error",
+  "image_context": "",
+  "image_URL": "",
+  "image_tag_attribute": {
+    "tag": "unknown",
+    "attribute": "unknown"
+  },
+  "language": "en",
+  "reasoning": "Failed to connect to ECB-LLM service. Please check configuration and credentials.",
+  "extended_description": "ECB-LLM analysis failed - LLM not available or credentials invalid",
+  "current_alt_text": "",
+  "proposed_alt_text": "",
+  "proposed_alt_text_length": 0,
+  "ai_model": {
+    "provider": "ECB-LLM",
+    "model": "gpt-5.1"
+  },
+  "translation_method": "none",
+  "processing_time_seconds": 0.0,
+  "html_display": {
+    "display_proposed_alt_text": true,
+    "display_image_type": true,
+    "display_current_alt_text": true,
+    "display_image_tag_attribute": true,
+    "display_reasoning": true,
+    "display_context": true,
+    "display_image_preview": true,
+    "display_html_attributes_used": true,
+    "display_html_tags_used": true,
+    "display_image_type_distribution": true,
+    "display_image_analysis_overview": true
+  }
+}
+[07:27:31] DEBUG: Saving JSON to: /app/output/alt-text/1.json
+[07:27:31] DEBUG: JSON file generated successfully: /app/output/alt-text/1.json
+[07:27:31] DEBUG: JSON generation completed with errors
+
+==================================================
+End Time: 2025-12-26 07:27:31
+Duration: 0s
+=== End of Log ===

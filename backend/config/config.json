@@ -9,9 +9,9 @@
     "show_errors": true
   },
   "_comment_llm": "llm_provider: OpenAI or ECB-LLM (U2A OAuth2 authentication only)",
-  "llm_provider": "ECB-LLM",
+  "llm_provider": "OpenAI",
   "_comment_model": "model: gpt-4o (for OpenAI) or gpt-4o, gpt-5.1 (for ECB-LLM only)",
-  "model": "gpt-5.1",
+  "model": "gpt-4o",
   "_comment_translation_mode": "translation_mode: 'fast' (generate once in first language, then translate) or 'accurate' (generate fresh alt-text for each language). 'fast' is recommended for cost/speed.",
   "translation_mode": "accurate",
   "_comment_html_report_display": "HTML report display settings: control which fields are shown in the generated HTML report",

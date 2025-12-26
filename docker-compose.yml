@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  myaccessibilitybuddy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: myaccessibilitybuddy
+    ports:
+      - "8000:8000"  # FastAPI backend
+      - "8080:8080"  # Frontend HTTP server
+      - "3001:3001"  # ECB-LLM OAuth callback (if using ECB-LLM)
+    volumes:
+      # Mount input/output directories for persistent data
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./logs:/app/logs
+      # Mount config for easy configuration changes
+      - ./backend/config/config.json:/app/backend/config/config.json
+      # Mount .env file for credentials (create this file with your API keys)
+      - ./backend/.env:/app/backend/.env
+    environment:
+      # These can be overridden by .env file
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import requests; requests.get('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a companion service for testing with test images
+  myaccessibilitybuddy-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: myaccessibilitybuddy-test
+    profiles:
+      - test
+    volumes:
+      - ./test:/app/test
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./backend/config/config.json:/app/backend/config/config.json
+      - ./backend/.env:/app/backend/.env
+    command: >
+      sh -c "
+      cp /app/test/images/*.png /app/input/images/ 2>/dev/null || true &&
+      cp /app/test/context/*.txt /app/input/context/ 2>/dev/null || true &&
+      cd /app/backend &&
+      python3 app.py -p --language en --report
+      "

@@ -88,6 +88,36 @@ AutoAltText/
 ## Common Commands
 
 ### Development Setup
+
+**Option 1: Docker (Recommended)**
+
+```bash
+# 1. Create .env file with your API credentials
+cp backend/.env.example backend/.env
+# Edit backend/.env and add your OPENAI_API_KEY or ECB-LLM credentials
+
+# 2. Configure LLM provider in backend/config/config.json
+# Set "llm_provider": "OpenAI" or "ECB-LLM"
+
+# 3. Build and start with Docker Compose
+docker-compose up -d
+
+# Access the application
+# Frontend: http://localhost:8080/home.html
+# API Docs: http://localhost:8000/api/docs
+
+# View logs
+docker-compose logs -f
+
+# Stop containers
+docker-compose down
+
+# Rebuild after code changes
+docker-compose up -d --build
+```
+
+**Option 2: Local Development (Traditional)**
+
 ```bash
 # Create virtual environment
 cd backend
@@ -98,17 +128,31 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Configure .env file (in backend/ directory)
-# For OpenAI:
-OPENAI_API_KEY=sk-your-api-key-here
-
-# For ECB-LLM:
-CLIENT_ID_U2A=your-client-id
-CLIENT_SECRET_U2A=your-client-secret
+cp .env.example .env
+# Edit .env and add:
+# For OpenAI: OPENAI_API_KEY=sk-your-api-key-here
+# For ECB-LLM: CLIENT_ID_U2A=... and CLIENT_SECRET_U2A=...
 ```
 
 ### Running the Application
 
-**Web UI Mode:**
+**Docker Mode (Recommended):**
+```bash
+# Start all services
+docker-compose up -d
+
+# Frontend: http://localhost:8080/home.html
+# API docs: http://localhost:8000/api/docs
+# OAuth (ECB-LLM): Port 3001 automatically used when needed
+
+# Stop services
+docker-compose down
+
+# Run batch processing with test images
+docker-compose --profile test run myaccessibilitybuddy-test
+```
+
+**Local Mode:**
 ```bash
 # Start servers (8080 for frontend, 8000 for API)
 ./start_MyAccessibilityBuddy.sh
@@ -445,7 +489,129 @@ pip install cairosvg
 ### Logs
 Debug logs (when `debug_mode: true`) are written to `logs/` with timestamps.
 ```bash
+# Local mode
 tail -f logs/*.log
+
+# Docker mode
+docker-compose logs -f
+```
+
+### Docker-specific issues
+
+**Container won't start:**
+```bash
+# Check logs for errors
+docker-compose logs
+
+# Verify .env file exists and is mounted
+docker-compose config
+
+# Rebuild from scratch
+docker-compose down -v
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+**Permission errors in Docker:**
+```bash
+# The container runs as user 'appuser' (UID 1000)
+# If you have permission errors with mounted volumes, check ownership:
+ls -la input/ output/ logs/
+
+# Fix ownership if needed (Linux/Mac)
+sudo chown -R 1000:1000 input/ output/ logs/
+```
+
+**Cannot access OAuth callback (ECB-LLM):**
+```bash
+# Port 3001 must be accessible from your browser
+# Check if port is exposed in docker-compose.yml
+# For ECB-LLM, the OAuth flow requires browser access to localhost:3001
+```
+
+**Changes to code not reflected:**
+```bash
+# Rebuild the Docker image after code changes
+docker-compose up -d --build
+
+# Or rebuild specific service
+docker-compose build myaccessibilitybuddy
+docker-compose up -d
+```
+
+## Docker Deployment
+
+### Container Architecture
+
+The Docker setup includes:
+- **Dockerfile**: Multi-stage Python 3.12 slim image with all dependencies
+- **docker-compose.yml**: Orchestrates frontend (8080) and backend (8000) services
+- **docker-entrypoint.sh**: Startup script managing both servers
+- **Volumes**: Persistent data for input/, output/, logs/, config.json, and .env
+
+### Production Considerations
+
+**Security:**
+- Container runs as non-root user (appuser, UID 1000)
+- .env file never included in image (mounted as volume)
+- Minimal base image (python:3.12-slim) reduces attack surface
+- Health checks monitor API availability
+
+**Volumes:**
+```yaml
+# docker-compose.yml mounts these directories:
+- ./input:/app/input           # Image input files
+- ./output:/app/output         # Generated alt-text and reports
+- ./logs:/app/logs             # Application logs
+- ./backend/config/config.json:/app/backend/config/config.json
+- ./backend/.env:/app/backend/.env
+```
+
+**Environment Variables:**
+All configuration via `backend/.env`:
+- `OPENAI_API_KEY` - For OpenAI provider
+- `CLIENT_ID_U2A` / `CLIENT_SECRET_U2A` - For ECB-LLM provider
+
+**Scaling:**
+Current setup runs both frontend and backend in single container. For production:
+1. Separate frontend static files → nginx
+2. Run multiple API containers behind load balancer
+3. External volume/object storage for input/output
+4. Centralized logging (stdout/stderr captured by Docker)
+
+### Docker Commands Reference
+
+```bash
+# Build and start
+docker-compose up -d
+
+# View logs (follow)
+docker-compose logs -f
+
+# Restart services
+docker-compose restart
+
+# Stop services (keep volumes)
+docker-compose down
+
+# Stop and remove volumes
+docker-compose down -v
+
+# Rebuild after code changes
+docker-compose up -d --build
+
+# Run CLI commands inside container
+docker-compose exec myaccessibilitybuddy bash
+# Then inside container:
+cd /app/backend
+python3 app.py -g /app/input/images/1.png --language en
+
+# Run test suite
+docker-compose --profile test run myaccessibilitybuddy-test
+
+# Check container health
+docker-compose ps
+docker inspect myaccessibilitybuddy | grep -A 10 Health
 ```
 
 ## Dependencies (requirements.txt)

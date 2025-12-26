@@ -1,0 +1,66 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Python cache and virtual environments
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/venv/
+venv/
+env/
+ENV/
+.venv
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (keep only essential docs in image)
+*.md
+!README.md
+docs/
+
+# Output and logs (these are mounted as volumes)
+output/
+logs/
+*.log
+
+# Test data (mounted as volume when needed)
+# test/
+
+# Environment files (mounted as volume)
+.env
+.env.*
+backend/.env
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Development tools
+ollama.py
+tools/batch_compare_prompts.sh
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
