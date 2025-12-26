@@ -331,7 +331,7 @@ Available prompts in `prompt/`:
 - `display_reasoning`: Show/hide AI's explanation for classification
 - `display_context`: Show/hide extracted webpage context
 
-**Note**: These settings are embedded in each JSON file's `html_display` object and read during report generation. Changes to config.json only affect newly generated JSON files.
+**Note**: These settings are read from `config.json` during HTML report generation. The `html_display` field is NOT included in generated JSON files.
 
 ### Logging
 ```json

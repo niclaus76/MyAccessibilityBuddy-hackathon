@@ -482,23 +482,13 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
         else:
             translation_method_text = "None (single language)"
 
-        # Get global display settings from first JSON file (use for report-wide statistics)
-        global_display_settings = {}
-        if image_data:
-            global_display_settings = image_data[0].get('html_display', {
-                'display_image_type_distribution': True,
-                'display_html_tags_used': True,
-                'display_html_attributes_used': True,
-                'display_image_analysis_overview': True
-            })
-
-        # Build Image Analysis Overview section with heading and statistics
-        # If display_image_analysis_overview is false, hide the entire section
-        if global_display_settings.get('display_image_analysis_overview', True):
-            image_analysis_overview_html = """        <h3>Image Analysis Overview</h3>
-""" + type_stats_html + tag_stats_html + attr_stats_html
-        else:
-            image_analysis_overview_html = ""
+        # Get global display settings from config.json
+        global_display_settings = CONFIG.get('html_report_display', {
+            'display_image_type_distribution': True,
+            'display_html_tags_used': True,
+            'display_html_attributes_used': True,
+            'display_image_analysis_overview': True
+        })
 
         # Generate stats HTML conditionally based on display settings
         if global_display_settings.get('display_image_type_distribution', True):
@@ -537,6 +527,22 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
         else:
             attr_stats_html = ""
 
+        # Build Image Analysis Overview section with heading and statistics
+        # If display_image_analysis_overview is false, hide the entire section
+        if global_display_settings.get('display_image_analysis_overview', True):
+            image_analysis_overview_html = """        <h3>Image Analysis Overview</h3>
+""" + type_stats_html + tag_stats_html + attr_stats_html
+        else:
+            image_analysis_overview_html = ""
+
+        # Build Image Analysis Overview section with heading and statistics
+        # If display_image_analysis_overview is false, hide the entire section
+        if global_display_settings.get('display_image_analysis_overview', True):
+            image_analysis_overview_html = """        <h3>Image Analysis Overview</h3>
+""" + type_stats_html + tag_stats_html + attr_stats_html
+        else:
+            image_analysis_overview_html = ""
+
         # Build image cards HTML
         image_cards_html = ""
         for idx, data in enumerate(image_data, 1):
@@ -549,8 +555,8 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
             proposed_alt_text_raw = data.get('proposed_alt_text', '')
             reasoning = data.get('reasoning', '')
 
-            # Get display settings from JSON (defaults to true for backward compatibility)
-            display_settings = data.get('html_display', {
+            # Get display settings from config.json
+            display_settings = CONFIG.get('html_report_display', {
                 'display_proposed_alt_text': True,
                 'display_image_type': True,
                 'display_current_alt_text': True,
@@ -2417,9 +2423,6 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         # Calculate processing time
         processing_time = round(time.time() - start_time, 2)
 
-        # Get display settings from config
-        display_settings = CONFIG.get('html_report_display', {})
-
         json_data = {
             "web_site_url": url if url else "",
             "page_title": page_title if page_title else "",
@@ -2439,20 +2442,7 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 "model": CONFIG.get('model', 'Unknown')
             },
             "translation_method": translation_method if translation_method else "none",
-            "processing_time_seconds": processing_time,
-            "html_display": {
-                "display_proposed_alt_text": display_settings.get('display_proposed_alt_text', True),
-                "display_image_type": display_settings.get('display_image_type', True),
-                "display_current_alt_text": display_settings.get('display_current_alt_text', True),
-                "display_image_tag_attribute": display_settings.get('display_image_tag_attribute', True),
-                "display_reasoning": display_settings.get('display_reasoning', True),
-                "display_context": display_settings.get('display_context', True),
-                "display_image_preview": display_settings.get('display_image_preview', True),
-                "display_html_attributes_used": display_settings.get('display_html_attributes_used', True),
-                "display_html_tags_used": display_settings.get('display_html_tags_used', True),
-                "display_image_type_distribution": display_settings.get('display_image_type_distribution', True),
-                "display_image_analysis_overview": display_settings.get('display_image_analysis_overview', True)
-            }
+            "processing_time_seconds": processing_time
         }
 
         debug_log(f"Final result - Type: {image_type}, Severity: {severity}, Alt-text: {alt_text}")
