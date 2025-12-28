@@ -20,15 +20,15 @@
   "steps": {
     "vision": {
       "provider": "OpenAI",
-      "model": "GPT-4o"
+      "model": "gpt-4o"
     },
     "processing": {
       "provider": "OpenAI",
-      "model": "GPT-4o"
+      "model": "gpt-4o"
     },
     "translation": {
       "provider": "OpenAI",
-      "model": "GPT-4o"
+      "model": "gpt-4o"
     }
   },
 

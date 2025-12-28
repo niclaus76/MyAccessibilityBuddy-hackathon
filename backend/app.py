@@ -456,8 +456,11 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
         source_url = ""
         report_page_title = ""
         ai_provider = ""
+        vision_provider = ""
         ai_vision_model = ""
+        processing_provider = ""
         ai_processing_model = ""
+        translation_provider = ""
         ai_translation_model = ""
         translation_method = ""
         total_processing_time = 0.0
@@ -477,13 +480,25 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
                     # Extract AI model info from first item (should be same for all)
                     if not ai_provider:
                         ai_info = data.get('ai_model', {})
-                        ai_provider = ai_info.get('provider', 'Unknown')
-                        ai_vision_model = ai_info.get('vision_model', ai_info.get('model', 'Unknown'))
+                        # Get per-step provider and model information
+                        vision_provider = ai_info.get('vision_provider', 'Unknown')
+                        ai_vision_model = ai_info.get('vision_model', 'Unknown')
+                        processing_provider = ai_info.get('processing_provider', 'Unknown')
                         ai_processing_model = ai_info.get('processing_model', 'Unknown')
+                        translation_provider = ai_info.get('translation_provider', 'Unknown')
+                        ai_translation_model = ai_info.get('translation_model', 'Unknown')
 
-                        # Get translation model from config based on provider
-                        provider_config = CONFIG.get(ai_provider.lower().replace('-', '_'), {})
-                        ai_translation_model = provider_config.get('translation_model', 'Unknown')
+                        # For backward compatibility, try old structure if new fields are missing
+                        if vision_provider == 'Unknown' and 'provider' in ai_info:
+                            vision_provider = ai_info.get('provider', 'Unknown')
+                            processing_provider = vision_provider
+                            translation_provider = vision_provider
+
+                        # Store provider info as comma-separated list of unique providers
+                        providers = set([vision_provider, processing_provider])
+                        if translation_provider and translation_provider != 'Unknown':
+                            providers.add(translation_provider)
+                        ai_provider = ', '.join(sorted(providers))
                     # Extract translation method from first item (should be same for all)
                     if not translation_method:
                         translation_method = data.get('translation_method', 'none')
@@ -760,6 +775,16 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
         </div>
 """
 
+            # Conditionally add Vision Model Output field
+            vision_output = data.get('vision_model_output', '') or data.get('extended_description', '')
+            if vision_output and vision_output != 'LLM analysis failed - LLM not available or credentials invalid':
+                image_cards_html += """
+        <div class="field">
+            <span class="field-label">Vision Model Output (Step 1 - Image Analysis):</span>
+            <div class="field-value">""" + vision_output + """</div>
+        </div>
+"""
+
             # Conditionally add Reasoning field
             if display_settings.get('display_reasoning', True):
                 image_cards_html += """
@@ -806,8 +831,11 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
         html_content = html_content.replace('{PAGE_TITLE_HTML}', page_title_html)
         html_content = html_content.replace('{SOURCE_URL_HTML}', source_url_html)
         html_content = html_content.replace('{AI_PROVIDER}', ai_provider)
+        html_content = html_content.replace('{VISION_PROVIDER}', vision_provider)
         html_content = html_content.replace('{AI_VISION_MODEL}', ai_vision_model)
+        html_content = html_content.replace('{PROCESSING_PROVIDER}', processing_provider)
         html_content = html_content.replace('{AI_PROCESSING_MODEL}', ai_processing_model)
+        html_content = html_content.replace('{TRANSLATION_PROVIDER}', translation_provider)
         html_content = html_content.replace('{AI_TRANSLATION_MODEL}', ai_translation_model)
         html_content = html_content.replace('{TRANSLATION_METHOD_TEXT}', translation_method_text)
         html_content = html_content.replace('{TOTAL_IMAGES}', str(len(image_data)))
@@ -1632,6 +1660,7 @@ Based on this image description, generate the required JSON output:
             response_text = processing_response['message']['content']
 
         elif processing_provider == 'Claude':
+            from anthropic import Anthropic
             processing_client = Anthropic(api_key=processing_creds['api_key'])
             processing_response = processing_client.messages.create(
                 model=processing_model,
@@ -1645,6 +1674,7 @@ Based on this image description, generate the required JSON output:
 
         elif processing_provider in ['OpenAI', 'ECB-LLM']:
             if processing_provider == 'OpenAI':
+                from openai import OpenAI
                 processing_client = OpenAI(api_key=processing_creds['api_key'])
             else:  # ECB-LLM
                 processing_client = ECBAzureOpenAI()
@@ -2832,7 +2862,8 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                         # Store metadata from first language analysis
                         if image_type is None:
                             image_type = llm_result.get("image_type", "informative")
-                            image_description = llm_result.get("image_description", "")
+                            # Get vision model output (Step 1 description)
+                            image_description = llm_result.get("vision_model_output", llm_result.get("image_description", ""))
                             # Extract model information from first language analysis
                             models_used = llm_result.get("_models_used")
 
@@ -2885,7 +2916,8 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 if llm_result:
                     # Store all metadata from first language analysis
                     image_type = llm_result.get("image_type", "informative")
-                    image_description = llm_result.get("image_description", "")
+                    # Get vision model output (Step 1 description)
+                    image_description = llm_result.get("vision_model_output", llm_result.get("image_description", ""))
                     first_lang_reasoning = llm_result.get("reasoning", "")
                     first_lang_alt_text = llm_result.get("alt_text", "")
 
@@ -2953,7 +2985,8 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
             if llm_result:
                 # Use LLM results
                 image_type = llm_result.get("image_type", "informative")
-                image_description = llm_result.get("image_description", "")
+                # Get vision model output (Step 1 description)
+                image_description = llm_result.get("vision_model_output", llm_result.get("image_description", ""))
                 reasoning = llm_result.get("reasoning", "")
                 alt_text = llm_result.get("alt_text", "")
 
@@ -3023,8 +3056,8 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 "vision_model": models_used.get('vision_model') if models_used else CONFIG.get('steps', {}).get('vision', {}).get('model', 'Unknown'),
                 "processing_provider": models_used.get('processing_provider') if models_used else CONFIG.get('steps', {}).get('processing', {}).get('provider', 'Unknown'),
                 "processing_model": models_used.get('processing_model') if models_used else CONFIG.get('steps', {}).get('processing', {}).get('model', 'Unknown'),
-                "translation_provider": CONFIG.get('steps', {}).get('translation', {}).get('provider', 'Unknown') if translation_method and translation_method != "none" else None,
-                "translation_model": CONFIG.get('steps', {}).get('translation', {}).get('model', 'Unknown') if translation_method and translation_method != "none" else None
+                "translation_provider": CONFIG.get('steps', {}).get('translation', {}).get('provider', 'Unknown'),
+                "translation_model": CONFIG.get('steps', {}).get('translation', {}).get('model', 'Unknown')
             },
             "translation_method": translation_method if translation_method else "none",
             "processing_time_seconds": processing_time
