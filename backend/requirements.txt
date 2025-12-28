@@ -18,6 +18,8 @@ CairoSVG>=2.8.2
 
 # LLM providers
 openai>=2.8.1
+anthropic>=0.40.0  # Claude (Anthropic) API client
+ollama>=0.3.0  # Ollama client for local models
 # ecb-llm-client>=0.8.6  # Optional: ECB internal package, install separately if needed or uncomment this row
 
 # Environment variables

@@ -10,7 +10,7 @@ This guide covers running MyAccessibilityBuddy using Docker containers.
 Verify installation:
 ```bash
 docker --version
-docker-compose --version
+docker compose version
 ```
 
 ## Quick Start

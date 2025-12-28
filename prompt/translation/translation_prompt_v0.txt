@@ -1,0 +1,12 @@
+Translate the following alternative text from {SOURCE_LANGUAGE} to {TARGET_LANGUAGE}.
+
+CRITICAL REQUIREMENTS:
+1. The translation MUST be 125 characters or less (including spaces and punctuation)
+2. Maintain the meaning and accessibility compliance
+3. End with a period
+4. Be concise and natural in the target language
+5. If the direct translation exceeds 125 characters, use a shorter equivalent that preserves the core meaning
+
+Source text ({SOURCE_LANGUAGE}): "{ALT_TEXT}"
+
+Provide ONLY the translated text in {TARGET_LANGUAGE}, nothing else. Do not include explanations or metadata.

@@ -35,6 +35,15 @@ except ImportError:
     print("cairosvg not installed. SVG files will not be supported.")
     print("To enable SVG support, install with: pip install cairosvg")
 
+# Import Ollama client if available
+try:
+    import ollama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    print("ollama not installed. Ollama provider will not be available.")
+    print("To use Ollama, install with: pip install ollama")
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
@@ -220,50 +229,98 @@ def handle_exception(func_name, exception, context=""):
     
     return error_msg
 
-def get_llm_credentials():
+def get_step_config(step_name):
     """
-    Retrieve LLM credentials based on the configured provider.
+    Get provider and model configuration for a specific step (vision, processing, or translation).
+
+    Args:
+        step_name (str): Step name ('vision', 'processing', or 'translation')
 
     Returns:
-        tuple: (provider, credentials_dict) where credentials_dict contains the necessary auth info
+        tuple: (provider, model, credentials_dict)
     """
-    func_name = "get_llm_credentials"
+    func_name = "get_step_config"
 
-    # Get LLM provider from config (options: 'OpenAI' or 'ECB-LLM')
-    llm_provider = CONFIG.get('llm_provider', 'OpenAI')
-    debug_log(f"LLM provider configured: {llm_provider}")
+    # Get step configuration
+    steps_config = CONFIG.get('steps', {})
+    step_config = steps_config.get(step_name, {})
+    provider = step_config.get('provider', 'OpenAI')
+    model = step_config.get('model', 'gpt-4o')
 
-    if llm_provider == 'OpenAI':
-        # Get OpenAI API key from environment
+    debug_log(f"Step '{step_name}' configured: provider={provider}, model={model}")
+
+    # Get credentials for the provider
+    credentials = {}
+
+    if provider == 'OpenAI':
         api_key = os.environ.get('OPENAI_API_KEY')
         if not api_key:
             debug_log("OPENAI_API_KEY not found in environment variables", "ERROR")
-            return None, None
+            return None, None, None
+        credentials = {'api_key': api_key}
 
-        debug_log("OpenAI credentials retrieved successfully")
-        return 'OpenAI', {'api_key': api_key}
+    elif provider == 'Claude':
+        api_key = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('CLAUDE_API_KEY')
+        if not api_key:
+            debug_log("ANTHROPIC_API_KEY or CLAUDE_API_KEY not found in environment variables", "ERROR")
+            return None, None, None
+        credentials = {'api_key': api_key}
 
-    elif llm_provider == 'ECB-LLM':
-        # U2A: User-to-Application OAuth2 authentication
-        # ECBAzureOpenAI client automatically reads CLIENT_ID_U2A and CLIENT_SECRET_U2A from environment
+    elif provider == 'ECB-LLM':
         if not ECB_LLM_AVAILABLE:
             debug_log("ECB-LLM client not installed. Install with: pip install ecb_llm_client", "ERROR")
-            return None, None
+            return None, None, None
 
         client_id = os.environ.get('CLIENT_ID_U2A')
         client_secret = os.environ.get('CLIENT_SECRET_U2A')
 
         if not client_id or not client_secret:
             debug_log("CLIENT_ID_U2A or CLIENT_SECRET_U2A not found in environment variables", "ERROR")
-            debug_log("ECBAzureOpenAI requires these environment variables for U2A authentication", "ERROR")
-            return None, None
+            return None, None, None
+        credentials = {'auth_mode': 'U2A'}
 
-        debug_log("ECB-LLM U2A credentials found in environment")
-        return 'ECB-LLM', {'auth_mode': 'U2A'}
+    elif provider == 'Ollama':
+        if not OLLAMA_AVAILABLE:
+            debug_log("Ollama client not installed. Install with: pip install ollama", "ERROR")
+            return None, None, None
+
+        ollama_config = CONFIG.get('ollama', {})
+        base_url = ollama_config.get('base_url', 'http://localhost:11434')
+        credentials = {'base_url': base_url}
 
     else:
-        debug_log(f"Unknown LLM provider: {llm_provider}", "ERROR")
+        debug_log(f"Unknown provider: {provider}", "ERROR")
+        return None, None, None
+
+    return provider, model, credentials
+
+def get_llm_credentials():
+    """
+    Retrieve LLM credentials based on the configured provider.
+    DEPRECATED: Use get_step_config() for per-step provider selection.
+    This function is maintained for backward compatibility.
+
+    Returns:
+        tuple: (provider, credentials_dict) where credentials_dict contains the necessary auth info
+    """
+    func_name = "get_llm_credentials"
+
+    # For backward compatibility, use vision step config as default
+    vision_provider, vision_model, credentials = get_step_config('vision')
+    if not vision_provider:
         return None, None
+
+    # Add model information to credentials
+    processing_provider, processing_model, _ = get_step_config('processing')
+    translation_provider, translation_model, _ = get_step_config('translation')
+
+    credentials['vision_model'] = vision_model
+    credentials['processing_model'] = processing_model if processing_model else vision_model
+    credentials['translation_model'] = translation_model if translation_model else processing_model
+
+    debug_log(f"LLM credentials (backward compat): provider={vision_provider}, vision={vision_model}, processing={processing_model}, translation={translation_model}")
+
+    return vision_provider, credentials
 
 def get_absolute_folder_path(folder_name):
     """
@@ -399,7 +456,9 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
         source_url = ""
         report_page_title = ""
         ai_provider = ""
-        ai_model = ""
+        ai_vision_model = ""
+        ai_processing_model = ""
+        ai_translation_model = ""
         translation_method = ""
         total_processing_time = 0.0
         for json_file in sorted(json_files):
@@ -419,7 +478,12 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
                     if not ai_provider:
                         ai_info = data.get('ai_model', {})
                         ai_provider = ai_info.get('provider', 'Unknown')
-                        ai_model = ai_info.get('model', 'Unknown')
+                        ai_vision_model = ai_info.get('vision_model', ai_info.get('model', 'Unknown'))
+                        ai_processing_model = ai_info.get('processing_model', 'Unknown')
+
+                        # Get translation model from config based on provider
+                        provider_config = CONFIG.get(ai_provider.lower().replace('-', '_'), {})
+                        ai_translation_model = provider_config.get('translation_model', 'Unknown')
                     # Extract translation method from first item (should be same for all)
                     if not translation_method:
                         translation_method = data.get('translation_method', 'none')
@@ -742,7 +806,9 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
         html_content = html_content.replace('{PAGE_TITLE_HTML}', page_title_html)
         html_content = html_content.replace('{SOURCE_URL_HTML}', source_url_html)
         html_content = html_content.replace('{AI_PROVIDER}', ai_provider)
-        html_content = html_content.replace('{AI_MODEL}', ai_model)
+        html_content = html_content.replace('{AI_VISION_MODEL}', ai_vision_model)
+        html_content = html_content.replace('{AI_PROCESSING_MODEL}', ai_processing_model)
+        html_content = html_content.replace('{AI_TRANSLATION_MODEL}', ai_translation_model)
         html_content = html_content.replace('{TRANSLATION_METHOD_TEXT}', translation_method_text)
         html_content = html_content.replace('{TOTAL_IMAGES}', str(len(image_data)))
         html_content = html_content.replace('{TOTAL_PROCESSING_TIME}', f"{total_processing_time:.2f}")
@@ -890,22 +956,23 @@ def local_image_to_data_url(image_path):
 
 def load_and_merge_prompts(prompt_folder):
     """
-    Load and merge multiple prompt files based on configuration.
+    Load and merge multiple processing prompt files based on configuration.
+    These prompts are used for generating WCAG-compliant alt-text.
 
     Args:
-        prompt_folder (str): Path to the folder containing prompt files
+        prompt_folder (str): Path to the processing folder containing prompt files
 
     Returns:
         tuple: (merged_prompt_text, list_of_loaded_files)
     """
     func_name = "load_and_merge_prompts"
-    debug_log(f"Loading prompts from folder: {prompt_folder}")
+    debug_log(f"Loading processing prompts from folder: {prompt_folder}")
 
     # Get prompt configuration
     prompt_config = CONFIG.get('prompt', {})
-    prompt_files = prompt_config.get('files', ['alt-text.txt'])
+    prompt_files = prompt_config.get('processing_files', prompt_config.get('files', ['processing_prompt_v0.txt']))
     merge_separator = prompt_config.get('merge_separator', '\n\n---\n\n')
-    default_prompt = prompt_config.get('default_prompt', 'alt-text.txt')
+    default_prompt = prompt_config.get('default_processing_prompt', prompt_config.get('default_prompt', 'processing_prompt_v0.txt'))
 
     merged_prompt = ""
     loaded_files = []
@@ -952,6 +1019,164 @@ def load_and_merge_prompts(prompt_folder):
 
     return merged_prompt, loaded_files
 
+def load_vision_prompt(vision_prompt_folder):
+    """
+    Load vision prompt for Ollama's first-step image description.
+
+    Args:
+        vision_prompt_folder (str): Path to the folder containing vision prompt files
+
+    Returns:
+        str: The vision prompt text
+    """
+    func_name = "load_vision_prompt"
+    debug_log(f"Loading vision prompt from folder: {vision_prompt_folder}")
+
+    # Get prompt configuration
+    prompt_config = CONFIG.get('prompt', {})
+    vision_files = prompt_config.get('vision_files', ['vision_prompt_v0.txt'])
+    default_vision_prompt = prompt_config.get('default_vision_prompt', 'vision_prompt_v0.txt')
+
+    # Try to load the first configured vision prompt file
+    for vision_file in vision_files:
+        vision_path = os.path.join(vision_prompt_folder, vision_file)
+        debug_log(f"Looking for vision prompt file: {vision_path}")
+
+        if os.path.exists(vision_path):
+            try:
+                with open(vision_path, 'r', encoding='utf-8') as f:
+                    vision_prompt = f.read().strip()
+                    if vision_prompt:
+                        debug_log(f"Loaded vision prompt file: {vision_file}")
+                        return vision_prompt
+            except Exception as e:
+                handle_exception(func_name, e, f"reading vision prompt file {vision_path}")
+                continue
+
+    # If no files were loaded, try the default
+    default_path = os.path.join(vision_prompt_folder, default_vision_prompt)
+    if os.path.exists(default_path):
+        try:
+            with open(default_path, 'r', encoding='utf-8') as f:
+                vision_prompt = f.read().strip()
+                debug_log(f"Loaded default vision prompt file: {default_vision_prompt}")
+                return vision_prompt
+        except Exception as e:
+            handle_exception(func_name, e, f"reading default vision prompt file {default_path}")
+
+    # Fallback to hardcoded prompt
+    debug_log("No vision prompt files found, using hardcoded fallback", "WARNING")
+    return "Describe this image in detail."
+
+def load_translation_prompt(translation_prompt_folder):
+    """
+    Load translation prompt for alt-text translation.
+
+    Args:
+        translation_prompt_folder (str): Path to the folder containing translation prompt files
+
+    Returns:
+        str: The translation prompt text
+    """
+    func_name = "load_translation_prompt"
+    debug_log(f"Loading translation prompt from folder: {translation_prompt_folder}")
+
+    # Get prompt configuration
+    prompt_config = CONFIG.get('prompt', {})
+    translation_files = prompt_config.get('translation_files', ['translation_prompt_v0.txt'])
+    default_translation_prompt = prompt_config.get('default_translation_prompt', 'translation_prompt_v0.txt')
+
+    # Try to load the first configured translation prompt file
+    for translation_file in translation_files:
+        translation_path = os.path.join(translation_prompt_folder, translation_file)
+        debug_log(f"Looking for translation prompt file: {translation_path}")
+
+        if os.path.exists(translation_path):
+            try:
+                with open(translation_path, 'r', encoding='utf-8') as f:
+                    translation_prompt = f.read().strip()
+                    if translation_prompt:
+                        debug_log(f"Loaded translation prompt file: {translation_file}")
+                        return translation_prompt
+            except Exception as e:
+                handle_exception(func_name, e, f"reading translation prompt file {translation_path}")
+                continue
+
+    # If no files were loaded, try the default
+    default_path = os.path.join(translation_prompt_folder, default_translation_prompt)
+    if os.path.exists(default_path):
+        try:
+            with open(default_path, 'r', encoding='utf-8') as f:
+                translation_prompt = f.read().strip()
+                debug_log(f"Loaded default translation prompt file: {default_translation_prompt}")
+                return translation_prompt
+        except Exception as e:
+            handle_exception(func_name, e, f"reading default translation prompt file {default_path}")
+
+    # Fallback to hardcoded prompt
+    debug_log("No translation prompt files found, using hardcoded fallback", "WARNING")
+    return """Translate the following alternative text from {SOURCE_LANGUAGE} to {TARGET_LANGUAGE}.
+
+CRITICAL REQUIREMENTS:
+1. The translation MUST be 125 characters or less (including spaces and punctuation)
+2. Maintain the meaning and accessibility compliance
+3. End with a period
+4. Be concise and natural in the target language
+5. If the direct translation exceeds 125 characters, use a shorter equivalent that preserves the core meaning
+
+Source text ({SOURCE_LANGUAGE}): "{ALT_TEXT}"
+
+Provide ONLY the translated text in {TARGET_LANGUAGE}, nothing else. Do not include explanations or metadata."""
+
+def load_translation_system_prompt(translation_prompt_folder):
+    """
+    Load translation system prompt for alt-text translation.
+
+    Args:
+        translation_prompt_folder (str): Path to the folder containing translation system prompt files
+
+    Returns:
+        str: The translation system prompt text
+    """
+    func_name = "load_translation_system_prompt"
+    debug_log(f"Loading translation system prompt from folder: {translation_prompt_folder}")
+
+    # Get prompt configuration
+    prompt_config = CONFIG.get('prompt', {})
+    translation_system_files = prompt_config.get('translation_system_files', ['translation_system_prompt_v0.txt'])
+    default_translation_system_prompt = prompt_config.get('default_translation_system_prompt', 'translation_system_prompt_v0.txt')
+
+    # Try to load the first configured translation system prompt file
+    for translation_system_file in translation_system_files:
+        translation_system_path = os.path.join(translation_prompt_folder, translation_system_file)
+        debug_log(f"Looking for translation system prompt file: {translation_system_path}")
+
+        if os.path.exists(translation_system_path):
+            try:
+                with open(translation_system_path, 'r', encoding='utf-8') as f:
+                    translation_system_prompt = f.read().strip()
+                    if translation_system_prompt:
+                        debug_log(f"Loaded translation system prompt file: {translation_system_file}")
+                        return translation_system_prompt
+            except Exception as e:
+                handle_exception(func_name, e, f"reading translation system prompt file {translation_system_path}")
+                continue
+
+    # If no files were loaded, try the default
+    default_path = os.path.join(translation_prompt_folder, default_translation_system_prompt)
+    if os.path.exists(default_path):
+        try:
+            with open(default_path, 'r', encoding='utf-8') as f:
+                translation_system_prompt = f.read().strip()
+                debug_log(f"Loaded default translation system prompt file: {default_translation_system_prompt}")
+                return translation_system_prompt
+        except Exception as e:
+            handle_exception(func_name, e, f"reading default translation system prompt file {default_path}")
+
+    # Fallback to hardcoded prompt
+    debug_log("No translation system prompt files found, using hardcoded fallback", "WARNING")
+    return "You are a professional translator specializing in WCAG-compliant alternative text. Translate to {TARGET_LANGUAGE} while ensuring the output is exactly 125 characters or less."
+
 def translate_alt_text(alt_text, source_language, target_language):
     """
     Translate alt-text from source language to target language while maintaining 125 character limit.
@@ -977,8 +1202,15 @@ def translate_alt_text(alt_text, source_language, target_language):
         # Initialize client based on provider
         if provider == 'OpenAI':
             client = OpenAI(api_key=credentials['api_key'])
+        elif provider == 'Claude':
+            from anthropic import Anthropic
+            client = Anthropic(api_key=credentials['api_key'])
         elif provider == 'ECB-LLM':
             client = ECBAzureOpenAI()
+        elif provider == 'Ollama':
+            import ollama
+            base_url = credentials.get('base_url', 'http://localhost:11434')
+            client = ollama.Client(host=base_url)
         else:
             debug_log(f"Unsupported provider: {provider}", "ERROR")
             return None
@@ -994,25 +1226,24 @@ def translate_alt_text(alt_text, source_language, target_language):
         source_lang_name = language_map.get(source_language.lower(), source_language)
         target_lang_name = language_map.get(target_language.lower(), target_language)
 
-        # Create translation prompt
-        translation_prompt = f"""Translate the following alternative text from {source_lang_name} to {target_lang_name}.
+        # Load translation prompts from files
+        translation_prompt_folder = get_absolute_folder_path('prompt_translation')
+        translation_prompt_template = load_translation_prompt(translation_prompt_folder)
+        translation_system_prompt_template = load_translation_system_prompt(translation_prompt_folder)
 
-CRITICAL REQUIREMENTS:
-1. The translation MUST be 125 characters or less (including spaces and punctuation)
-2. Maintain the meaning and accessibility compliance
-3. End with a period
-4. Be concise and natural in the target language
-5. If the direct translation exceeds 125 characters, use a shorter equivalent that preserves the core meaning
+        # Replace placeholders in translation prompt
+        translation_prompt = translation_prompt_template.replace('{SOURCE_LANGUAGE}', source_lang_name)
+        translation_prompt = translation_prompt.replace('{TARGET_LANGUAGE}', target_lang_name)
+        translation_prompt = translation_prompt.replace('{ALT_TEXT}', alt_text)
 
-Source text ({source_lang_name}): "{alt_text}"
-
-Provide ONLY the translated text in {target_lang_name}, nothing else. Do not include explanations or metadata."""
+        # Replace placeholders in system prompt
+        translation_system_prompt = translation_system_prompt_template.replace('{TARGET_LANGUAGE}', target_lang_name)
 
         # Prepare messages
         messages = [
             {
                 "role": "system",
-                "content": f"You are a professional translator specializing in WCAG-compliant alternative text. Translate to {target_lang_name} while ensuring the output is exactly 125 characters or less."
+                "content": translation_system_prompt
             },
             {
                 "role": "user",
@@ -1020,8 +1251,10 @@ Provide ONLY the translated text in {target_lang_name}, nothing else. Do not inc
             }
         ]
 
-        # Get model from config
-        model = CONFIG.get('model', 'gpt-4o')
+        # Get translation model from provider-specific config
+        provider_config = CONFIG.get(provider.lower().replace('-', '_'), {})
+        model = provider_config.get('translation_model', provider_config.get('processing_model', 'gpt-4o'))
+        debug_log(f"Using translation model: {model}")
 
         # Prepare API request parameters
         api_params = {
@@ -1030,15 +1263,46 @@ Provide ONLY the translated text in {target_lang_name}, nothing else. Do not inc
             "max_completion_tokens": 200
         }
 
-        # Only add temperature for models that support it (gpt-5.1 doesn't support custom temperature)
-        if not model.startswith('gpt-5'):
-            api_params["temperature"] = 0.3  # Lower temperature for more consistent translations
+        # Make API request based on provider
+        if provider == 'Claude':
+            # Claude uses a different API structure
+            response = client.messages.create(
+                model=model,
+                max_tokens=200,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": translation_prompt
+                    }
+                ],
+                system=translation_system_prompt,  # Claude uses system parameter separately
+                temperature=0.3
+            )
+            translated_text = response.content[0].text
+        elif provider == 'Ollama':
+            # Ollama uses a simpler API structure
+            response = client.chat(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": translation_system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": translation_prompt
+                    }
+                ]
+            )
+            translated_text = response['message']['content']
+        else:
+            # OpenAI and ECB-LLM use the standard OpenAI API
+            # Only add temperature for models that support it (gpt-5.1 doesn't support custom temperature)
+            if not model.startswith('gpt-5'):
+                api_params["temperature"] = 0.3  # Lower temperature for more consistent translations
 
-        # Make API request
-        response = client.chat.completions.create(**api_params)
-
-        # Extract translated text
-        translated_text = response.choices[0].message.content
+            response = client.chat.completions.create(**api_params)
+            translated_text = response.choices[0].message.content
 
         # Check if response is None or empty
         if translated_text is None:
@@ -1142,8 +1406,10 @@ Provide ONLY the translated text in {target_lang_name}, nothing else. Do not inc
             }
         ]
 
-        # Get model from config
-        model = CONFIG.get('model', 'gpt-4o')
+        # Get translation model from provider-specific config
+        provider_config = CONFIG.get(provider.lower().replace('-', '_'), {})
+        model = provider_config.get('translation_model', provider_config.get('processing_model', 'gpt-4o'))
+        debug_log(f"Using translation model: {model}")
 
         # Prepare API request parameters
         api_params = {
@@ -1176,9 +1442,284 @@ Provide ONLY the translated text in {target_lang_name}, nothing else. Do not inc
         return None
 
 
+def analyze_image_with_ollama(image_path, combined_prompt, credentials, language=None, vision_prompt=None):
+    """
+    Analyze an image using two-step processing with potentially different providers for each step.
+    Supports mixed providers (e.g., Claude for vision, OpenAI for processing).
+
+    Args:
+        image_path (str): Path to the image file
+        combined_prompt (str): The combined prompt with context for analysis
+        credentials (dict): DEPRECATED - kept for backward compatibility
+        language (str): ISO language code for alt-text generation
+        vision_prompt (str): Optional vision prompt for step 1. If None, loads from vision folder.
+
+    Returns:
+        dict: Parsed response with image_type, image_description, reasoning, and alt_text
+    """
+    func_name = "analyze_image_with_ollama"
+
+    debug_log(f"Starting two-step analysis for: {image_path} with mixed provider support")
+
+    try:
+        # Get provider and model configuration for each step
+        vision_provider, vision_model, vision_creds = get_step_config('vision')
+        processing_provider, processing_model, processing_creds = get_step_config('processing')
+
+        if not vision_provider or not processing_provider:
+            debug_log("Failed to retrieve step configurations", "ERROR")
+            return None
+
+        debug_log(f"Vision step: {vision_provider} / {vision_model}")
+        debug_log(f"Processing step: {processing_provider} / {processing_model}")
+
+        # Load vision prompt if not provided
+        if vision_prompt is None:
+            vision_prompt_folder = get_absolute_folder_path('prompt_vision')
+            vision_prompt = load_vision_prompt(vision_prompt_folder)
+
+        debug_log(f"Using vision prompt: {vision_prompt[:100]}...")
+
+        # STEP 1: Vision model generates image description
+        debug_log(f"Step 1: Generating image description with {vision_provider} / {vision_model}")
+
+        if vision_provider == 'Ollama':
+            # Ollama-specific initialization
+            base_url = vision_creds.get('base_url', 'http://localhost:11434')
+            vision_client = ollama.Client(host=base_url)
+            debug_log(f"Ollama client initialized with host: {base_url}")
+
+            # Ollama expects base64-encoded image data, not file paths
+            # Handle SVG conversion to PNG for vision model compatibility
+            import base64
+            from mimetypes import guess_type
+
+            mime_type, _ = guess_type(image_path)
+            if mime_type == "image/svg+xml":
+                if not SVG_SUPPORT:
+                    debug_log("SVG file detected but cairosvg not installed. Cannot convert to PNG.", "ERROR")
+                    raise ValueError("SVG conversion not supported. Install cairosvg: pip install cairosvg")
+
+                debug_log(f"SVG file detected: {image_path}. Converting to PNG for Ollama vision model...")
+                try:
+                    with open(image_path, "rb") as svg_file:
+                        svg_data = svg_file.read()
+                    # Convert SVG to PNG
+                    png_data = cairosvg.svg2png(bytestring=svg_data)
+                    image_data = base64.b64encode(png_data).decode('utf-8')
+                    debug_log(f"Successfully converted SVG to PNG (size: {len(png_data)} bytes)")
+                except Exception as e:
+                    debug_log(f"Failed to convert SVG to PNG: {str(e)}", "ERROR")
+                    raise
+            else:
+                # Regular image file
+                with open(image_path, 'rb') as img_file:
+                    image_data = base64.b64encode(img_file.read()).decode('utf-8')
+
+            vision_response = vision_client.chat(
+                model=vision_model,
+                messages=[{
+                    'role': 'user',
+                    'content': vision_prompt,
+                    'images': [image_data]
+                }]
+            )
+            image_description = vision_response['message']['content']
+
+        elif vision_provider == 'Claude':
+            # Claude (Anthropic) initialization
+            from anthropic import Anthropic
+            import base64
+            from mimetypes import guess_type
+
+            vision_client = Anthropic(api_key=vision_creds['api_key'])
+            debug_log("Claude client initialized")
+
+            # Read and encode image to base64
+            mime_type, _ = guess_type(image_path)
+            if not mime_type or not mime_type.startswith('image/'):
+                mime_type = 'image/png'  # Default fallback
+
+            # Handle SVG conversion if needed
+            if mime_type == "image/svg+xml":
+                if not SVG_SUPPORT:
+                    debug_log("SVG file detected but cairosvg not installed. Cannot convert to PNG.", "ERROR")
+                    raise ValueError("SVG conversion not supported. Install cairosvg: pip install cairosvg")
+
+                debug_log(f"SVG file detected: {image_path}. Converting to PNG for Claude vision...")
+                with open(image_path, "rb") as svg_file:
+                    svg_data = svg_file.read()
+                png_data = cairosvg.svg2png(bytestring=svg_data)
+                image_data = base64.standard_b64encode(png_data).decode('utf-8')
+                media_type = "image/png"
+            else:
+                with open(image_path, 'rb') as img_file:
+                    image_data = base64.standard_b64encode(img_file.read()).decode('utf-8')
+                # Map MIME types to Claude's expected format
+                media_type = mime_type if mime_type in ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] else 'image/png'
+
+            vision_response = vision_client.messages.create(
+                model=vision_model,
+                max_tokens=1024,
+                messages=[{
+                    'role': 'user',
+                    'content': [
+                        {
+                            'type': 'image',
+                            'source': {
+                                'type': 'base64',
+                                'media_type': media_type,
+                                'data': image_data
+                            }
+                        },
+                        {
+                            'type': 'text',
+                            'text': vision_prompt
+                        }
+                    ]
+                }]
+            )
+            image_description = vision_response.content[0].text
+
+        elif vision_provider in ['OpenAI', 'ECB-LLM']:
+            # OpenAI/ECB-LLM initialization
+            if vision_provider == 'OpenAI':
+                from openai import OpenAI
+                vision_client = OpenAI(api_key=vision_creds['api_key'])
+            else:  # ECB-LLM
+                vision_client = ECBAzureOpenAI()
+
+            # Convert image to data URL
+            image_data_url = local_image_to_data_url(image_path)
+
+            vision_response = vision_client.chat.completions.create(
+                model=vision_model,
+                messages=[{
+                    'role': 'user',
+                    'content': [
+                        {'type': 'text', 'text': vision_prompt},
+                        {'type': 'image_url', 'image_url': {'url': image_data_url}}
+                    ]
+                }],
+                max_completion_tokens=1000
+            )
+            image_description = vision_response.choices[0].message.content
+        else:
+            debug_log(f"Unsupported provider for vision step: {vision_provider}", "ERROR")
+            return None
+
+        debug_log(f"Image description generated: {image_description[:200]}...")
+
+        # STEP 2: Processing model generates structured JSON with WCAG alt-text
+        debug_log(f"Step 2: Processing with {processing_provider} / {processing_model} to generate alt-text")
+
+        processing_prompt = f"""{combined_prompt}
+
+Based on this image description, generate the required JSON output:
+{image_description}"""
+
+        # Initialize client for processing step (may be different provider than vision)
+        if processing_provider == 'Ollama':
+            base_url = processing_creds.get('base_url', 'http://localhost:11434')
+            processing_client = ollama.Client(host=base_url)
+            processing_response = processing_client.chat(
+                model=processing_model,
+                messages=[{
+                    'role': 'user',
+                    'content': processing_prompt
+                }]
+            )
+            response_text = processing_response['message']['content']
+
+        elif processing_provider == 'Claude':
+            processing_client = Anthropic(api_key=processing_creds['api_key'])
+            processing_response = processing_client.messages.create(
+                model=processing_model,
+                max_tokens=1024,
+                messages=[{
+                    'role': 'user',
+                    'content': processing_prompt
+                }]
+            )
+            response_text = processing_response.content[0].text
+
+        elif processing_provider in ['OpenAI', 'ECB-LLM']:
+            if processing_provider == 'OpenAI':
+                processing_client = OpenAI(api_key=processing_creds['api_key'])
+            else:  # ECB-LLM
+                processing_client = ECBAzureOpenAI()
+
+            processing_response = processing_client.chat.completions.create(
+                model=processing_model,
+                messages=[{
+                    'role': 'user',
+                    'content': processing_prompt
+                }],
+                max_completion_tokens=1000
+            )
+            response_text = processing_response.choices[0].message.content
+        else:
+            debug_log(f"Unsupported provider for processing step: {processing_provider}", "ERROR")
+            return None
+
+        debug_log(f"Processing response (first 500 chars): {response_text[:500]}...")
+
+        # Parse JSON from response
+        result = None
+        try:
+            # Try to parse entire response as JSON
+            parsed_response = json.loads(response_text)
+            if isinstance(parsed_response, dict):
+                debug_log("Successfully parsed response as JSON", "INFORMATION")
+                result = parsed_response
+        except json.JSONDecodeError:
+            debug_log("Response contains additional text, extracting JSON block", "INFORMATION")
+
+        # Extract JSON from text if not yet parsed
+        if result is None:
+            first_brace = response_text.find('{')
+            last_brace = response_text.rfind('}')
+
+            if first_brace != -1 and last_brace != -1:
+                json_str = response_text[first_brace:last_brace + 1]
+                try:
+                    parsed_response = json.loads(json_str)
+                    debug_log("Successfully extracted JSON from response", "INFORMATION")
+                    result = parsed_response
+                except json.JSONDecodeError:
+                    debug_log("Could not parse JSON from response", "WARNING")
+
+        # Fallback: create basic response structure
+        if result is None:
+            debug_log("Creating fallback response structure", "WARNING")
+            result = {
+                "image_type": "informative",
+                "image_description": image_description,
+                "reasoning": f"Generated via {provider} two-step processing",
+                "alt_text": image_description[:125]  # Truncate to WCAG limit
+            }
+
+        # Add vision model output to the result (Step 1 output)
+        result['vision_model_output'] = image_description
+
+        # Add model information to the result (including provider info for mixed-provider support)
+        result['_models_used'] = {
+            'vision_provider': vision_provider,
+            'vision_model': vision_model,
+            'processing_provider': processing_provider,
+            'processing_model': processing_model
+        }
+
+        return result
+
+    except Exception as e:
+        handle_exception(func_name, e, f"analyzing image with mixed providers (vision={vision_provider}, processing={processing_provider})")
+        return None
+
+
 def analyze_image_with_openai(image_path, combined_prompt, language=None):
     """
-    Analyze an image using configured LLM provider (OpenAI or ECB-LLM) and return structured JSON data.
+    Analyze an image using configured LLM provider (OpenAI, ECB-LLM, or Ollama) and return structured JSON data.
 
     Args:
         image_path (str): Path to the image file
@@ -1198,7 +1739,19 @@ def analyze_image_with_openai(image_path, combined_prompt, language=None):
             debug_log("Failed to retrieve LLM credentials", "ERROR")
             return None
 
-        # Initialize client based on provider
+        # Check if two-step processing is enabled
+        two_step_processing = CONFIG.get('two_step_processing', True)
+        debug_log(f"Two-step processing: {two_step_processing}")
+
+        # Route to Ollama-style two-step processing if enabled
+        if two_step_processing:
+            debug_log(f"Using LLM provider: {provider} with two-step processing")
+            return analyze_image_with_ollama(image_path, combined_prompt, credentials, language)
+
+        # Single-step processing (legacy mode)
+        debug_log(f"Using LLM provider: {provider} with single-step processing")
+
+        # Initialize client based on provider (OpenAI or ECB-LLM)
         if provider == 'OpenAI':
             debug_log(f"Using LLM provider: {provider}")
             client = OpenAI(api_key=credentials['api_key'])
@@ -1243,8 +1796,8 @@ def analyze_image_with_openai(image_path, combined_prompt, language=None):
         })
         debug_log(f"Added user message with prompt and image")
 
-        # Get model from config
-        model = CONFIG.get('model', 'gpt-4o')
+        # Get vision model from credentials (for single-step, use vision_model)
+        model = credentials.get('vision_model', 'gpt-4o')
         debug_log(f"Using model: {model}")
 
         # Make API request
@@ -1285,6 +1838,11 @@ def analyze_image_with_openai(image_path, combined_prompt, language=None):
                 # Ensure the response is a dictionary, not a string or other type
                 if isinstance(parsed_response, dict):
                     debug_log("Successfully parsed entire response as JSON", "INFORMATION")
+                    # Add model information to the result (single-step uses vision_model only)
+                    parsed_response['_models_used'] = {
+                        'vision_model': model,
+                        'processing_model': None  # Single-step doesn't use processing model
+                    }
                     return parsed_response
                 else:
                     debug_log(f"Response parsed as JSON but is not a dict (type: {type(parsed_response).__name__}), attempting to extract JSON object", "WARNING")
@@ -1301,6 +1859,11 @@ def analyze_image_with_openai(image_path, combined_prompt, language=None):
                 try:
                     parsed_response = json.loads(json_str)
                     debug_log("Successfully extracted and parsed JSON from response", "INFORMATION")
+                    # Add model information to the result (single-step uses vision_model only)
+                    parsed_response['_models_used'] = {
+                        'vision_model': model,
+                        'processing_model': None  # Single-step doesn't use processing model
+                    }
                     return parsed_response
                 except json.JSONDecodeError as e:
                     debug_log(f"Extracted JSON is invalid: {str(e)}", "WARNING")
@@ -1342,16 +1905,24 @@ def analyze_image_with_openai(image_path, combined_prompt, language=None):
                 "image_type": "informative",
                 "image_description": "AI-generated description not available in structured format",
                 "reasoning": "Response format parsing failed - extracted from plain text",
-                "alt_text": extracted_text
+                "alt_text": extracted_text,
+                "_models_used": {
+                    "vision_model": model,
+                    "processing_model": None  # Single-step doesn't use processing model
+                }
             }
         except json.JSONDecodeError as e:
             debug_log(f"JSON parsing failed: {str(e)}", "WARNING")
             # Fallback response
             return {
-                "image_type": "informative", 
+                "image_type": "informative",
                 "image_description": "AI analysis completed but format parsing failed",
                 "reasoning": "JSON parsing error in AI response",
-                "alt_text": "AI-analyzed image."
+                "alt_text": "AI-analyzed image.",
+                "_models_used": {
+                    "vision_model": model,
+                    "processing_model": None  # Single-step doesn't use processing model
+                }
             }
             
     except Exception as e:
@@ -2142,11 +2713,11 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         if context_folder is None:
             context_folder = get_absolute_folder_path('context')
         if prompt_folder is None:
-            prompt_folder = get_absolute_folder_path('prompt')
+            prompt_folder = get_absolute_folder_path('prompt_processing')
         if alt_text_folder is None:
             alt_text_folder = get_absolute_folder_path('alt_text')
 
-        debug_log(f"Using folders - images: {images_folder}, context: {context_folder}, prompt: {prompt_folder}, alt-text: {alt_text_folder}")
+        debug_log(f"Using folders - images: {images_folder}, context: {context_folder}, processing prompts: {prompt_folder}, alt-text: {alt_text_folder}")
         
         # Create alt-text folder if it doesn't exist
         if not os.path.exists(alt_text_folder):
@@ -2225,6 +2796,7 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
 
         # Try LLM analysis (OpenAI or ECB-LLM based on configuration)
         translation_method = None  # Track translation method used
+        models_used = None  # Track which models were used for generation
         if is_multilingual:
             # Generate alt-text for multiple languages
             debug_log(f"Generating alt-text for {len(target_languages)} languages: {target_languages}")
@@ -2261,6 +2833,8 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                         if image_type is None:
                             image_type = llm_result.get("image_type", "informative")
                             image_description = llm_result.get("image_description", "")
+                            # Extract model information from first language analysis
+                            models_used = llm_result.get("_models_used")
 
                         lang_alt_text = llm_result.get("alt_text", "")
                         lang_reasoning = llm_result.get("reasoning", "")
@@ -2315,6 +2889,9 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                     first_lang_reasoning = llm_result.get("reasoning", "")
                     first_lang_alt_text = llm_result.get("alt_text", "")
 
+                    # Extract model information if available
+                    models_used = llm_result.get("_models_used")
+
                     # Ensure alt_text compliance
                     if len(first_lang_alt_text) > 125:
                         first_lang_alt_text = first_lang_alt_text[:122] + "..."
@@ -2363,9 +2940,10 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 alt_text = multilingual_results  # Array of tuples
                 reasoning = multilingual_reasoning  # Array of tuples
                 debug_log(f"Multilingual generation complete (FAST mode) - Type: {image_type}, {len(multilingual_results)} languages")
-        else:
+
+        if not is_multilingual or translation_mode == "accurate":
             # Single language mode (existing behavior)
-            lang = target_languages[0]
+            lang = target_languages[0] if not is_multilingual else target_languages[0]
             debug_log(f"Language specified: {lang}")
             # Create language-specific prompt
             lang_prompt = create_prompt_for_language(lang)
@@ -2378,6 +2956,9 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 image_description = llm_result.get("image_description", "")
                 reasoning = llm_result.get("reasoning", "")
                 alt_text = llm_result.get("alt_text", "")
+
+                # Extract model information if available
+                models_used = llm_result.get("_models_used")
 
                 # Ensure alt_text compliance
                 if len(alt_text) > 125:
@@ -2438,8 +3019,12 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
             "proposed_alt_text": proposed_alt_text,
             "proposed_alt_text_length": characters,
             "ai_model": {
-                "provider": CONFIG.get('llm_provider', 'Unknown'),
-                "model": CONFIG.get('model', 'Unknown')
+                "vision_provider": models_used.get('vision_provider') if models_used else CONFIG.get('steps', {}).get('vision', {}).get('provider', 'Unknown'),
+                "vision_model": models_used.get('vision_model') if models_used else CONFIG.get('steps', {}).get('vision', {}).get('model', 'Unknown'),
+                "processing_provider": models_used.get('processing_provider') if models_used else CONFIG.get('steps', {}).get('processing', {}).get('provider', 'Unknown'),
+                "processing_model": models_used.get('processing_model') if models_used else CONFIG.get('steps', {}).get('processing', {}).get('model', 'Unknown'),
+                "translation_provider": CONFIG.get('steps', {}).get('translation', {}).get('provider', 'Unknown') if translation_method and translation_method != "none" else None,
+                "translation_model": CONFIG.get('steps', {}).get('translation', {}).get('model', 'Unknown') if translation_method and translation_method != "none" else None
             },
             "translation_method": translation_method if translation_method else "none",
             "processing_time_seconds": processing_time
@@ -2505,7 +3090,7 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
     """
     func_name = "process_all_images"
     debug_log(f"Starting {func_name}")
-    
+
     try:
         # Use config values - resolve to absolute paths
         if images_folder is None:
@@ -2513,7 +3098,7 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
         if context_folder is None:
             context_folder = get_absolute_folder_path('context')
         if prompt_folder is None:
-            prompt_folder = get_absolute_folder_path('prompt')
+            prompt_folder = get_absolute_folder_path('prompt_processing')
         if alt_text_folder is None:
             alt_text_folder = get_absolute_folder_path('alt_text')
         
@@ -2683,7 +3268,7 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
         if context_folder is None:
             context_folder = get_absolute_folder_path('context')
         if prompt_folder is None:
-            prompt_folder = get_absolute_folder_path('prompt')
+            prompt_folder = get_absolute_folder_path('prompt_processing')
         if alt_text_folder is None:
             alt_text_folder = get_absolute_folder_path('alt_text')
 

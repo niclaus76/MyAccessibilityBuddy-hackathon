@@ -10,34 +10,8 @@
     <title>My Accessibility Buddy</title>
     <!-- Bootstrap Italia CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.8.2/dist/css/bootstrap-italia.min.css" rel="stylesheet">
-    <style>
-        /* Skip to main content link */
-        .skip-link {
-            position: absolute;
-            top: -40px;
-            left: 0;
-            background: #0066cc;
-            color: white;
-            padding: 8px 16px;
-            text-decoration: none;
-            z-index: 100;
-            font-weight: bold;
-        }
-        .skip-link:focus {
-            top: 0;
-            outline: 3px solid #ffdd00;
-            outline-offset: 2px;
-        }
-        /* Improved focus indicators */
-        button:focus-visible,
-        select:focus-visible,
-        input:focus-visible,
-        textarea:focus-visible,
-        [tabindex]:focus-visible {
-            outline: 3px solid #0066cc;
-            outline-offset: 2px;
-        }
-    </style>
+    <!-- Custom CSS -->
+    <link href="styles.css" rel="stylesheet">
 </head>
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -66,27 +40,110 @@
                     review before use.</p>
             </div>
         </div>
+
+        <!-- STEPS AND MODELS INFO -->
+        <div class="row justify-content-center mt-4">
+            <div class="col-12 col-md-8">
+                <div class="text-center mb-3">
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="toggleInfoBtn" aria-expanded="false" aria-controls="processingInfo">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="me-1" style="vertical-align: text-bottom;" aria-hidden="true">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                        </svg>
+                        Read more about processing steps & models
+                    </button>
+                </div>
+                <div class="alert alert-info d-none" id="processingInfo" role="region" aria-label="Processing steps information">
+                    <h6 class="alert-heading"><strong>Three-Step Processing</strong></h6>
+                    <p class="mb-2"><strong>Step 1 - Vision:</strong> Analyzes the image and generates a detailed description.</p>
+                    <p class="mb-2"><strong>Step 2 - Processing:</strong> Converts the description into WCAG 2.2-compliant alt text.</p>
+                    <p class="mb-3"><strong>Step 3 - Translation:</strong> Translates the alt text to the selected language(s).</p>
+
+                    <h6 class="mt-3"><strong>Available Providers & Models</strong></h6>
+                    <ul class="mb-0" style="font-size: 0.9rem;">
+                        <li><strong>OpenAI:</strong> gpt-4o, gpt-4o-mini (cloud-based, requires API key)</li>
+                        <li><strong>Claude:</strong> claude-3-5-sonnet, claude-3-opus, claude-3-haiku (cloud-based, requires API key)</li>
+                        <li><strong>ECB-LLM:</strong> gpt-4o, gpt-5.1 (internal ECB service, requires authentication)</li>
+                        <li><strong>Ollama:</strong> granite3.2-vision, llama3.2-vision, phi3, mistral (local models, free)</li>
+                    </ul>
+                    <p class="mt-2 mb-0"><small><em>You can mix providers across steps (e.g., Claude for vision, OpenAI for processing). Leave dropdowns as "Please select" to use default settings from config.json.</em></small></p>
+                </div>
+            </div>
+        </div>
         </div>
     </header>
 
     <main id="main-content">
         <div class="container py-4">
 
-    <!-- Model Selection -->
+    <!-- Vision Step -->
+    <div class="row justify-content-center mb-3">
+        <div class="col-12 col-md-8">
+            <h6 class="mb-2">Step 1: Vision (Image Analysis)</h6>
+            <div class="row">
+                <div class="col-md-6 mb-2">
+                    <label for="visionProviderSelect" class="form-label">Provider</label>
+                    <select class="form-select" id="visionProviderSelect" name="vision_provider" required>
+                        <option value="">Please select</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                        <option value="ecb-llm">ECB-LLM</option>
+                        <option value="ollama">Ollama</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-2">
+                    <label for="visionModelSelect" class="form-label">Model</label>
+                    <select class="form-select" id="visionModelSelect" name="vision_model" required disabled>
+                        <option value="">Please select provider first</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Step -->
+    <div class="row justify-content-center mb-3">
+        <div class="col-12 col-md-8">
+            <h6 class="mb-2">Step 2: Processing (Alt-Text Generation)</h6>
+            <div class="row">
+                <div class="col-md-6 mb-2">
+                    <label for="processingProviderSelect" class="form-label">Provider</label>
+                    <select class="form-select" id="processingProviderSelect" name="processing_provider" required>
+                        <option value="">Please select</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                        <option value="ecb-llm">ECB-LLM</option>
+                        <option value="ollama">Ollama</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-2">
+                    <label for="processingModelSelect" class="form-label">Model</label>
+                    <select class="form-select" id="processingModelSelect" name="processing_model" required disabled>
+                        <option value="">Please select provider first</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Translation Step -->
     <div class="row justify-content-center mb-4">
         <div class="col-12 col-md-8">
-            <div class="d-flex align-items-center">
-                <label for="modelSelect" class="form-label fw-bold me-3 mb-0">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="me-1" style="vertical-align: text-bottom;" aria-hidden="true">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                    </svg>
-                    Model
-                </label>
-                <div class="flex-grow-1">
-                    <select class="form-select" id="modelSelect" name="model" required>
-                        <option value="openai-gpt4o" selected>OpenAI GPT-4o</option>
-                        <option value="ecb-llm-gpt4o">ECB-LLM GPT-4o</option>
-                        <option value="ecb-llm-gpt-5.1">ECB-LLM GPT-5.1</option>
+            <h6 class="mb-2">Step 3: Translation (Multilingual)</h6>
+            <div class="row">
+                <div class="col-md-6 mb-2">
+                    <label for="translationProviderSelect" class="form-label">Provider</label>
+                    <select class="form-select" id="translationProviderSelect" name="translation_provider" required>
+                        <option value="">Please select</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                        <option value="ecb-llm">ECB-LLM</option>
+                        <option value="ollama">Ollama</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-2">
+                    <label for="translationModelSelect" class="form-label">Model</label>
+                    <select class="form-select" id="translationModelSelect" name="translation_model" required disabled>
+                        <option value="">Please select provider first</option>
                     </select>
                 </div>
             </div>
@@ -291,386 +348,6 @@
 
 <!-- Bootstrap Italia JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.8.2/dist/js/bootstrap-italia.bundle.min.js"></script>
-
-<script>
-    let currentModel = 'openai-gpt4o';
-    let currentLang = 'en';
-    let selectedFile = null;
-    let selectedContextFile = null;
-    let contextText = '';
-    let actualAltText = ''; // Store the actual alt text for copying
-    let isAuthenticated = false;
-    let loginUrl = null;
-
-    // Initialize Bootstrap tooltips
-    document.addEventListener('DOMContentLoaded', function() {
-        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-
-        // Check authentication status on page load
-        checkAuthenticationStatus();
-    });
-
-    // DOM Elements
-    const modelSelect = document.getElementById('modelSelect');
-    const langSelect = document.getElementById('languageSelect');
-    const fileInput = document.getElementById('fileInput');
-    const uploadArea = document.getElementById('uploadDragdrop');
-    const browseBtn = document.getElementById('browseBtn');
-    const previewContainer = document.getElementById('previewContainer');
-    const previewImage = document.getElementById('previewImage');
-    const generateBtn = document.getElementById('generateBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const resultSection = document.getElementById('resultSection');
-    const copyBtn = document.getElementById('copyBtn');
-    const removeImage = document.getElementById('removeImage');
-
-    // Context file elements
-    const contextFileInput = document.getElementById('contextFileInput');
-    const contextDragdrop = document.getElementById('contextDragdrop');
-    const contextBrowseBtn = document.getElementById('contextBrowseBtn');
-    const contextPreviewContainer = document.getElementById('contextPreviewContainer');
-    const contextFileName = document.getElementById('contextFileName');
-    const contextFilePreview = document.getElementById('contextFilePreview');
-    const removeContext = document.getElementById('removeContext');
-
-    // Model selection
-    modelSelect.addEventListener('change', (e) => {
-        currentModel = e.target.value;
-    });
-
-    // Language selection
-    langSelect.addEventListener('change', (e) => {
-        currentLang = e.target.value;
-    });
-
-    // Browse button click
-    browseBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        fileInput.click();
-    });
-
-    // Upload area click
-    uploadArea.addEventListener('click', (e) => {
-        if (e.target !== browseBtn && !browseBtn.contains(e.target)) {
-            fileInput.click();
-        }
-    });
-
-    // Upload area keyboard accessibility
-    uploadArea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            fileInput.click();
-        }
-    });
-
-    // File input change
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFile(e.target.files[0]);
-        }
-    });
-
-    // Drag and drop functionality
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadArea.style.borderColor = '#0052cc';
-        uploadArea.style.backgroundColor = '#e6f0ff';
-    });
-
-    uploadArea.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadArea.style.borderColor = '#0066cc';
-        uploadArea.style.backgroundColor = '#f0f6fc';
-    });
-
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadArea.style.borderColor = '#0066cc';
-        uploadArea.style.backgroundColor = '#f0f6fc';
-
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            handleFile(files[0]);
-        }
-    });
-
-    function handleFile(file) {
-        if (!file.type.startsWith('image/')) return;
-
-        selectedFile = file;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            previewImage.src = e.target.result;
-            uploadArea.classList.add('d-none');
-            previewContainer.classList.remove('d-none');
-            generateBtn.disabled = false;
-        };
-        reader.readAsDataURL(file);
-    }
-
-    // Remove image
-    removeImage.addEventListener('click', resetForm);
-
-    // Context file upload handlers
-    contextBrowseBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        contextFileInput.click();
-    });
-
-    contextDragdrop.addEventListener('click', () => {
-        contextFileInput.click();
-    });
-
-    // Context drag-drop keyboard accessibility
-    contextDragdrop.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            contextFileInput.click();
-        }
-    });
-
-    contextDragdrop.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        contextDragdrop.style.borderColor = '#0066cc';
-        contextDragdrop.style.backgroundColor = '#e6f2ff';
-    });
-
-    contextDragdrop.addEventListener('dragleave', () => {
-        contextDragdrop.style.borderColor = '#17324d';
-        contextDragdrop.style.backgroundColor = '#f5f5f5';
-    });
-
-    contextDragdrop.addEventListener('drop', (e) => {
-        e.preventDefault();
-        contextDragdrop.style.borderColor = '#17324d';
-        contextDragdrop.style.backgroundColor = '#f5f5f5';
-
-        const file = e.dataTransfer.files[0];
-        if (file && file.type === 'text/plain') {
-            handleContextFile(file);
-        }
-    });
-
-    contextFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            handleContextFile(file);
-        }
-    });
-
-    function handleContextFile(file) {
-        selectedContextFile = file;
-        const reader = new FileReader();
-
-        reader.onload = (e) => {
-            contextText = e.target.result;
-            contextFileName.textContent = file.name;
-            const preview = contextText.length > 100 ? contextText.substring(0, 100) + '...' : contextText;
-            contextFilePreview.textContent = preview;
-            contextPreviewContainer.classList.remove('d-none');
-            contextDragdrop.classList.add('d-none');
-        };
-
-        reader.readAsText(file);
-    }
-
-    removeContext.addEventListener('click', () => {
-        selectedContextFile = null;
-        contextText = '';
-        contextFileInput.value = '';
-        contextPreviewContainer.classList.add('d-none');
-        contextDragdrop.classList.remove('d-none');
-    });
-
-    function resetForm() {
-        selectedFile = null;
-        fileInput.value = '';
-        previewContainer.classList.add('d-none');
-        previewImage.src = '';
-        uploadArea.classList.remove('d-none');
-        selectedContextFile = null;
-        contextText = '';
-        contextFileInput.value = '';
-        contextPreviewContainer.classList.add('d-none');
-        contextDragdrop.classList.remove('d-none');
-        generateBtn.disabled = true;
-        resultSection.classList.add('d-none');
-    }
-
-    // API Configuration
-    const API_BASE_URL = 'http://localhost:8000/api';
-
-    // Check authentication status
-    async function checkAuthenticationStatus() {
-        console.log('[AUTH] Checking authentication status...');
-        try {
-            const response = await fetch(`${API_BASE_URL}/auth/status`);
-            const data = await response.json();
-            console.log('[AUTH] Status response:', data);
-
-            if (data.authenticated && data.requires_u2a) {
-                // U2A mode: check if we have valid session
-                isAuthenticated = data.has_credentials;
-                loginUrl = data.login_url;
-                console.log('[AUTH] U2A mode - isAuthenticated:', isAuthenticated, 'loginUrl:', loginUrl);
-            } else if (!data.requires_u2a) {
-                // OpenAI: no user auth required
-                isAuthenticated = true;
-                console.log('[AUTH] OpenAI mode - no auth required');
-            }
-        } catch (error) {
-            console.error('[AUTH] Error checking auth status:', error);
-            isAuthenticated = false;
-        }
-    }
-
-    // Show authentication via OAuth2 redirect
-    async function showAuthentication() {
-        console.log('[AUTH] showAuthentication called');
-        console.log('[AUTH] loginUrl:', loginUrl);
-        console.log('[AUTH] isAuthenticated:', isAuthenticated);
-
-        // If loginUrl is not set, try to fetch auth status again
-        if (!loginUrl) {
-            console.log('[AUTH] Login URL not set, fetching auth status...');
-            await checkAuthenticationStatus();
-        }
-
-        if (loginUrl) {
-            // Redirect to OAuth2 authorization endpoint
-            // This will redirect to ECB login and then back to our callback
-            console.log('[AUTH] Redirecting to:', `${API_BASE_URL}${loginUrl}`);
-            window.location.href = `${API_BASE_URL}${loginUrl}`;
-        } else {
-            console.error('[AUTH] No login URL available even after re-checking');
-            alert('Authentication is required but no login URL is configured. Please check your setup and ensure the API server is running.');
-        }
-    }
-
-    // Generate with real API call
-    generateBtn.addEventListener('click', async () => {
-        console.log('[GENERATE] Button clicked');
-
-        // Backend handles authentication automatically via CredentialManager
-        // No frontend authentication check needed
-        performGeneration();
-    });
-
-    async function performGeneration() {
-        const btnText = document.getElementById('btnText');
-        const btnSpinner = document.getElementById('btnSpinner');
-
-        btnText.textContent = 'Generating...';
-        btnSpinner.classList.remove('d-none');
-        generateBtn.disabled = true;
-
-        try {
-            // Prepare FormData
-            const formData = new FormData();
-            formData.append('image', selectedFile);
-            formData.append('language', currentLang);
-            formData.append('model', currentModel);
-
-            if (contextText && contextText.trim()) {
-                formData.append('context', contextText.trim());
-            }
-
-            // API Call
-            const response = await fetch(`${API_BASE_URL}/generate-alt-text`, {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-
-            if (data.success && data.alt_text !== undefined && data.alt_text !== null) {
-                actualAltText = data.alt_text; // Store actual value
-                const altTextDisplay = data.alt_text === "" ? '(Empty alt text for decorative image)' : data.alt_text;
-                document.getElementById('resultText').value = altTextDisplay;
-                resultSection.classList.remove('d-none');
-                resultSection.scrollIntoView({ behavior: 'smooth' });
-
-                // Enable Clear button after successful generation
-                clearBtn.disabled = false;
-            } else {
-                throw new Error(data.error || 'Failed to generate alt-text');
-            }
-
-        } catch (error) {
-            console.error('Error generating alt-text:', error);
-            alert(`Generation error: ${error.message}\n\nMake sure the API server is running (python backend/api.py)`);
-        } finally {
-            btnText.textContent = 'Generate Alt Text';
-            btnSpinner.classList.add('d-none');
-            generateBtn.disabled = false;
-        }
-    }
-
-    // Copy result
-    copyBtn.addEventListener('click', () => {
-        // Copy the current value from textarea (allowing user edits)
-        const textToCopy = document.getElementById('resultText').value;
-        navigator.clipboard.writeText(textToCopy).then(() => {
-            document.getElementById('copyBtnText').textContent = 'Copied!';
-            setTimeout(() => {
-                document.getElementById('copyBtnText').textContent = 'Copy';
-            }, 2000);
-        });
-    });
-
-    // Clear all - reset form to initial state
-    clearBtn.addEventListener('click', () => {
-        // Reset image upload
-        selectedFile = null;
-        fileInput.value = '';
-        previewContainer.classList.add('d-none');
-        uploadArea.classList.remove('d-none');
-
-        // Reset context
-        selectedContextFile = null;
-        contextText = '';
-        contextFileInput.value = '';
-        contextPreviewContainer.classList.add('d-none');
-        contextDragdrop.classList.remove('d-none');
-
-        // Reset model and language to default
-        modelSelect.value = 'openai-gpt4o';
-        currentModel = 'openai-gpt4o';
-        langSelect.value = 'en';
-        currentLang = 'en';
-
-        // Hide result section
-        resultSection.classList.add('d-none');
-        document.getElementById('resultText').value = '';
-        actualAltText = '';
-
-        // Disable buttons
-        generateBtn.disabled = true;
-        clearBtn.disabled = true;
-
-        // Scroll back to top
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-</script>
-
-        </div>
-    </main>
-
-    <!-- Live region for screen reader announcements -->
-    <div role="status" aria-live="polite" aria-atomic="true" class="visually-hidden" id="announcements"></div>
-
-</body>
-</html>
+<!-- Application JS -->
+<script src="app.js"></script>
+</body></html>

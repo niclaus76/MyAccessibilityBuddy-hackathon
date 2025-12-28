@@ -1,6 +1,10 @@
 {
+  "_comment_info": "BASIC CONFIGURATION - Settings most users will need to adjust",
+  "_comment_advanced": "For advanced settings (folders, scraping, context extraction, etc.), see config.advanced.json",
+
   "_comment_debug": "true or false - enables debug logging to files",
   "debug_mode": true,
+
   "_comment_logging": "Control console output by log level: DEBUG (technical details), INFO/progress (progress updates), WARNING/warnings (potential issues), ERROR/errors (failures)",
   "logging": {
     "show_debug": true,
@@ -8,184 +12,83 @@
     "show_warnings": true,
     "show_errors": true
   },
-  "_comment_llm": "llm_provider: OpenAI or ECB-LLM (U2A OAuth2 authentication only)",
-  "llm_provider": "OpenAI",
-  "_comment_model": "model: gpt-4o (for OpenAI) or gpt-4o, gpt-5.1 (for ECB-LLM only)",
-  "model": "gpt-4o",
-  "_comment_translation_mode": "translation_mode: 'fast' (generate once in first language, then translate) or 'accurate' (generate fresh alt-text for each language). 'fast' is recommended for cost/speed.",
-  "translation_mode": "accurate",
-  "_comment_html_report_display": "HTML report display settings: control which fields are shown in the generated HTML report",
-  "html_report_display": {
-    "display_image_analysis_overview": true,
-    "display_image_type_distribution": true,
-    "display_html_tags_used": true,
-    "display_html_attributes_used": true,
-    "display_image_preview": true,
-    "display_image_type": true,
-    "display_current_alt_text": true,
-    "display_proposed_alt_text": true,
-    "display_image_tag_attribute": true,
-    "display_reasoning": true,
-    "display_context": true
+
+  "_comment_two_step_processing": "Two-step processing: use separate models for vision (Step 1: image description) and processing (Step 2: WCAG alt-text generation). Set to false to use single-step processing with vision_model only.",
+  "two_step_processing": true,
+
+  "_comment_steps": "Configure provider and model for each step. You can mix providers (e.g., Claude for vision, OpenAI for processing, ECB-LLM for translation)",
+  "steps": {
+    "vision": {
+      "provider": "OpenAI",
+      "model": "GPT-4o"
+    },
+    "processing": {
+      "provider": "OpenAI",
+      "model": "GPT-4o"
+    },
+    "translation": {
+      "provider": "OpenAI",
+      "model": "GPT-4o"
+    }
   },
-  "_comment_ecb_llm": "ECB-LLM U2A OAuth2 configuration: token_url, scope, authorize_url (OAuth2 authorization endpoint)",
+
+  "_comment_provider_configs": "Provider-specific configurations and authentication",
+  "openai": {
+    "available_models": {
+      "vision": ["gpt-4o", "gpt-4o-mini"],
+      "processing": ["gpt-4o", "gpt-4o-mini"],
+      "translation": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
+    }
+  },
+
+  "claude": {
+    "available_models": {
+      "vision": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229"],
+      "processing": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229"],
+      "translation": ["claude-3-5-haiku-20241022", "claude-3-haiku-20240307"]
+    }
+  },
+
   "ecb_llm": {
-    "token_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/token",
-    "scope": "openid profile LLM.api.read",
-    "authorize_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/authorize"
+    "available_models": {
+      "vision": ["gpt-4o", "gpt-5.1"],
+      "processing": ["gpt-4o", "gpt-5.1"],
+      "translation": ["gpt-4o", "gpt-5.1"]
+    }
   },
-  "_comment_project_root": "Optional: Specify custom project root directory. If not set or 'auto', automatically detects as parent of backend/ folder. Use absolute path for custom location.",
-  "project_root": "auto",
-  "folders": {
-    "images": "input/images",
-    "context": "input/context",
-    "alt_text": "output/alt-text",
-    "reports": "output/reports",
-    "prompt": "prompt",
-    "logs": "logs"
+
+  "ollama": {
+    "base_url": "http://192.168.64.1:11434",
+    "_comment_available_models_vision": "Ollama vision models: granite3.2-vision (IBM Granite 3.2 with vision, recommended), llama3.2-vision (Meta Llama 3.2 with vision), moondream (lightweight vision model), llava (LLaVA multimodal model)",
+    "_comment_available_models_processing": "Ollama text models: phi3 (Microsoft Phi-3 3.8B, fast and efficient, recommended), llama3.2 (Meta Llama 3.2 3B), granite3.2 (IBM Granite 3.2 3B), qwen2.5 (Alibaba Qwen 2.5), mistral (Mistral 7B)",
+    "_comment_available_models_translation": "Ollama translation models: Same as processing models - phi3 (recommended for speed), llama3.2, granite3.2, qwen2.5 (good for non-Latin scripts), mistral",
+    "available_models": {
+      "vision": ["granite3.2-vision", "llama3.2-vision", "moondream", "llava"],
+      "processing": ["phi3", "llama3.2", "granite3.2", "qwen2.5", "mistral"],
+      "translation": ["phi3", "llama3.2", "granite3.2", "qwen2.5", "mistral"]
+    }
   },
-  "download": {
-    "_comment": "timeout: request timeout in seconds, delay_between_requests: delay between image downloads to avoid rate limiting",
-    "timeout": 30,
-    "delay_between_requests": 3,
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-  },
-  "image_extraction": {
-    "_comment": "Configure which HTML tags and attributes to use for finding images",
-    "tags": {
-      "img": true,
-      "picture": true,
-      "div": true,
-      "link": true,
-      "meta": true
-    },
-    "attributes": {
-      "src": true,
-      "data-src": true,
-      "data-image": true,
-      "data-image-webp": true,
-      "srcset": true,
-      "data-srcset": true,
-      "href": true,
-      "content": true
-    },
-    "css_background_images": true
-  },
-  "context": {
-    "_comment": "Context extraction configuration: max_text_length (max chars per text element), max_parent_levels (DOM levels to traverse), min_text_length (minimum chars to include), max_sibling_text_length (max chars from sibling elements)",
-    "max_text_length": 1000,
-    "max_parent_levels": 5,
-    "min_text_length": 20,
-    "max_sibling_text_length": 500
-  },
+
+  "_comment_translation_mode": "translation_mode: 'fast' (generate once in first language, then translate) or 'accurate' (generate fresh alt-text for each language). 'fast' is recommended for cost/speed.",
+  "translation_mode": "fast",
+
+  "_comment_prompt": "Prompt template configuration: processing_files (list of processing prompt files), default_processing_prompt (fallback), vision_files (list of vision prompt files), default_vision_prompt (fallback), translation_files (list of translation prompt files), default_translation_prompt (fallback). For merge_separator setting, see config.advanced.json",
   "prompt": {
-    "_comment": "Prompt template configuration: files (list of prompt template files to load), merge_separator (separator between multiple prompts), default_prompt (fallback prompt file)",
-    "files": [
-      "prompt_v3.txt"
+    "processing_files": [
+      "processing_prompt_v3bis.txt"
     ],
-    "merge_separator": "\n\n---\n\n",
-    "default_prompt": "prompt_v0.txt"
-  },
-  "languages": {
-    "_comment": "Supported languages for alt-text generation (EU official languages)",
-    "allowed": [
-      {
-        "code": "bg",
-        "name": "\u0411\u044a\u043b\u0433\u0430\u0440\u0441\u043a\u0438"
-      },
-      {
-        "code": "cs",
-        "name": "\u010ce\u0161tina"
-      },
-      {
-        "code": "da",
-        "name": "Dansk"
-      },
-      {
-        "code": "de",
-        "name": "Deutsch"
-      },
-      {
-        "code": "el",
-        "name": "E\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac"
-      },
-      {
-        "code": "en",
-        "name": "English"
-      },
-      {
-        "code": "es",
-        "name": "Espa\u00f1ol"
-      },
-      {
-        "code": "et",
-        "name": "Eesti keel"
-      },
-      {
-        "code": "fi",
-        "name": "Suomi"
-      },
-      {
-        "code": "fr",
-        "name": "Fran\u00e7ais"
-      },
-      {
-        "code": "ga",
-        "name": "Gaeilge"
-      },
-      {
-        "code": "hr",
-        "name": "Hrvatski"
-      },
-      {
-        "code": "hu",
-        "name": "Magyar"
-      },
-      {
-        "code": "it",
-        "name": "Italiano"
-      },
-      {
-        "code": "lt",
-        "name": "Lietuvi\u0173"
-      },
-      {
-        "code": "lv",
-        "name": "Latvie\u0161u"
-      },
-      {
-        "code": "mt",
-        "name": "Malti"
-      },
-      {
-        "code": "nl",
-        "name": "Nederlands"
-      },
-      {
-        "code": "pl",
-        "name": "Polski"
-      },
-      {
-        "code": "pt",
-        "name": "Portugu\u00eas"
-      },
-      {
-        "code": "ro",
-        "name": "Rom\u00e2n\u0103"
-      },
-      {
-        "code": "sk",
-        "name": "Sloven\u010dina"
-      },
-      {
-        "code": "sl",
-        "name": "Sloven\u0161\u010dina"
-      },
-      {
-        "code": "sv",
-        "name": "Svenska"
-      }
+    "default_processing_prompt": "processing_prompt_v0.txt",
+    "vision_files": [
+      "vision_prompt_v0.txt"
     ],
-    "default": "en"
+    "default_vision_prompt": "vision_prompt_v0.txt",
+    "translation_files": [
+      "translation_prompt_v0.txt"
+    ],
+    "default_translation_prompt": "translation_prompt_v0.txt",
+    "translation_system_files": [
+      "translation_system_prompt_v0.txt"
+    ],
+    "default_translation_system_prompt": "translation_system_prompt_v0.txt"
   }
 }

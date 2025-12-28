@@ -226,14 +226,68 @@ python3 tools/batch_compare_prompts.py
 # Output: output/prompt_comparison_TIMESTAMP.csv
 ```
 
-## Configuration (backend/config/config.json)
+## Configuration
 
-### LLM Provider Settings
+MyAccessibilityBuddy uses a split configuration system for better usability:
+
+- **[config.json](backend/config/config.json)** - Basic settings (LLM, logging, prompts)
+- **[config.advanced.json](backend/config/config.advanced.json)** - Advanced settings (folders, scraping, context extraction, languages)
+
+Both files are automatically loaded and merged at startup. Basic config takes precedence for overlapping keys.
+
+### Basic Configuration (config.json)
+
+Settings that users commonly adjust:
+
+#### LLM Provider Settings
 ```json
 {
-  "llm_provider": "OpenAI",    // or "ECB-LLM"
-  "model": "gpt-4o",           // or "gpt-5.1" for ECB-LLM
-  "translation_mode": "accurate"  // "fast" or "accurate"
+  "llm_provider": "Ollama",        // Options: "OpenAI", "ECB-LLM", or "Ollama"
+  "two_step_processing": true,     // Enable two-step processing (recommended)
+  "translation_mode": "fast",      // "fast" or "accurate"
+
+  "openai": {
+    "vision_model": "gpt-4o",      // Step 1: Image description
+    "processing_model": "gpt-4o"   // Step 2: WCAG alt-text generation
+  },
+
+  "ecb_llm": {
+    "vision_model": "gpt-4o",      // Can use gpt-4o or gpt-5.1
+    "processing_model": "gpt-4o"
+  },
+
+  "ollama": {
+    "base_url": "http://192.168.64.1:11434",
+    "vision_model": "granite3.2-vision",
+    "processing_model": "phi3"
+  }
+}
+```
+
+**LLM Providers:**
+- **OpenAI**: Cloud-based GPT-4o (requires `OPENAI_API_KEY` in `.env`)
+- **ECB-LLM**: ECB internal service (requires `CLIENT_ID_U2A` and `CLIENT_SECRET_U2A` in `.env`)
+- **Ollama**: Local models via Ollama server (free, runs locally, no API key needed)
+
+**Two-Step Processing:**
+When `two_step_processing: true` (recommended), all providers use a two-step workflow:
+1. **Step 1 - Vision**: Vision model analyzes image → generates detailed description (uses prompts from `prompt/vision/`)
+2. **Step 2 - Processing**: Processing model → generates WCAG-compliant alt-text (uses prompts from `prompt/processing/`)
+
+When `two_step_processing: false`, uses legacy single-step mode (vision model does everything).
+
+**Model Flexibility:**
+You can mix and match models within the same provider:
+```json
+{
+  "openai": {
+    "vision_model": "gpt-4o",       // High-quality image analysis
+    "processing_model": "gpt-4o-mini"  // Cheaper model for text processing
+  },
+  "ollama": {
+    "vision_model": "llama3.2-vision",  // Or granite3.2-vision, moondream
+    "processing_model": "phi3"           // Or llama3.2, granite3.2
+  }
 }
 ```
 
@@ -241,9 +295,76 @@ python3 tools/batch_compare_prompts.py
 - **"fast"**: Generate once in first language, then translate others (faster, cheaper)
 - **"accurate"**: Generate fresh alt-text for each language (better quality, slower)
 
-Note: Legacy config used `full_translation_mode: boolean`. Code at line 2161 handles backward compatibility.
+**Setting up Ollama:**
+```bash
+# Install Ollama: https://ollama.ai
+# Pull required models
+ollama pull granite3.2-vision  # Or llama3.2-vision
+ollama pull phi3               # Or llama3.2, granite3.2
 
-### Folder Paths
+# Configure in config.json
+"llm_provider": "Ollama"
+```
+
+#### Logging Settings
+```json
+{
+  "debug_mode": true,  // Enables file logging to logs/
+  "logging": {
+    "show_debug": true,     // Technical details
+    "show_progress": true,  // Progress updates
+    "show_warnings": true,  // Potential issues
+    "show_errors": true     // Failures
+  }
+}
+```
+
+#### Prompt Selection
+```json
+{
+  "prompt": {
+    "processing_files": ["processing_prompt_v0.txt"],
+    "default_processing_prompt": "processing_prompt_v0.txt",
+    "vision_files": ["vision_prompt_v0.txt"],
+    "default_vision_prompt": "vision_prompt_v0.txt"
+  }
+}
+```
+
+**Prompt Organization:**
+Prompts are organized into two categories based on the two-step processing workflow:
+
+```
+prompt/
+├── vision/                              # Step 1: Image description
+│   └── vision_prompt_v0.txt            # "Describe this image in detail."
+└── processing/                          # Step 2: WCAG alt-text generation
+    ├── processing_prompt_v0.txt        # Minimal baseline with JSON output
+    ├── processing_prompt_v1.txt        # Basic classification
+    ├── processing_prompt_v2.txt        # WCAG 2.2 focused (recommended)
+    ├── processing_prompt_v3.txt        # Comprehensive
+    └── processing_prompt_v4.txt        # Advanced multi-file modular system
+```
+
+**Available Processing Prompts** in `prompt/processing/`:
+- `processing_prompt_v0.txt` - Minimal baseline with JSON output
+- `processing_prompt_v1.txt` - Basic classification (decorative/informative/functional)
+- `processing_prompt_v2.txt` - WCAG 2.2 focused with decision tree (recommended)
+- `processing_prompt_v3.txt` - Comprehensive with phased execution and optimization
+- `processing_prompt_v4.txt` - Advanced multi-file modular system
+- `processing_prompt_v4-*.txt` - Supporting files for prompt_v4
+
+**Customizing Prompts:**
+- **Vision prompts** (`prompt/vision/`): Control how the image is analyzed in Step 1
+- **Processing prompts** (`prompt/processing/`): Control WCAG alt-text generation in Step 2
+
+**Language Placeholder**: All prompts support the `{LANGUAGE}` placeholder which is automatically replaced with the target language name (e.g., "Italian", "German") at runtime. This ensures alt-text is generated in the correct language for multilingual workflows.
+
+### Advanced Configuration (config.advanced.json)
+
+Technical settings rarely modified by most users:
+
+#### Folder Paths
 All paths are relative to project root. Accessed via `config.settings.get_folder_path(name)`:
 ```json
 {
@@ -253,33 +374,30 @@ All paths are relative to project root. Accessed via `config.settings.get_folder
     "alt_text": "output/alt-text",
     "reports": "output/reports",
     "prompt": "prompt",
+    "prompt_processing": "prompt/processing",
+    "prompt_vision": "prompt/vision",
     "logs": "logs"
   }
 }
 ```
 
-### Prompt Templates
+#### Supported Languages
 ```json
 {
-  "prompt": {
-    "files": ["prompt_v0.txt"],  // List of prompts to merge
-    "merge_separator": "\n\n---\n\n",
-    "default_prompt": "prompt_v0.txt"   // Fallback
+  "languages": {
+    "allowed": [
+      {"code": "bg", "name": "Български"},
+      {"code": "en", "name": "English"},
+      ...24 EU languages total
+    ],
+    "default": "en"
   }
 }
 ```
 
-Available prompts in `prompt/`:
-- `prompt_v0.txt` - Minimal baseline with JSON output
-- `prompt_v1.txt` - Basic classification (decorative/informative/functional)
-- `prompt_v2.txt` - WCAG 2.2 focused with decision tree (recommended)
-- `prompt_v3.txt` - Comprehensive with phased execution and optimization
-- `prompt_v4.txt` - Advanced multi-file modular system
-- `prompt_v4-*.txt` - Supporting files for prompt_v4
+View full list with: `python3 app.py -al`
 
-**Language Placeholder**: All prompts support the `{LANGUAGE}` placeholder which is automatically replaced with the target language name (e.g., "Italian", "German") at runtime. This ensures alt-text is generated in the correct language for multilingual workflows.
-
-### Web Scraping Configuration
+#### Web Scraping Configuration
 ```json
 {
   "download": {
@@ -331,20 +449,32 @@ Available prompts in `prompt/`:
 - `display_reasoning`: Show/hide AI's explanation for classification
 - `display_context`: Show/hide extracted webpage context
 
-**Note**: These settings are read from `config.json` during HTML report generation. The `html_display` field is NOT included in generated JSON files.
+**Note**: These settings are read from `config.advanced.json` during HTML report generation. The `html_display` field is NOT included in generated JSON files.
 
-### Logging
+#### Context Extraction
 ```json
 {
-  "debug_mode": true,  // Enables file logging to logs/
-  "logging": {
-    "show_debug": true,     // Technical details
-    "show_progress": true,  // Progress updates
-    "show_warnings": true,  // Potential issues
-    "show_errors": true     // Failures
+  "context": {
+    "max_text_length": 1000,       // Max chars per text element
+    "max_parent_levels": 5,        // DOM levels to traverse
+    "min_text_length": 20,         // Minimum chars to include
+    "max_sibling_text_length": 500 // Max chars from sibling elements
   }
 }
 ```
+
+#### ECB-LLM OAuth2 Configuration
+```json
+{
+  "ecb_llm": {
+    "token_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/token",
+    "scope": "openid profile LLM.api.read",
+    "authorize_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/authorize"
+  }
+}
+```
+
+**Note**: These OAuth2 endpoints should rarely need modification.
 
 ## Authentication (ECB-LLM only)
 
@@ -413,15 +543,6 @@ All functions are in the monolithic `app.py` file:
 - `generate_html_report(...)` - Create accessible HTML report
 - `clear_folders(folders_to_clear)` - Cleanup utility
 
-## Supported Languages
-
-24 EU languages configured in `config.json`:
-```
-bg, cs, da, de, el, en, es, et, fi, fr, ga, hr, hu, it, lt, lv, mt, nl, pl, pt, ro, sk, sl, sv
-```
-
-View full list with: `python3 app.py -al`
-
 ## Troubleshooting
 
 ### "Failed to fetch" error in Web UI
@@ -472,14 +593,14 @@ lsof -ti:8000,8080
 grep "{LANGUAGE}" prompt/prompt_v0.txt
 
 # 2. Use "accurate" mode for multilingual (generates fresh alt-text per language)
-# Edit config.json: "translation_mode": "accurate"
+# Edit backend/config/config.json: "translation_mode": "accurate"
 
 # 3. Test with multiple languages
 python3 app.py -g test.png --language en it de
 ```
 
 ### Rate limiting (429 errors)
-Edit `config.json` → `download.delay_between_requests` → increase to 5+ seconds
+Edit `backend/config/config.advanced.json` → `download.delay_between_requests` → increase to 5+ seconds
 
 ### SVG support not working
 ```bash
@@ -620,12 +741,27 @@ docker inspect myaccessibilitybuddy | grep -A 10 Health
 - fastapi, uvicorn - Web server
 - beautifulsoup4, requests - Web scraping
 - openai - OpenAI API client
+- ollama - Ollama client for local models
 - Pillow - Image processing
 - python-dotenv - Environment variables
 
 **Optional:**
 - CairoSVG - SVG to PNG conversion
 - ecb_llm_client - ECB-LLM provider (ECB internal package)
+
+**Installing Ollama:**
+```bash
+# 1. Install Ollama from https://ollama.ai
+# 2. Install Python client
+pip install ollama
+
+# 3. Pull required models
+ollama pull granite3.2-vision  # Vision model
+ollama pull phi3               # Processing model
+
+# 4. Verify Ollama is running
+curl http://localhost:11434/api/tags
+```
 
 ## Development Notes
 

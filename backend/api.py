@@ -20,9 +20,14 @@ from urllib.parse import urlencode
 # Import from the app module
 from app import (
     analyze_image_with_openai,
+    analyze_image_with_ollama,
     load_and_merge_prompts,
+    load_vision_prompt,
+    load_translation_prompt,
+    load_translation_system_prompt,
     load_config,
-    get_absolute_folder_path
+    get_absolute_folder_path,
+    get_llm_credentials
 )
 
 # Initialize FastAPI app
@@ -384,10 +389,15 @@ async def generate_alt_text(
     image: UploadFile = File(..., description="Image file to analyze"),
     language: str = Form("en", description="Language code (en, it, de, fr, etc.)"),
     context: Optional[str] = Form(None, description="Optional context about the image"),
-    model: str = Form("ecb-llm-gpt5.1", description="Model to use (openai-gpt4o, ecb-llm-gpt4o, ecb-llm-gpt5.1)")
+    vision_provider: Optional[str] = Form(None, description="Vision provider (openai, claude, ecb-llm, ollama)"),
+    vision_model: Optional[str] = Form(None, description="Vision model (e.g., gpt-4o, claude-3-5-sonnet-20241022, granite3.2-vision)"),
+    processing_provider: Optional[str] = Form(None, description="Processing provider (openai, claude, ecb-llm, ollama)"),
+    processing_model: Optional[str] = Form(None, description="Processing model (e.g., gpt-4o-mini, phi3)"),
+    translation_provider: Optional[str] = Form(None, description="Translation provider (openai, claude, ecb-llm, ollama)"),
+    translation_model: Optional[str] = Form(None, description="Translation model (e.g., gpt-4o-mini, phi3)")
 ):
     """
-    Generate WCAG 2.2 compliant alt-text for an image.
+    Generate WCAG 2.2 compliant alt-text for an image with per-step provider/model override support.
 
     This endpoint uses the same CLI function (generate_alt_text_json) that handles
     U2A authentication automatically via CredentialManager.
@@ -396,7 +406,12 @@ async def generate_alt_text(
         image: Uploaded image file
         language: Target language for alt-text (default: en)
         context: Optional context information about the image
-        model: Model selection that overrides config.json (openai-gpt4o, ecb-llm-gpt4o, ecb-llm-gpt5.1)
+        vision_provider: Provider for vision step (optional, uses config if not specified)
+        vision_model: Model for vision step (optional, uses config if not specified)
+        processing_provider: Provider for processing step (optional, uses config if not specified)
+        processing_model: Model for processing step (optional, uses config if not specified)
+        translation_provider: Provider for translation step (optional, uses config if not specified)
+        translation_model: Model for translation step (optional, uses config if not specified)
 
     Returns:
         AltTextResponse: Generated alt-text and metadata
@@ -407,38 +422,53 @@ async def generate_alt_text(
     from app import generate_alt_text_json, CONFIG
     import shutil
 
-    # Parse model parameter to determine provider and model name
-    # Format: "openai-gpt4o" -> provider="OpenAI", model="gpt-4o"
-    #         "ecb-llm-gpt4o" -> provider="ECB-LLM", model="gpt-4o"
-    #         "ecb-llm-gpt5.1" -> provider="ECB-LLM", model="gpt-5.1"
-    model_parts = model.split('-')
+    # Store original CONFIG.steps values to restore later
+    original_steps = CONFIG.get('steps', {}).copy()
 
-    if len(model_parts) >= 2 and model_parts[0] == 'openai':
-        # Format: openai-gptXX
-        llm_provider = 'OpenAI'
-        # Rejoin remaining parts with hyphen (e.g., "gpt4o" or "gpt-4o")
-        model_name = '-'.join(model_parts[1:])
-        # Normalize "gpt4o" to "gpt-4o"
-        if model_name == 'gpt4o':
-            model_name = 'gpt-4o'
-    elif len(model_parts) >= 3 and model_parts[0] == 'ecb' and model_parts[1] == 'llm':
-        # Format: ecb-llm-gptXX
-        llm_provider = 'ECB-LLM'
-        # Rejoin remaining parts with hyphen (e.g., "gpt4o" or "gpt-5.1")
-        model_name = '-'.join(model_parts[2:])
-        # Normalize "gpt4o" to "gpt-4o"
-        if model_name == 'gpt4o':
-            model_name = 'gpt-4o'
-    else:
-        # Default fallback (matches config.json defaults)
-        llm_provider = 'OpenAI'
-        model_name = 'gpt-4o'
+    # Apply per-step overrides if specified
+    if not 'steps' in CONFIG:
+        CONFIG['steps'] = {}
 
-    # Temporarily override CONFIG settings for this request
-    original_provider = CONFIG.get('llm_provider')
-    original_model = CONFIG.get('model')
-    CONFIG['llm_provider'] = llm_provider
-    CONFIG['model'] = model_name
+    # Helper function to normalize provider names from frontend to backend format
+    def normalize_provider_name(provider_name):
+        """Convert frontend provider names to backend format"""
+        provider_map = {
+            'openai': 'OpenAI',
+            'claude': 'Claude',
+            'ecb-llm': 'ECB-LLM',
+            'ollama': 'Ollama'
+        }
+        return provider_map.get(provider_name.lower(), provider_name)
+
+    # Vision step override
+    if vision_provider:
+        if 'vision' not in CONFIG['steps']:
+            CONFIG['steps']['vision'] = {}
+        CONFIG['steps']['vision']['provider'] = normalize_provider_name(vision_provider)
+    if vision_model:
+        if 'vision' not in CONFIG['steps']:
+            CONFIG['steps']['vision'] = {}
+        CONFIG['steps']['vision']['model'] = vision_model
+
+    # Processing step override
+    if processing_provider:
+        if 'processing' not in CONFIG['steps']:
+            CONFIG['steps']['processing'] = {}
+        CONFIG['steps']['processing']['provider'] = normalize_provider_name(processing_provider)
+    if processing_model:
+        if 'processing' not in CONFIG['steps']:
+            CONFIG['steps']['processing'] = {}
+        CONFIG['steps']['processing']['model'] = processing_model
+
+    # Translation step override
+    if translation_provider:
+        if 'translation' not in CONFIG['steps']:
+            CONFIG['steps']['translation'] = {}
+        CONFIG['steps']['translation']['provider'] = normalize_provider_name(translation_provider)
+    if translation_model:
+        if 'translation' not in CONFIG['steps']:
+            CONFIG['steps']['translation'] = {}
+        CONFIG['steps']['translation']['model'] = translation_model
 
     # Create temporary directories for processing
     tmp_dir = tempfile.mkdtemp(prefix='myaccessibilitybuddy_')
@@ -547,9 +577,8 @@ async def generate_alt_text(
             error=str(e)
         )
     finally:
-        # Restore original CONFIG settings
-        CONFIG['llm_provider'] = original_provider
-        CONFIG['model'] = original_model
+        # Restore original CONFIG.steps settings
+        CONFIG['steps'] = original_steps
 
         # Clean up temporary directory and all its contents
         try:

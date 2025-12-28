@@ -1,7 +1,9 @@
 """
 Configuration management for AutoAltText backend.
 
-This module handles loading and accessing configuration from config.json.
+This module handles loading and merging configuration from:
+- config.json (basic settings: LLM, logging, prompts, languages)
+- config.advanced.json (advanced settings: folders, scraping, context extraction)
 """
 
 import json
@@ -12,24 +14,52 @@ from typing import Dict, Any, Optional
 # Get the project root directory (parent of backend)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 CONFIG_FILE = Path(__file__).parent / "config.json"
+CONFIG_ADVANCED_FILE = Path(__file__).parent / "config.advanced.json"
 
 # Global configuration dictionary
 _config: Dict[str, Any] = {}
 _debug_mode: bool = True
 
 
-def load_config(config_file: Optional[Path] = None) -> Dict[str, Any]:
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Load configuration from JSON file.
+    Deep merge two dictionaries. Override values take precedence.
 
     Args:
-        config_file: Path to config file (defaults to backend/config/config.json)
+        base: Base dictionary
+        override: Dictionary with values to override
 
     Returns:
-        Dictionary containing configuration
+        Merged dictionary
+    """
+    result = base.copy()
+
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            # Recursively merge nested dictionaries
+            result[key] = _deep_merge(result[key], value)
+        else:
+            # Override value
+            result[key] = value
+
+    return result
+
+
+def load_config(config_file: Optional[Path] = None) -> Dict[str, Any]:
+    """
+    Load and merge configuration from JSON files.
+
+    Loads both config.json (basic) and config.advanced.json (advanced),
+    then merges them with basic config taking precedence for overlapping keys.
+
+    Args:
+        config_file: Path to basic config file (defaults to backend/config/config.json)
+
+    Returns:
+        Dictionary containing merged configuration
 
     Raises:
-        FileNotFoundError: If config file doesn't exist
+        FileNotFoundError: If basic config file doesn't exist
         json.JSONDecodeError: If config file is invalid JSON
     """
     global _config, _debug_mode
@@ -40,8 +70,21 @@ def load_config(config_file: Optional[Path] = None) -> Dict[str, Any]:
     if not config_file.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_file}")
 
+    # Load basic configuration
     with open(config_file, 'r', encoding='utf-8') as f:
-        _config = json.load(f)
+        basic_config = json.load(f)
+
+    # Load advanced configuration (if exists)
+    advanced_config = {}
+    if CONFIG_ADVANCED_FILE.exists():
+        try:
+            with open(CONFIG_ADVANCED_FILE, 'r', encoding='utf-8') as f:
+                advanced_config = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Warning: Could not load advanced config: {e}")
+
+    # Merge configurations: advanced first, then override with basic
+    _config = _deep_merge(advanced_config, basic_config)
 
     _debug_mode = _config.get('debug_mode', True)
 
