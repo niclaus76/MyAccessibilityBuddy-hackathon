@@ -15,7 +15,17 @@
     "prompt_processing": "prompt/processing",
     "prompt_vision": "prompt/vision",
     "prompt_translation": "prompt/translation",
-    "logs": "logs"
+    "logs": "logs",
+    "training": "training",
+    "training_datasets": "training/datasets",
+    "training_raw": "training/datasets/raw",
+    "training_processed": "training/datasets/processed",
+    "training_splits": "training/datasets/splits",
+    "training_benchmarks": "training/benchmarks",
+    "training_validation": "training/validation",
+    "training_experiments": "training/experiments",
+    "training_quality": "training/quality",
+    "training_tools": "tools/training"
   },
 
   "_comment_prompt_advanced": "Advanced prompt configuration",
@@ -81,6 +91,94 @@
     "token_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/token",
     "scope": "openid profile LLM.api.read",
     "authorize_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/authorize"
+  },
+
+  "_comment_testing": "Testing and batch comparison configuration",
+  "testing": {
+    "_comment_folders": "Test folder paths (relative to project root)",
+    "folders": {
+      "test_images": "test/input/images",
+      "test_context": "test/input/context",
+      "test_reports": "test/output/reports"
+    },
+    "_comment_batch_comparison": "Batch prompt comparison settings",
+    "batch_comparison": {
+      "test_name": "Prompt Comparison Test",
+      "description": "Compare multiple prompt versions to evaluate alt-text generation quality",
+      "model": {
+        "provider": "OpenAI",
+        "vision_model": "gpt-4o",
+        "processing_model": "gpt-4o",
+        "translation_model": "gpt-4o"
+      },
+      "prompts": [
+        {
+          "file": "processing_prompt_v0.txt",
+          "label": "v0: base prompt",
+          "description": "Minimal baseline prompt with JSON output"
+        },
+        {
+          "file": "processing_prompt_v1.txt",
+          "label": "v1: With image classification",
+          "description": "Basic classification (decorative/informative/functional)"
+        },
+        {
+          "file": "processing_prompt_v2.txt",
+          "label": "v2: With image classification and workflow",
+          "description": "WCAG 2.2 focused with decision tree"
+        },
+        {
+          "file": "processing_prompt_v3.txt",
+          "label": "v3: With extended image classification and workflow",
+          "description": "Comprehensive with phased execution and optimization"
+        },
+        {
+          "file": "processing_prompt_v4.txt",
+          "label": "v4: with extended image classification, workflow and security",
+          "description": "Advanced multi-file modular system"
+        }
+      ],
+      "test_images": [
+        "1.png",
+        "2.png"
+      ],
+      "language": "en",
+      "output": {
+        "generate_csv": true,
+        "generate_html": true,
+        "csv_filename": "prompt_comparison_{timestamp}.csv",
+        "html_filename": "prompt_comparison_{timestamp}.html"
+      }
+    }
+  },
+
+  "_comment_training": "Training data management configuration",
+  "training": {
+    "_comment_split_ratios": "Train/validation/test split ratios (must sum to 1.0)",
+    "split_ratios": {
+      "train": 0.70,
+      "val": 0.15,
+      "test": 0.15
+    },
+    "_comment_validation": "Expert validation settings",
+    "validation": {
+      "require_human_review": false,
+      "quality_threshold": 0.8,
+      "min_review_coverage": 0.20
+    },
+    "_comment_deduplication": "Image deduplication settings",
+    "deduplication": {
+      "enabled": true,
+      "hash_algorithm": "sha256",
+      "near_duplicate_threshold": 0.95
+    },
+    "_comment_quality_control": "Dataset quality control settings",
+    "quality_control": {
+      "min_alt_text_length": 10,
+      "max_alt_text_length": 125,
+      "check_image_validity": true,
+      "check_context_matching": true
+    }
   },
 
   "_comment_languages": "Supported languages for alt-text generation (EU official languages)",

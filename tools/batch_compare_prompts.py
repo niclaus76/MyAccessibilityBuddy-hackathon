@@ -31,19 +31,20 @@ class Colors:
 # Configuration
 BACKEND_DIR = Path("backend")
 CONFIG_FILE = BACKEND_DIR / "config" / "config.json"
-IMAGES_DIR = Path("input/images")
-CONTEXT_DIR = Path("input/context")
-OUTPUT_DIR = Path("output/alt-text")
-PROMPT_DIR = Path("prompt")
+CONFIG_ADVANCED_FILE = BACKEND_DIR / "config" / "config.advanced.json"
+PROMPT_DIR = Path("prompt/processing")
 
-# Prompt files to test
-PROMPTS = [
-    {"file": "prompt_v0.txt", "label": "v0: base prompt"},
-    {"file": "prompt_v1.txt", "label": "v1: With image classification"},
-    {"file": "prompt_v2.txt", "label": "v2: With image classification and workflow"},
-    {"file": "prompt_v3.txt", "label": "v3: With extended image classification and workflow"},
-    {"file": "prompt_v4.txt", "label": "v4: with extended image classification, workflow and security"}
-]
+# These will be loaded from config.advanced.json
+PROMPTS = []
+TEST_IMAGES = []
+MODEL_CONFIG = {}
+TEST_FOLDERS = {}
+
+# Paths that will be set from config.advanced.json
+IMAGES_DIR = None
+CONTEXT_DIR = None
+OUTPUT_DIR = None
+OUTPUT_REPORTS_DIR = None
 
 def print_header(text: str):
     """Print a formatted header."""
@@ -67,6 +68,50 @@ def print_warning(text: str):
     """Print warning message."""
     print(f"{Colors.YELLOW}⚠ {text}{Colors.NC}")
 
+def load_test_config():
+    """Load test configuration from config.advanced.json."""
+    global PROMPTS, TEST_IMAGES, MODEL_CONFIG, TEST_FOLDERS
+    global IMAGES_DIR, CONTEXT_DIR, OUTPUT_DIR, OUTPUT_REPORTS_DIR
+
+    if not CONFIG_ADVANCED_FILE.exists():
+        print_error(f"Advanced configuration file not found: {CONFIG_ADVANCED_FILE}")
+        print_info("Please ensure backend/config/config.advanced.json exists")
+        return False
+
+    try:
+        with open(CONFIG_ADVANCED_FILE, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        # Get testing configuration section
+        testing_config = config.get('testing', {})
+        batch_comparison = testing_config.get('batch_comparison', {})
+        test_folders = testing_config.get('folders', {})
+
+        PROMPTS = batch_comparison.get('prompts', [])
+        TEST_IMAGES = batch_comparison.get('test_images', [])
+        MODEL_CONFIG = batch_comparison.get('model', {})
+        TEST_FOLDERS = test_folders
+
+        # Set folder paths from configuration
+        IMAGES_DIR = Path(test_folders.get('test_images', 'test/input/images'))
+        CONTEXT_DIR = Path(test_folders.get('test_context', 'test/input/context'))
+        OUTPUT_REPORTS_DIR = Path(test_folders.get('test_reports', 'test/output/reports'))
+        OUTPUT_DIR = Path("output/alt-text")  # Keep original output for intermediate results
+
+        print_success(f"Loaded test configuration: {batch_comparison.get('test_name', 'Unnamed Test')}")
+        print_info(f"Description: {batch_comparison.get('description', 'No description')}")
+        print_info(f"Model: {MODEL_CONFIG.get('provider', 'Unknown')} - Vision: {MODEL_CONFIG.get('vision_model', 'Unknown')}, Processing: {MODEL_CONFIG.get('processing_model', 'Unknown')}")
+        print_info(f"Prompts to test: {len(PROMPTS)}")
+        print_info(f"Test images: {len(TEST_IMAGES)} images")
+        print_info(f"Test images folder: {IMAGES_DIR}")
+        print_info(f"Test context folder: {CONTEXT_DIR}")
+        print_info(f"Output reports folder: {OUTPUT_REPORTS_DIR}")
+
+        return True
+    except Exception as e:
+        print_error(f"Error loading test configuration: {e}")
+        return False
+
 def check_environment():
     """Check if the environment is set up correctly."""
     print_header("Environment Check")
@@ -79,23 +124,23 @@ def check_environment():
 
     print_success("Project root directory verified")
 
-    # Check images directory
+    # Check test images from configuration
     if not IMAGES_DIR.exists():
         print_error(f"Images directory not found: {IMAGES_DIR}")
         return False
 
-    # Count images
-    image_extensions = ['*.jpg', '*.jpeg', '*.png', '*.gif', '*.webp', '*.svg', '*.bmp', '*.tiff']
-    images = []
-    for ext in image_extensions:
-        images.extend(IMAGES_DIR.glob(ext))
-        images.extend(IMAGES_DIR.glob(ext.upper()))
+    # Validate test images exist
+    missing_images = []
+    for image in TEST_IMAGES:
+        image_path = IMAGES_DIR / image
+        if not image_path.exists():
+            missing_images.append(image)
 
-    if len(images) == 0:
-        print_error(f"No images found in {IMAGES_DIR}")
+    if missing_images:
+        print_error(f"Test images not found: {', '.join(missing_images)}")
         return False
 
-    print_success(f"Found {len(images)} images to process")
+    print_success(f"Found all {len(TEST_IMAGES)} test images configured")
 
     # Check context directory
     if CONTEXT_DIR.exists():
@@ -134,7 +179,9 @@ def update_config_prompt(prompt_file: str):
     with open(CONFIG_FILE, 'r') as f:
         config = json.load(f)
 
-    config['prompt']['files'] = [prompt_file]
+    # Update the processing_files and default_processing_prompt
+    config['prompt']['processing_files'] = [prompt_file]
+    config['prompt']['default_processing_prompt'] = prompt_file
 
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
@@ -155,7 +202,7 @@ def run_batch_processing():
     try:
         # Change to backend directory and run the command
         result = subprocess.run(
-            ["python3", "app.py", "--process-all", "--language", "en"],
+            ["python3", "app.py", "-p", "--language", "en"],
             cwd=BACKEND_DIR,
             capture_output=True,
             text=True,
@@ -228,20 +275,197 @@ def generate_csv(all_results: Dict[str, Dict[str, str]], output_path: Path):
     print_success(f"CSV file created: {output_path}")
     print_success(f"Total images: {len(sorted_images)}")
 
+def generate_html_report(all_results: Dict[str, Dict[str, str]], output_path: Path):
+    """Generate HTML comparison report using report_template style."""
+    print_header("Generating HTML Report")
+
+    # Get all unique image filenames
+    all_images = set()
+    for prompt_results in all_results.values():
+        all_images.update(prompt_results.keys())
+
+    sorted_images = sorted(all_images)
+
+    # Read the template
+    template_path = Path("output/reports/report_template.html")
+    if template_path.exists():
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template_html = f.read()
+        # Extract just the CSS from template
+        css_start = template_html.find('<style>')
+        css_end = template_html.find('</style>') + 8
+        css_content = template_html[css_start:css_end] if css_start != -1 else ""
+    else:
+        css_content = "<style>body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }</style>"
+
+    # Build HTML
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Comparison Report - MyAccessibilityBuddy</title>
+    {css_content}
+    <style>
+        .prompt-comparison {{
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }}
+        .prompt-header {{
+            font-weight: bold;
+            color: #0066cc;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #e8f4f8;
+            border-left: 4px solid #0066cc;
+        }}
+        .comparison-table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }}
+        .comparison-table th {{
+            background-color: #0066cc;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }}
+        .comparison-table td {{
+            padding: 12px;
+            border: 1px solid #ddd;
+            vertical-align: top;
+        }}
+        .comparison-table tr:nth-child(even) {{
+            background-color: #f9f9f9;
+        }}
+        .alt-text-cell {{
+            font-style: italic;
+            line-height: 1.6;
+        }}
+        .char-count {{
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }}
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <header class="header">
+        <h1>Prompt Comparison Report</h1>
+        <p>MyAccessibilityBuddy - Batch Prompt Analysis</p>
+    </header>
+
+    <main id="main-content">
+        <section class="summary" role="region" aria-label="Summary">
+            <h2>Summary</h2>
+            <p><strong>Total Images Analyzed:</strong> {len(sorted_images)}</p>
+            <p><strong>Prompts Tested:</strong> {len(PROMPTS)}</p>
+            <p><strong>Total Alt-Texts Generated:</strong> {len(sorted_images) * len(PROMPTS)}</p>
+            <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+
+            <h3>Model Configuration:</h3>
+            <ul>
+                <li><strong>Provider:</strong> {MODEL_CONFIG.get('provider', 'Unknown')}</li>
+                <li><strong>Vision Model:</strong> {MODEL_CONFIG.get('vision_model', 'Unknown')}</li>
+                <li><strong>Processing Model:</strong> {MODEL_CONFIG.get('processing_model', 'Unknown')}</li>
+                <li><strong>Translation Model:</strong> {MODEL_CONFIG.get('translation_model', 'Unknown')}</li>
+            </ul>
+
+            <h3>Prompts Tested:</h3>
+            <ul>
+"""
+
+    for prompt in PROMPTS:
+        html_content += f"                <li><strong>{prompt['label']}</strong> - {prompt['file']}</li>\n"
+
+    html_content += """            </ul>
+        </section>
+
+        <h2>Detailed Comparison</h2>
+"""
+
+    # Generate comparison for each image
+    for image in sorted_images:
+        # Construct image path for display
+        image_path = f"../input/images/{image}"
+
+        html_content += f"""
+        <article class="image-card" role="article" aria-labelledby="image-{image.replace('.', '-')}">
+            <h3 id="image-{image.replace('.', '-')}">{image}</h3>
+
+            <div class="field">
+                <img src="{image_path}" alt="{image}" class="image-preview" onerror="this.style.display='none'">
+            </div>
+
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Prompt Version</th>
+                        <th>Prompt File</th>
+                        <th>Generated Alt-Text</th>
+                    </tr>
+                </thead>
+                <tbody>
+"""
+
+        for prompt in PROMPTS:
+            alt_text = all_results.get(prompt['label'], {}).get(image, '')
+            char_count = len(alt_text) if alt_text else 0
+            char_status = "✓" if 0 < char_count <= 125 else ("⚠" if char_count > 125 else "✗")
+
+            html_content += f"""
+                    <tr>
+                        <td><strong>{prompt['label']}</strong></td>
+                        <td><code>{prompt['file']}</code></td>
+                        <td class="alt-text-cell">
+                            {alt_text if alt_text else '<em style="color: #999;">No alt-text generated</em>'}
+                            <div class="char-count">{char_status} {char_count} characters</div>
+                        </td>
+                    </tr>
+"""
+
+        html_content += """
+                </tbody>
+            </table>
+        </article>
+"""
+
+    html_content += """
+    </main>
+</body>
+</html>
+"""
+
+    # Write HTML file
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+    print_success(f"HTML report created: {output_path}")
+    print_success(f"Total images: {len(sorted_images)}")
+
 def main():
     """Main execution function."""
     print_header("MyAccessibilityBuddy - Batch Prompt Comparison")
+
+    # Load test configuration
+    if not load_test_config():
+        sys.exit(1)
 
     # Check environment
     if not check_environment():
         sys.exit(1)
 
-    # Create output directory for CSV
-    output_csv_dir = Path("output")
-    output_csv_dir.mkdir(exist_ok=True)
+    # Create output directory for reports (using folder from config.advanced.json)
+    OUTPUT_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_csv = output_csv_dir / f"prompt_comparison_{timestamp}.csv"
+    output_csv = OUTPUT_REPORTS_DIR / f"prompt_comparison_{timestamp}.csv"
 
     # Backup configuration
     backup_path = backup_config()
@@ -274,9 +498,14 @@ def main():
         # Generate CSV report
         generate_csv(all_results, output_csv)
 
+        # Generate HTML report
+        output_html = OUTPUT_REPORTS_DIR / f"prompt_comparison_{timestamp}.html"
+        generate_html_report(all_results, output_html)
+
         # Summary
         print_header("Processing Complete!")
-        print_success(f"Results saved to: {output_csv}")
+        print_success(f"CSV results saved to: {output_csv}")
+        print_success(f"HTML report saved to: {output_html}")
 
         # Show statistics
         total_images = len(set().union(*[set(r.keys()) for r in all_results.values()]))

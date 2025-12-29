@@ -35,6 +35,7 @@ COPY backend/ /app/backend/
 COPY frontend/ /app/frontend/
 COPY prompt/ /app/prompt/
 COPY test/ /app/test/
+COPY tools/ /app/tools/
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

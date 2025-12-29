@@ -163,8 +163,15 @@ def get_folder_path(folder_name: str) -> Path:
         >>> get_folder_path('images')
         Path('/home/developer/AutoAltText/input/images')
     """
+    # First check main folders
     folder_config = get_nested('folders', {})
-    relative_path = folder_config.get(folder_name, folder_name)
+    relative_path = folder_config.get(folder_name)
+
+    # If not found, check testing.folders
+    if relative_path is None:
+        test_folders = get_nested('testing.folders', {})
+        relative_path = test_folders.get(folder_name, folder_name)
+
     return PROJECT_ROOT / relative_path
 
 
