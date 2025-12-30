@@ -14,6 +14,9 @@ import base64
 from mimetypes import guess_type
 from openai import OpenAI
 
+# Store startup messages to log after logging system is initialized
+STARTUP_MESSAGES = []
+
 # Import ECB-LLM client if available
 try:
     from ecb_llm_client import CredentialManager, ECBAzureOpenAI
@@ -22,8 +25,8 @@ try:
     ECB_LLM_AVAILABLE = True
 except ImportError:
     ECB_LLM_AVAILABLE = False
-    print("ecb_llm_client not installed. ECB-LLM provider will not be available.")
-    print("To use ECB-LLM, install with: pip install ecb_llm_client")
+    STARTUP_MESSAGES.append(("WARNING", "ecb_llm_client not installed. ECB-LLM provider will not be available."))
+    STARTUP_MESSAGES.append(("INFO", "To use ECB-LLM, install with: pip install ecb_llm_client"))
 
 # Import SVG conversion library if available
 try:
@@ -32,8 +35,8 @@ try:
     SVG_SUPPORT = True
 except ImportError:
     SVG_SUPPORT = False
-    print("cairosvg not installed. SVG files will not be supported.")
-    print("To enable SVG support, install with: pip install cairosvg")
+    STARTUP_MESSAGES.append(("WARNING", "cairosvg not installed. SVG files will not be supported."))
+    STARTUP_MESSAGES.append(("INFO", "To enable SVG support, install with: pip install cairosvg"))
 
 # Import Ollama client if available
 try:
@@ -41,17 +44,17 @@ try:
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
-    print("ollama not installed. Ollama provider will not be available.")
-    print("To use Ollama, install with: pip install ollama")
+    STARTUP_MESSAGES.append(("WARNING", "ollama not installed. Ollama provider will not be available."))
+    STARTUP_MESSAGES.append(("INFO", "To use Ollama, install with: pip install ollama"))
 
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    print("Loaded environment variables from .env file")
+    STARTUP_MESSAGES.append(("INFO", "Loaded environment variables from .env file"))
 except ImportError:
-    print("python-dotenv not installed. Using system environment variables only.")
-    print("To use .env files, install with: pip install python-dotenv")
+    STARTUP_MESSAGES.append(("WARNING", "python-dotenv not installed. Using system environment variables only."))
+    STARTUP_MESSAGES.append(("INFO", "To use .env files, install with: pip install python-dotenv"))
 
 # Import configuration management
 from config import settings as config_settings
@@ -68,7 +71,7 @@ def get_cet_time():
 
 def load_config(config_file=None):
     """Load configuration from JSON file with error handling."""
-    global CONFIG, DEBUG_MODE
+    global CONFIG, DEBUG_MODE, STARTUP_MESSAGES
     try:
         # Use new config module
         if config_file is None:
@@ -80,6 +83,12 @@ def load_config(config_file=None):
 
         DEBUG_MODE = CONFIG.get('debug_mode', True)
         debug_log(f"Configuration loaded from {config_settings.CONFIG_FILE}")
+
+        # Output deferred startup messages now that logging is initialized
+        for level, message in STARTUP_MESSAGES:
+            log_message(message, level)
+        STARTUP_MESSAGES = []  # Clear after logging
+
     except Exception as e:
         CONFIG = {}
         DEBUG_MODE = True
@@ -143,37 +152,57 @@ def initialize_log_file(url=None):
         LOG_START_TIME = None
         return None
 
+def log_message(message, level="INFORMATION"):
+    """
+    Universal logging function that always prints with timestamp and category.
+
+    Args:
+        message: The message to log
+        level: Log level - must be one of: DEBUG, INFORMATION, WARNING, ERROR
+               Legacy levels (INFO, PROGRESS, SUCCESS) are automatically mapped to INFORMATION
+               - DEBUG, INFORMATION: Controlled by show_information
+               - WARNING: Controlled by show_warnings
+               - ERROR: Controlled by show_errors
+    """
+    # Normalize legacy level names to the 4 standard categories
+    level_mapping = {
+        "INFO": "INFORMATION",
+        "PROGRESS": "INFORMATION",
+        "SUCCESS": "INFORMATION"
+    }
+    level = level_mapping.get(level, level)
+
+    timestamp = get_cet_time().strftime("%H:%M:%S")
+    log_line = f"[{timestamp}] {level}: {message}"
+
+    # Determine if message should be printed to console based on config
+    should_print = True  # Default to showing
+
+    if level in ["DEBUG", "INFORMATION"]:
+        should_print = CONFIG.get('logging', {}).get('show_information', False)
+    elif level == "WARNING":
+        should_print = CONFIG.get('logging', {}).get('show_warnings', True)
+    elif level == "ERROR":
+        should_print = CONFIG.get('logging', {}).get('show_errors', True)
+
+    if should_print:
+        print(log_line)
+
+    # Write to log file if debug mode is enabled and file is initialized
+    if DEBUG_MODE and CURRENT_LOG_FILE:
+        try:
+            with open(CURRENT_LOG_FILE, 'a', encoding='utf-8') as f:
+                f.write(log_line + '\n')
+        except Exception as e:
+            print(f"[{timestamp}] WARNING: Could not write to log file: {e}")
+
 def debug_log(message, level="DEBUG"):
-    """Print debug messages if debug mode is enabled and write to log file."""
+    """
+    Debug logging function - wrapper around log_message for backward compatibility.
+    Only logs when DEBUG_MODE is enabled.
+    """
     if DEBUG_MODE:
-        timestamp = get_cet_time().strftime("%H:%M:%S")
-        log_line = f"[{timestamp}] {level}: {message}"
-
-        # Print to console only if show_debug is true for DEBUG messages
-        # For other levels (WARNING, ERROR, INFORMATION), check their respective settings
-        should_print = False
-        if level == "DEBUG":
-            should_print = CONFIG.get('logging', {}).get('show_debug', False)
-        elif level == "WARNING":
-            should_print = CONFIG.get('logging', {}).get('show_warnings', True)
-        elif level == "ERROR":
-            should_print = CONFIG.get('logging', {}).get('show_errors', True)
-        elif level == "INFORMATION":
-            should_print = CONFIG.get('logging', {}).get('show_progress', False)
-        else:
-            should_print = True  # For any other level, show by default
-
-        if should_print:
-            print(log_line)
-
-        # Always write to log file if initialized (regardless of console display setting)
-        if CURRENT_LOG_FILE:
-            try:
-                with open(CURRENT_LOG_FILE, 'a', encoding='utf-8') as f:
-                    f.write(log_line + '\n')
-            except Exception as e:
-                # Don't fail if log write fails, just print warning once
-                print(f"Warning: Could not write to log file: {e}")
+        log_message(message, level)
 
 def close_log_file():
     """Close the current log file and add footer with duration."""
@@ -204,7 +233,7 @@ def close_log_file():
                 f.write(f"Duration: {duration_str}\n")
                 f.write(f"=== End of Log ===\n")
         except Exception as e:
-            print(f"Warning: Could not close log file: {e}")
+            log_message(f"Could not close log file: {e}", "WARNING")
 
     CURRENT_LOG_FILE = None
     LOG_START_TIME = None
@@ -499,9 +528,9 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
                         if translation_provider and translation_provider != 'Unknown':
                             providers.add(translation_provider)
                         ai_provider = ', '.join(sorted(providers))
-                    # Extract translation method from first item (should be same for all)
+                    # Extract translation mode from first item (should be same for all)
                     if not translation_method:
-                        translation_method = data.get('translation_method', 'none')
+                        translation_method = data.get('translation_mode', data.get('translation_method', 'none'))
                     # Sum up processing times
                     total_processing_time += data.get('processing_time_seconds', 0.0)
             except Exception as e:
@@ -1040,8 +1069,7 @@ def load_and_merge_prompts(prompt_folder):
 
     if loaded_files:
         debug_log(f"Successfully loaded and merged {len(loaded_files)} prompt file(s): {', '.join(loaded_files)}")
-        if CONFIG.get('logging', {}).get('show_progress', True):
-            print(f"Loaded prompt file(s): {', '.join(loaded_files)}")
+        log_message(f"Loaded prompt file(s): {', '.join(loaded_files)}", "INFORMATION")
     else:
         debug_log("No prompt files could be loaded", "WARNING")
 
@@ -2073,8 +2101,8 @@ def download_images_from_url(url, images_folder=None, max_images=None):
             }
 
             debug_log(f"Successfully saved direct image: {filepath}")
-            if CONFIG.get('logging', {}).get('show_progress', True):
-                print(f"Downloaded direct image: {filename}")
+            if CONFIG.get('logging', {}).get('show_information', True):
+                log_message(f"Downloaded direct image: {filename}", "INFORMATION")
 
             # Return early - no HTML parsing needed
             return (downloaded_images, image_metadata, "")
@@ -2177,18 +2205,18 @@ def download_images_from_url(url, images_folder=None, max_images=None):
 
         debug_log(f"Found {len(image_sources)} total image sources on the page")
 
-        if CONFIG.get('logging', {}).get('show_progress', True):
+        if CONFIG.get('logging', {}).get('show_information', True):
             if max_images:
-                print(f"Found {len(image_sources)} image sources on the page (will download max {max_images})")
+                log_message(f"Found {len(image_sources)} image sources on the page (will download max {max_images})")
             else:
-                print(f"Found {len(image_sources)} image sources on the page")
+                log_message(f"Found {len(image_sources)} image sources on the page")
 
         for i, img_data in enumerate(image_sources):
             # Check if we've reached the maximum number of images to download
             if max_images and len(downloaded_images) >= max_images:
                 debug_log(f"Reached maximum number of images ({max_images}), stopping download")
-                if CONFIG.get('logging', {}).get('show_progress', True):
-                    print(f"Reached maximum number of images ({max_images}), stopping download")
+                if CONFIG.get('logging', {}).get('show_information', True):
+                    log_message(f"Reached maximum number of images ({max_images}), stopping download")
                 break
 
             debug_log(f"Processing image {i+1}/{len(image_sources)}")
@@ -2258,8 +2286,8 @@ def download_images_from_url(url, images_folder=None, max_images=None):
 
                 debug_log(f"Successfully saved: {filepath}")
                 
-                if CONFIG.get('logging', {}).get('show_progress', True):
-                    print(f"Downloaded: {filename}")
+                if CONFIG.get('logging', {}).get('show_information', True):
+                    log_message(f"Downloaded: {filename}", "INFORMATION")
                 
                 if delay > 0:
                     time.sleep(delay)
@@ -2282,8 +2310,8 @@ def download_images_from_url(url, images_folder=None, max_images=None):
         return ([], {}, "")
 
     debug_log(f"Download complete: {len(downloaded_images)} images successfully downloaded")
-    if CONFIG.get('logging', {}).get('show_progress', True):
-        print(f"Successfully downloaded {len(downloaded_images)} images")
+    if CONFIG.get('logging', {}).get('show_information', True):
+        log_message(f"Successfully downloaded {len(downloaded_images)} images", "INFORMATION")
 
     return (downloaded_images, image_metadata, page_title)
 
@@ -2447,8 +2475,6 @@ def grab_context(image_filename, url, context_folder=None):
         if not target_img:
             error_msg = f"Image '{image_filename}' not found on the page"
             debug_log(error_msg, "WARNING")
-            if CONFIG.get('logging', {}).get('show_warnings', True):
-                print(error_msg)
             return (None, None)
         
         debug_log("Starting context extraction...")
@@ -2581,8 +2607,8 @@ def grab_context(image_filename, url, context_folder=None):
             f.write("\n\n".join(structured_context_parts))
 
         debug_log(f"Context extraction complete: {len(context_text)} items saved")
-        if CONFIG.get('logging', {}).get('show_progress', True):
-            print(f"Context saved for '{image_filename}' -> {context_filepath}")
+        if CONFIG.get('logging', {}).get('show_information', True):
+            log_message(f"Context saved for '{image_filename}' -> {context_filepath}")
 
         return (context_filepath, found_image_url, current_alt_text)
         
@@ -2649,8 +2675,8 @@ def clear_folders(folders=None):
                             deleted_count += 1
                             debug_log(f"Deleted: {filepath}")
 
-                            if CONFIG.get('logging', {}).get('show_progress', True):
-                                print(f"Deleted: {filepath}")
+                            if CONFIG.get('logging', {}).get('show_information', True):
+                                log_message(f"Deleted: {filepath}", "INFORMATION")
 
                         except PermissionError as e:
                             handle_exception(func_name, e, f"permission denied for {filepath}")
@@ -2660,8 +2686,8 @@ def clear_folders(folders=None):
                     deleted_counts[folder] = deleted_count
                     debug_log(f"Cleared {deleted_count} files from '{folder}' folder")
                     
-                    if CONFIG.get('logging', {}).get('show_progress', True):
-                        print(f"Cleared {deleted_count} files from '{folder}' folder")
+                    if CONFIG.get('logging', {}).get('show_information', True):
+                        log_message(f"Cleared {deleted_count} files from '{folder}' folder")
                     
                 except OSError as e:
                     handle_exception(func_name, e, f"accessing folder '{folder}'")
@@ -2672,14 +2698,14 @@ def clear_folders(folders=None):
             else:
                 debug_log(f"Folder '{folder}' does not exist", "WARNING")
                 if CONFIG.get('logging', {}).get('show_warnings', True):
-                    print(f"Folder '{folder}' does not exist")
+                    log_message(f"Folder \'{folder}\' does not exist", "WARNING")
                 deleted_counts[folder] = 0
         
         total_deleted = sum(deleted_counts.values())
         debug_log(f"Clear operation complete: {total_deleted} total files deleted")
         
-        if CONFIG.get('logging', {}).get('show_progress', True):
-            print(f"\nTotal files deleted: {total_deleted}")
+        if CONFIG.get('logging', {}).get('show_information', True):
+            log_message(f"Total files deleted: {total_deleted}", "INFORMATION")
         
         return deleted_counts
         
@@ -2728,8 +2754,6 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 if not is_valid:
                     error_msg = f"Language validation failed for '{lang}': {message}"
                     debug_log(error_msg, "ERROR")
-                    if CONFIG.get('logging', {}).get('show_errors', True):
-                        print(error_msg)
                     return (None, False)
                 target_languages.append(lang)
                 debug_log(message)
@@ -2739,8 +2763,6 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
             if not is_valid:
                 error_msg = f"Language validation failed: {message}"
                 debug_log(error_msg, "ERROR")
-                if CONFIG.get('logging', {}).get('show_errors', True):
-                    print(error_msg)
                 return (None, False)
             target_languages = [language]
             debug_log(message)
@@ -2781,8 +2803,6 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         if not os.path.exists(image_path):
             error_msg = f"Error: Image file '{image_filename}' not found in '{images_folder}' folder"
             debug_log(error_msg, "ERROR")
-            if CONFIG.get('logging', {}).get('show_errors', True):
-                print(error_msg)
             return (None, False)
         
         # Look for context file
@@ -2796,22 +2816,20 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 with open(context_path, 'r', encoding='utf-8') as f:
                     context_text = f.read().strip()
                 debug_log(f"Found context file: {context_filename}")
-                if CONFIG.get('logging', {}).get('show_progress', True):
-                    print(f"Found context file: {context_filename}")
+                if CONFIG.get('logging', {}).get('show_information', True):
+                    log_message(f"Found context file: {context_filename}")
             except Exception as e:
                 handle_exception(func_name, e, f"reading context file {context_path}")
         else:
             debug_log(f"Context file '{context_filename}' not found", "WARNING")
             if CONFIG.get('logging', {}).get('show_warnings', True):
-                print(f"Warning: Context file '{context_filename}' not found in '{context_folder}' folder")
+                log_message(f"Context file '{context_filename}' not found in '{context_folder}' folder")
         
         # Load and merge prompt files
         prompt_text, loaded_prompt_files = load_and_merge_prompts(prompt_folder)
         if not prompt_text:
             error_msg = f"Error: No prompt files could be loaded from '{prompt_folder}' folder"
             debug_log(error_msg, "ERROR")
-            if CONFIG.get('logging', {}).get('show_errors', True):
-                print(error_msg)
             return (None, False)
 
         debug_log("Creating JSON structure...")
@@ -2857,17 +2875,17 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 translation_method = "none"
                 debug_log(f"Single English language - translation_method set to 'none'")
 
+        # Check translation mode from config (needed for both single and multilingual)
+        # Support both new format ('fast'/'accurate') and legacy format (True/False)
+        translation_mode_config = CONFIG.get('translation_mode', CONFIG.get('full_translation_mode', 'fast'))
+
+        # Convert boolean legacy format to string format
+        if isinstance(translation_mode_config, bool):
+            translation_mode_config = 'accurate' if translation_mode_config else 'fast'
+
         if is_multilingual:
             # Generate alt-text for multiple languages
             debug_log(f"Generating alt-text for {len(target_languages)} languages: {target_languages}")
-
-            # Check translation mode from config
-            # Support both new format ('fast'/'accurate') and legacy format (True/False)
-            translation_mode_config = CONFIG.get('translation_mode', CONFIG.get('full_translation_mode', 'fast'))
-
-            # Convert boolean legacy format to string format
-            if isinstance(translation_mode_config, bool):
-                translation_mode_config = 'accurate' if translation_mode_config else 'fast'
 
             if translation_mode_config == 'accurate':
                 # ACCURATE MODE: Generate new alt-text for each language
@@ -3003,7 +3021,7 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 reasoning = multilingual_reasoning  # Array of tuples
                 debug_log(f"Multilingual generation complete (FAST mode) - Type: {image_type}, {len(multilingual_results)} languages")
 
-        if not is_multilingual or translation_mode == "accurate":
+        if not is_multilingual:
             # Single language mode (existing behavior)
             lang = target_languages[0] if not is_multilingual else target_languages[0]
             debug_log(f"Language specified: {lang}")
@@ -3089,17 +3107,19 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
                 "translation_provider": models_used.get('translation_provider') if (models_used and models_used.get('translation_provider')) else CONFIG.get('steps', {}).get('translation', {}).get('provider', 'Unknown'),
                 "translation_model": models_used.get('translation_model') if (models_used and models_used.get('translation_model')) else CONFIG.get('steps', {}).get('translation', {}).get('model', 'Unknown')
             },
-            "translation_method": translation_method if translation_method else "none",
             "processing_time_seconds": processing_time
         }
+
+        # Add translation_mode only for multilingual scenarios (fast or accurate)
+        if translation_method in ["fast", "accurate"]:
+            json_data["translation_mode"] = translation_method
 
         debug_log(f"Final result - Type: {image_type}, Severity: {severity}, Alt-text: {alt_text}")
 
         # Log full JSON output
         debug_log(f"Full JSON output:\n{json.dumps(json_data, indent=2, ensure_ascii=False)}")
 
-        if CONFIG.get('logging', {}).get('show_progress', True):
-            print(f"Generated: {image_type} ({severity}) - {alt_text}")
+        log_message(f"Generated: {image_type} ({severity}) - {alt_text}", "INFORMATION")
 
         # Save JSON file
         json_filename = f"{base_filename}.json"
@@ -3110,8 +3130,7 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
             json.dump(json_data, f, indent=2, ensure_ascii=False)
 
         debug_log(f"JSON file generated successfully: {json_path}")
-        if CONFIG.get('logging', {}).get('show_progress', True):
-            print(f"Generated JSON file: {json_path}")
+        log_message(f"Generated JSON file: {json_path}", "INFORMATION")
 
         # Return tuple: (path, success_flag)
         # Success is False only if image_type is "generation_error"
@@ -3172,8 +3191,6 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
         if not os.path.exists(images_folder):
             error_msg = f"Images folder '{images_folder}' does not exist"
             debug_log(error_msg, "ERROR")
-            if CONFIG.get('logging', {}).get('show_errors', True):
-                print(error_msg)
             return {"processed": 0, "successful": 0, "failed": 0, "error": error_msg}
         
         # Get all image files from images folder
@@ -3190,8 +3207,6 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
             if len(image_files) == 0:
                 warning_msg = f"No image files found in '{images_folder}' folder"
                 debug_log(warning_msg, "WARNING")
-                if CONFIG.get('logging', {}).get('show_warnings', True):
-                    print(warning_msg)
                 return {"processed": 0, "successful": 0, "failed": 0, "warning": warning_msg}
             
         except OSError as e:
@@ -3206,14 +3221,14 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
             "details": []
         }
         
-        if CONFIG.get('logging', {}).get('show_progress', True):
-            print(f"Processing {len(image_files)} images...")
+        if CONFIG.get('logging', {}).get('show_information', True):
+            log_message(f"Processing {len(image_files)} images...", "INFORMATION")
         
         for i, image_filename in enumerate(image_files, 1):
             debug_log(f"Processing image {i}/{len(image_files)}: {image_filename}")
             
-            if CONFIG.get('logging', {}).get('show_progress', True):
-                print(f"[{i}/{len(image_files)}] Processing: {image_filename}")
+            if CONFIG.get('logging', {}).get('show_information', True):
+                log_message(f"[{i}/{len(image_files)}] Processing: {image_filename}", "INFORMATION")
             
             try:
                 # Get image metadata (URL, tag/attribute info, and current alt text) if available
@@ -3286,11 +3301,11 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
         # Summary
         debug_log(f"Batch processing complete: {results['successful']} successful, {results['failed']} failed")
         
-        if CONFIG.get('logging', {}).get('show_progress', True):
-            print(f"\nBatch processing complete:")
-            print(f"  Total images: {results['processed']}")
-            print(f"  Successful: {results['successful']}")
-            print(f"  Failed: {results['failed']}")
+        if CONFIG.get('logging', {}).get('show_information', True):
+            log_message("Batch processing complete:", "INFORMATION")
+            log_message(f"  Total images: {results['processed']}", "INFORMATION")
+            log_message(f"  Successful: {results['successful']}", "INFORMATION")
+            log_message(f"  Failed: {results['failed']}", "INFORMATION")
             
             if results['failed'] > 0:
                 print(f"\nFailed images:")
@@ -3353,15 +3368,15 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
 
         # Handle clear-all operation BEFORE initializing log file
         if total_existing > 0 and clear_all:
-            if CONFIG.get('logging', {}).get('show_progress', True):
-                print(f"Auto-clearing {total_existing} existing files (plus reports and logs folders)...")
+            if CONFIG.get('logging', {}).get('show_information', True):
+                log_message(f"Auto-clearing {total_existing} existing files (plus reports and logs folders)...")
 
             # Include reports and logs folders when using --clear-all
             folders_to_clear_all = folders_to_check + [get_absolute_folder_path('reports'), get_absolute_folder_path('logs')]
             clear_results = clear_folders(folders_to_clear_all)
 
-            if CONFIG.get('logging', {}).get('show_progress', True):
-                print(f"Auto-cleared {sum(clear_results.values())} files from all folders")
+            if CONFIG.get('logging', {}).get('show_information', True):
+                log_message(f"Auto-cleared {sum(clear_results.values())} files from all folders")
 
         # Initialize log file AFTER clear operation (so it doesn't get deleted)
         log_file = initialize_log_file(url)
@@ -3374,8 +3389,8 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
         # Skip clearing prompt - just continue with existing files
         if total_existing > 0 and not clear_all:
             debug_log(f"Found {total_existing} existing files, continuing without clearing")
-            if CONFIG.get('logging', {}).get('show_progress', True):
-                print(f"Found {total_existing} existing files in folders, continuing...")
+            if CONFIG.get('logging', {}).get('show_information', True):
+                log_message(f"Found {total_existing} existing files in folders, continuing...")
         
         # Initialize results tracking
         workflow_results = {
@@ -3391,7 +3406,7 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
         }
         
         # Step 1: Download images
-        if CONFIG.get('logging', {}).get('show_progress', True):
+        if CONFIG.get('logging', {}).get('show_information', True):
             if max_images:
                 print(f"\nStep 1/3: Downloading images (max {max_images})...")
             else:
@@ -3420,11 +3435,11 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
             close_log_file()
             return workflow_results
 
-        if CONFIG.get('logging', {}).get('show_progress', True):
+        if CONFIG.get('logging', {}).get('show_information', True):
             print(f"Downloaded {len(download_results)} images")
         
         # Step 2: Extract context for all images
-        if CONFIG.get('logging', {}).get('show_progress', True):
+        if CONFIG.get('logging', {}).get('show_information', True):
             print(f"\nStep 2/3: Extracting context for {len(download_results)} images...")
         
         debug_log("Starting context extraction step")
@@ -3433,7 +3448,7 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
         for i, image_filename in enumerate(download_results, 1):
             debug_log(f"Extracting context for image {i}/{len(download_results)}: {image_filename}")
 
-            if CONFIG.get('logging', {}).get('show_progress', True):
+            if CONFIG.get('logging', {}).get('show_information', True):
                 print(f"[{i}/{len(download_results)}] Extracting context: {image_filename}")
 
             try:
@@ -3492,11 +3507,11 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
         workflow_results["steps"]["context"] = context_results
         debug_log(f"Context extraction complete: {context_results['successful']} successful, {context_results['failed']} failed")
         
-        if CONFIG.get('logging', {}).get('show_progress', True):
+        if CONFIG.get('logging', {}).get('show_information', True):
             print(f"Context extracted: {context_results['successful']} successful, {context_results['failed']} failed")
         
         # Step 3: Generate JSON files for all images
-        if CONFIG.get('logging', {}).get('show_progress', True):
+        if CONFIG.get('logging', {}).get('show_information', True):
             print(f"\nStep 3/3: Generating JSON files for all images...")
 
         debug_log("Starting JSON generation step")
@@ -3517,7 +3532,7 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
         
         debug_log(f"AutoAltText workflow complete: {workflow_results['summary']}")
 
-        if CONFIG.get('logging', {}).get('show_progress', True):
+        if CONFIG.get('logging', {}).get('show_information', True):
             print(f"\nAutoAltText Complete!")
             print(f"  Images downloaded: {workflow_results['summary']['images_downloaded']}")
             print(f"  Context extracted: {workflow_results['summary']['context_extracted']}")
@@ -3606,10 +3621,10 @@ def main():
             get_absolute_folder_path('reports'),
             get_absolute_folder_path('logs')
         ]
-        print("Clearing all folders (images, context, alt-text, reports, logs)...")
+        log_message("Clearing all folders (images, context, alt-text, reports, logs)...", "INFORMATION")
         results = clear_folders(folders_to_clear)
         total_deleted = sum(results.values())
-        print(f"Cleared {total_deleted} files from all folders")
+        log_message(f"Cleared {total_deleted} files from all folders", "INFORMATION")
         clear_operation_performed = True
 
     elif args.clear_inputs:
@@ -4155,16 +4170,16 @@ For more information, see AutoAltText.md
             sys.exit(1)
 
         if args.num_images:
-            print(f"Starting AutoAltText complete workflow (max {args.num_images} images)...")
+            log_message(f"Starting AutoAltText complete workflow (max {args.num_images} images)...", "INFORMATION")
         else:
-            print("Starting AutoAltText complete workflow...")
+            log_message("Starting AutoAltText complete workflow...", "INFORMATION")
 
         # Display language info
         if args.language:
             if len(args.language) > 1:
-                print(f"Generating alt-text in multiple languages: {', '.join(args.language)}")
+                log_message(f"Generating alt-text in multiple languages: {', '.join(args.language)}", "INFORMATION")
             else:
-                print(f"Language: {args.language[0]}")
+                log_message(f"Language: {args.language[0]}", "INFORMATION")
 
         results = AutoAltText(
             args.url,

@@ -1,8 +1,27 @@
-# MyAccessibilityBuddy
+# My Accessibility Buddy
+
+![MyAccessibilityBuddy logo](frontend/assets/banner.png)
 
 **AI-powered WCAG 2.2 compliant alternative text generator for web images**
 
 MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant content by automatically generating high-quality alternative text and accessibility-ready descriptions, supporting more inclusive digital communication for everyone.
+
+## Features
+
+### Three Main Use Cases
+- 👨‍💼 **[For Webmasters](#for-webmasters-generate-wcag-compliant-alternate-text-for-images)**: Generate WCAG-compliant alt-text for individual images via Web UI or CLI
+- 🔍 **[For Accessibility Compliance](#for-accessibility-compliance-test-generate-complete-alternative-text-reports-of-web-pages)**: Analyze entire websites and generate comprehensive accessibility reports
+- 🔬 **[For AI Engineers](#for-ai-engineers-batch-prompt-comparison-tool)**: Compare and optimize prompt templates with batch testing tools
+
+### Core Capabilities
+- 🖼️ **Multi-format support**: JPG, PNG, GIF, WEBP, SVG, BMP, TIFF
+- 🌍 **24 EU languages**: Multilingual alt-text generation
+- 🔄 **Multiple interfaces**: CLI, Web UI, REST API
+- 🤖 **AI providers**: OpenAI GPT-4o/5.1/5.2, Claude Sonnet-4/Opus-4, ECB-LLM, or Ollama (local)
+- 📊 **Batch processing**: Process multiple images at once
+- 📈 **HTML reports**: Accessible reports with detailed analysis
+- 🌐 **Web scraping**: Extract images and context from websites
+- ♿ **WCAG 2.2 compliant**: Follows accessibility standards
 
 ## Quick Start with Docker 🐳
 
@@ -21,17 +40,6 @@ docker compose up -d
 
 See [docs/DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md) for a 3-minute guide.
 
-## Features
-
-- 🖼️ **Multi-format support**: JPG, PNG, GIF, WEBP, SVG, BMP, TIFF
-- 🌍 **24 EU languages**: Multilingual alt-text generation
-- 🔄 **Multiple interfaces**: CLI, Web UI, REST API
-- 🤖 **AI providers**: OpenAI GPT-4o, ECB-LLM GPT-4o/5.1, or Ollama (local)
-- 📊 **Batch processing**: Process multiple images at once
-- 📈 **HTML reports**: Accessible reports with detailed analysis
-- 🌐 **Web scraping**: Extract images and context from websites
-- ♿ **WCAG 2.2 compliant**: Follows accessibility standards
-
 ## Documentation
 
 - **[docs/DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md)** - Get started in 3 minutes with Docker
@@ -39,40 +47,119 @@ See [docs/DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md) for a 3-minute guide.
 - **[docs/CLAUDE.md](docs/CLAUDE.md)** - Developer guide and architecture
 - **[docs/MyAccessibilityBuddy.md](docs/MyAccessibilityBuddy.md)** - Quick start examples
 
-## Installation Options
+## Use cases
 
-### Option 1: Docker (Recommended)
+### For webmasters: generate WCAG compliant alternate text for images
 
-See [docs/DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md) for step-by-step instructions.
+Generate compliant alt-text for single images using the web interface or API. Perfect for content creators and webmasters who need quick, accessible descriptions.
 
-### Option 2: Local Development
+#### Quick Start
 
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your API key
+# For web masters, using Web UI:
+Open http://localhost:8080/home.html
+1. Upload image (drag & drop or browse)
+2. Select language(s)
+3. Click "Generate Alt Text"
+
+# For accessibility complaince tests, using CLI (Docker)
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -g test/input/images/1.png --language en
+
+# or using context file for better results
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -g test/input/images/1.png -c test/input/context/1.txt --language en
+
+# or for Multiple languages
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -g test/input/images/1.png --language en es de
+
+# For AI engineers: Batch Prompt Comparison Tool
+# Run with default config (compares prompts v0-v4 on test images)
+docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
 ```
 
-See [docs/CLAUDE.md](docs/CLAUDE.md) for detailed setup instructions.
 
-## Batch Prompt Comparison Tool
+
+#### Configuration
+
+Edit `backend/config/config.json` for provider and model selection:
+
+```json
+{
+  "steps": {
+    "vision": {"provider": "OpenAI", "model": "gpt-4o"},
+    "processing": {"provider": "OpenAI", "model": "gpt-4o"}
+  }
+}
+```
+
+#### Example Output
+
+```json
+{
+  "alt_text": "Chart showing ECB interest rates at 2.5% from 2023-2025",
+  "image_type": "informative",
+  "reasoning": "Chart conveys specific economic data requiring description"
+}
+```
+
+### For accessibility compliance test: generate complete alternative text reports of web pages
+
+Analyze entire websites by scraping images and generating comprehensive accessibility reports. Ideal for compliance audits and testing.
+
+#### Quick Start
+
+```bash
+# Using CLI (Docker)
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py --url https://example.com --language en --generate-report
+
+# Output appears in output/reports/
+```
+
+#### Configuration
+
+Edit `backend/config/config.advanced.json` for scraping settings:
+
+```json
+{
+  "download": {
+    "timeout": 30,
+    "delay_between_requests": 3
+  },
+  "image_extraction": {
+    "tags": {"img": true, "picture": true},
+    "css_background_images": true
+  }
+}
+```
+
+#### Example Output
+
+**HTML Report** (`output/reports/accessibility_report_[timestamp].html`):
+- Image analysis overview with statistics
+- Image type distribution (decorative/informative/functional)
+- Current vs. proposed alt-text comparison
+- WCAG compliance recommendations
+- Visual previews and detailed reasoning
+
+### For AI engineers: Batch Prompt Comparison Tool
 
 Compare multiple prompt templates to optimize your alt-text quality. The batch comparison tool systematically tests different prompts against test images and generates detailed comparison reports.
 
-### Quick Start
+#### Quick Start
 
 ```bash
-# Using Docker (recommended)
+# Run with default config (compares prompts v0-v4 on test images)
 docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
 
-# Or using local environment
-python3 tools/batch_compare_prompts.py
+# Compare specific prompts (edit config first)
+# Edit backend/config/config.advanced.json -> testing.batch_comparison.prompts
+docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
+
+# Test with more images (add to config.advanced.json)
+# testing.batch_comparison.test_images: ["1.png", "2.png", "3.png", "4.png"]
+docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
 ```
 
-### Configuration
+#### Configuration
 
 Edit `backend/config/config.advanced.json` to customize your test:
 
@@ -82,16 +169,17 @@ Edit `backend/config/config.advanced.json` to customize your test:
     "batch_comparison": {
       "prompts": [
         {"file": "processing_prompt_v0.txt", "label": "v0: base prompt"},
-        {"file": "processing_prompt_v2.txt", "label": "v2: WCAG focused"}
+        {"file": "processing_prompt_v3.txt", "label": "v3: WCAG focused"}
       ],
-      "test_images": ["1.png", "2.png", "3.png"],
+      "test_images": ["1.png", "2.png"],
+      "test_context": ["1.txt", "2.txt"],
       "language": "en"
     }
   }
 }
 ```
 
-### Example Output
+#### Example Output
 
 The tool generates two reports:
 
@@ -108,14 +196,29 @@ Image Filename,Alt Text (v0: base prompt),Alt Text (v2: WCAG focused)
 - Visual preview of test images
 - Character count and reasoning for each result
 
-### Use Cases
+## Overview
 
-1. **Prompt Optimization**: Test v0, v1, v2 prompts to find the best approach
-2. **WCAG Compliance**: Verify prompts generate accessible alt-text
-3. **Quality Assurance**: Ensure consistency across image types
-4. **A/B Testing**: Compare different prompt engineering strategies
+### Technological innovation
+The innovation lies in **rule-constrained AI orchestration** rather than model novelty.  
+Accessibility standards actively guide language generation and quality control, producing outputs that are both human-readable and machine-readable.  
+This approach improves consistency and quality compared to unstructured AI-generated descriptions.
 
-See [docs/CLAUDE.md](docs/CLAUDE.md) for detailed configuration options.
+### Business model
+MyAccessibilityBuddy is designed to be delivered as:
+- a SaaS tool for editorial and communication teams  
+- an API for integration into CMSs, DAMs, and digital platforms  
+
+Target users include **public institutions and large content publishers** subject to WCAG and European Accessibility Act requirements.  
+By automating repetitive accessibility tasks while preserving human oversight, the solution reduces editorial effort, lowers compliance costs, and supports sustainable adoption at scale.
+
+### Social impact
+The tool reduces exclusion caused by missing or poor alternative text, improving access to digital content for people using assistive technologies.  
+By enabling accessibility at scale, it supports participation, autonomy, and equal access to information in digital communication.
+
+### Social innovation
+MyAccessibilityBuddy reframes accessibility from a compliance obligation to **shared digital infrastructure**.  
+By improving both human accessibility and machine interpretability, it aligns inclusive design with the future of AI-mediated information access.
+
 
 ## License
 

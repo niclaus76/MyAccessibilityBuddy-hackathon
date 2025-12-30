@@ -115,7 +115,7 @@ Edit `backend/config/config.json`:
   "debug_mode": false,
   "logging": {
     "show_debug": false,
-    "show_progress": true,
+    "show_information": false,
     "show_warnings": true,
     "show_errors": true
   },
@@ -151,12 +151,12 @@ Configuration file: `backend/config/config.json`
   "_comment_debug": "true or false - enables detailed debug logging to files",
   "debug_mode": false,
   
-  "_comment_logging": "Control console output by log level",
+  "_comment_logging": "Control console output by log level: DEBUG (technical details), INFORMATION (informational messages), WARNING (warnings/potential issues), ERROR (errors/failures)",
   "logging": {
-    "show_debug": false,      // Technical details for debugging
-    "show_progress": true,    // Progress updates (recommended: true)
-    "show_warnings": true,    // Potential issues
-    "show_errors": true       // Failures and errors
+    "show_debug": false,         // DEBUG level: Technical details for debugging
+    "show_information": false,   // INFORMATION level: Progress updates and informational messages
+    "show_warnings": true,       // WARNING level: Potential issues
+    "show_errors": true          // ERROR level: Failures and errors
   },
   
   "_comment_llm": "llm_provider: OpenAI or ECB-LLM (U2A OAuth2 authentication only)",
@@ -1254,7 +1254,7 @@ Enable detailed logging for troubleshooting:
   "debug_mode": true,
   "logging": {
     "show_debug": true,
-    "show_progress": true,
+    "show_information": true,
     "show_warnings": true,
     "show_errors": true
   }

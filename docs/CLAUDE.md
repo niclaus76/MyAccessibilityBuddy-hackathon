@@ -354,10 +354,10 @@ ollama pull phi3               # Or llama3.2, granite3.2
 {
   "debug_mode": true,  // Enables file logging to logs/
   "logging": {
-    "show_debug": true,     // Technical details
-    "show_progress": true,  // Progress updates
-    "show_warnings": true,  // Potential issues
-    "show_errors": true     // Failures
+    "show_debug": true,          // DEBUG: Technical details
+    "show_information": false,   // INFORMATION: Progress updates and informational messages
+    "show_warnings": true,       // WARNING: Potential issues
+    "show_errors": true          // ERROR: Failures
   }
 }
 ```

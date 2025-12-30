@@ -3,10 +3,10 @@
   "_comment_advanced": "For advanced settings (folders, scraping, context extraction, etc.), see config.advanced.json",
   "_comment_debug": "true or false - enables debug logging to files",
   "debug_mode": true,
-  "_comment_logging": "Control console output by log level: DEBUG (technical details), INFO/progress (progress updates), WARNING/warnings (potential issues), ERROR/errors (failures)",
+  "_comment_logging": "Control console output by log level: DEBUG (technical details), INFORMATION (informational messages), WARNING (warnings/potential issues), ERROR (errors/failures)",
   "logging": {
-    "show_debug": true,
-    "show_progress": true,
+    "show_debug": false,
+    "show_information": false,
     "show_warnings": true,
     "show_errors": true
   },
