@@ -17,6 +17,14 @@ import uuid
 import secrets
 from urllib.parse import urlencode
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("Loaded environment variables from .env file")
+except ImportError:
+    print("python-dotenv not installed. Using system environment variables only.")
+
 # Import from the app module
 from app import (
     analyze_image_with_openai,
@@ -27,7 +35,9 @@ from app import (
     load_translation_system_prompt,
     load_config,
     get_absolute_folder_path,
-    get_llm_credentials
+    get_llm_credentials,
+    ECB_LLM_AVAILABLE,
+    OLLAMA_AVAILABLE
 )
 
 # Initialize FastAPI app
@@ -72,6 +82,24 @@ class AltTextResponse(BaseModel):
     reasoning: Optional[str] = None
     character_count: int
     language: str
+    image_id: Optional[str] = None
+    json_file_path: Optional[str] = None
+    error: Optional[str] = None
+
+
+class SaveReviewedAltTextRequest(BaseModel):
+    """Request model for saving human-reviewed alt text."""
+    image_id: str
+    reviewed_alt_text: str
+    language: str
+    reviewed_alt_text_length: Optional[int] = None
+
+
+class SaveReviewedAltTextResponse(BaseModel):
+    """Response model for saving human-reviewed alt text."""
+    success: bool
+    message: str
+    json_file_path: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -383,6 +411,40 @@ async def health_check():
     )
 
 
+@app.get("/api/available-providers")
+async def get_available_providers():
+    """
+    Get list of available providers based on installed libraries.
+
+    Returns:
+        Dictionary with available providers and their models from config
+    """
+    from app import CONFIG
+
+    if not CONFIG:
+        load_config()
+        from app import CONFIG
+
+    available_providers = {
+        'openai': CONFIG.get('openai', {}).get('available_models', {}),
+        'claude': CONFIG.get('claude', {}).get('available_models', {})
+    }
+
+    # Only include ECB-LLM if the library is installed
+    if ECB_LLM_AVAILABLE:
+        available_providers['ecb-llm'] = CONFIG.get('ecb_llm', {}).get('available_models', {})
+
+    # Only include Ollama if the library is installed
+    if OLLAMA_AVAILABLE:
+        available_providers['ollama'] = CONFIG.get('ollama', {}).get('available_models', {})
+
+    return {
+        'providers': available_providers,
+        'ecb_llm_available': ECB_LLM_AVAILABLE,
+        'ollama_available': OLLAMA_AVAILABLE
+    }
+
+
 @app.post("/api/generate-alt-text", response_model=AltTextResponse)
 async def generate_alt_text(
     request: Request,
@@ -554,6 +616,21 @@ async def generate_alt_text(
         # Calculate character count
         char_count = len(alt_text_str) if alt_text_str else 0
 
+        # Get image_id from result
+        image_id = result.get('image_id', image_filename)
+
+        # Copy JSON to permanent output/alt-text directory
+        permanent_output_dir = get_absolute_folder_path('output/alt-text')
+        os.makedirs(permanent_output_dir, exist_ok=True)
+
+        # Generate permanent filename based on image_id and language
+        image_name_without_ext = os.path.splitext(image_id)[0]
+        permanent_json_filename = f"{image_name_without_ext}_{language}.json"
+        permanent_json_path = os.path.join(permanent_output_dir, permanent_json_filename)
+
+        # Copy the JSON file to permanent location
+        shutil.copy2(json_path, permanent_json_path)
+
         return AltTextResponse(
             success=True,
             alt_text=alt_text_str,
@@ -561,6 +638,8 @@ async def generate_alt_text(
             reasoning=reasoning_str,
             character_count=char_count,
             language=language,
+            image_id=image_id,
+            json_file_path=permanent_json_path,
             error=None
         )
 
@@ -585,6 +664,113 @@ async def generate_alt_text(
             shutil.rmtree(tmp_dir)
         except Exception:
             pass
+
+
+@app.post("/api/save-reviewed-alt-text", response_model=SaveReviewedAltTextResponse)
+async def save_reviewed_alt_text(request: SaveReviewedAltTextRequest):
+    """
+    Save human-reviewed alt text to the JSON file.
+
+    Args:
+        request: SaveReviewedAltTextRequest containing image_id, reviewed_alt_text, and language
+
+    Returns:
+        SaveReviewedAltTextResponse: Success status and file path
+
+    Raises:
+        HTTPException: If file not found or save fails
+    """
+    import json
+
+    try:
+        # Get the permanent output directory
+        permanent_output_dir = get_absolute_folder_path('output/alt-text')
+
+        # Generate filename based on image_id and language
+        image_name_without_ext = os.path.splitext(request.image_id)[0]
+        json_filename = f"{image_name_without_ext}_{request.language}.json"
+        json_file_path = os.path.join(permanent_output_dir, json_filename)
+
+        # Check if file exists
+        if not os.path.exists(json_file_path):
+            raise HTTPException(
+                status_code=404,
+                detail=f"JSON file not found for image_id: {request.image_id}"
+            )
+
+        # Read existing JSON
+        with open(json_file_path, 'r', encoding='utf-8') as f:
+            json_data = json.load(f)
+
+        # Calculate length if not provided
+        reviewed_length = request.reviewed_alt_text_length
+        if reviewed_length is None:
+            reviewed_length = len(request.reviewed_alt_text)
+
+        # Add or update the human_reviewed_alt_text field
+        # Handle both single language and multilingual formats
+        if isinstance(json_data.get('proposed_alt_text'), list):
+            # Multilingual format
+            if 'human_reviewed_alt_text' not in json_data:
+                json_data['human_reviewed_alt_text'] = []
+            if 'human_reviewed_alt_text_length' not in json_data:
+                json_data['human_reviewed_alt_text_length'] = []
+
+            # Update or add the reviewed text for this language
+            existing_entry = None
+            for i, (lang_code, _) in enumerate(json_data['human_reviewed_alt_text']):
+                if lang_code.upper() == request.language.upper():
+                    existing_entry = i
+                    break
+
+            if existing_entry is not None:
+                json_data['human_reviewed_alt_text'][existing_entry] = (request.language, request.reviewed_alt_text)
+                json_data['human_reviewed_alt_text_length'][existing_entry] = (request.language, reviewed_length)
+            else:
+                json_data['human_reviewed_alt_text'].append((request.language, request.reviewed_alt_text))
+                json_data['human_reviewed_alt_text_length'].append((request.language, reviewed_length))
+        else:
+            # Single language format
+            json_data['human_reviewed_alt_text'] = request.reviewed_alt_text
+            json_data['human_reviewed_alt_text_length'] = reviewed_length
+
+        # Reorganize JSON field order
+        # Move human_reviewed fields right after proposed_alt_text and move ai_model after language
+        ordered_data = {}
+        for key in json_data.keys():
+            if key not in ['human_reviewed_alt_text', 'human_reviewed_alt_text_length', 'ai_model']:
+                ordered_data[key] = json_data[key]
+                # Insert human_reviewed fields after proposed_alt_text_length
+                if key == 'proposed_alt_text_length':
+                    if 'human_reviewed_alt_text' in json_data:
+                        ordered_data['human_reviewed_alt_text'] = json_data['human_reviewed_alt_text']
+                    if 'human_reviewed_alt_text_length' in json_data:
+                        ordered_data['human_reviewed_alt_text_length'] = json_data['human_reviewed_alt_text_length']
+                # Insert ai_model after language
+                elif key == 'language':
+                    if 'ai_model' in json_data:
+                        ordered_data['ai_model'] = json_data['ai_model']
+
+        # Save updated JSON with ordered fields
+        with open(json_file_path, 'w', encoding='utf-8') as f:
+            json.dump(ordered_data, f, indent=2, ensure_ascii=False)
+
+        return SaveReviewedAltTextResponse(
+            success=True,
+            message="Human-reviewed alt text saved successfully",
+            json_file_path=json_file_path,
+            error=None
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return SaveReviewedAltTextResponse(
+            success=False,
+            message="Failed to save reviewed alt text",
+            json_file_path=None,
+            error=str(e)
+        )
 
 
 @app.get("/api/languages")

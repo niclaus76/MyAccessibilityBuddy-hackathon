@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   myaccessibilitybuddy:
     build:
@@ -15,8 +13,11 @@ services:
       - ./input:/app/input
       - ./output:/app/output
       - ./logs:/app/logs
+      - ./test:/app/test
+      - ./tools:/app/tools
       # Mount config for easy configuration changes
       - ./backend/config/config.json:/app/backend/config/config.json
+      - ./backend/config/config.advanced.json:/app/backend/config/config.advanced.json
       # Mount .env file for credentials (create this file with your API keys)
       - ./backend/.env:/app/backend/.env
     environment:

@@ -40,7 +40,6 @@ AutoAltText/
 ├── test/                       # Test images and context files
 ├── tools/
 │   └── batch_compare_prompts.py   # Batch prompt comparison tool
-├── batch_compare_prompts.sh       # Shell wrapper for prompt comparison
 └── start_MyAccessibilityBuddy.sh  # Start servers (ports 8080, 8000)
 ```
 
@@ -88,6 +87,36 @@ AutoAltText/
 ## Common Commands
 
 ### Development Setup
+
+**Option 1: Docker (Recommended)**
+
+```bash
+# 1. Create .env file with your API credentials
+cp backend/.env.example backend/.env
+# Edit backend/.env and add your OPENAI_API_KEY or ECB-LLM credentials
+
+# 2. Configure LLM provider in backend/config/config.json
+# Set "llm_provider": "OpenAI" or "ECB-LLM"
+
+# 3. Build and start with Docker Compose
+docker-compose up -d
+
+# Access the application
+# Frontend: http://localhost:8080/home.html
+# API Docs: http://localhost:8000/api/docs
+
+# View logs
+docker-compose logs -f
+
+# Stop containers
+docker-compose down
+
+# Rebuild after code changes
+docker-compose up -d --build
+```
+
+**Option 2: Local Development (Traditional)**
+
 ```bash
 # Create virtual environment
 cd backend
@@ -98,17 +127,31 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Configure .env file (in backend/ directory)
-# For OpenAI:
-OPENAI_API_KEY=sk-your-api-key-here
-
-# For ECB-LLM:
-CLIENT_ID_U2A=your-client-id
-CLIENT_SECRET_U2A=your-client-secret
+cp .env.example .env
+# Edit .env and add:
+# For OpenAI: OPENAI_API_KEY=sk-your-api-key-here
+# For ECB-LLM: CLIENT_ID_U2A=... and CLIENT_SECRET_U2A=...
 ```
 
 ### Running the Application
 
-**Web UI Mode:**
+**Docker Mode (Recommended):**
+```bash
+# Start all services
+docker-compose up -d
+
+# Frontend: http://localhost:8080/home.html
+# API docs: http://localhost:8000/api/docs
+# OAuth (ECB-LLM): Port 3001 automatically used when needed
+
+# Stop services
+docker-compose down
+
+# Run batch processing with test images
+docker-compose --profile test run myaccessibilitybuddy-test
+```
+
+**Local Mode:**
 ```bash
 # Start servers (8080 for frontend, 8000 for API)
 ./start_MyAccessibilityBuddy.sh
@@ -169,27 +212,125 @@ cat ../output/alt-text/1.json
 ```
 
 ### Batch Prompt Comparison
-```bash
-# Compare multiple prompts on all test images
-./batch_compare_prompts.sh
 
-# Or directly:
+The batch prompt comparison tool helps you evaluate and optimize your prompt templates by systematically testing them against a set of test images.
+
+**Docker Mode (Recommended):**
+```bash
+# Run batch comparison
+docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
+```
+
+**Local Mode:**
+```bash
 cd backend
 source venv/bin/activate
 cd ..
 python3 tools/batch_compare_prompts.py
-
-# Output: output/prompt_comparison_TIMESTAMP.csv
 ```
 
-## Configuration (backend/config/config.json)
-
-### LLM Provider Settings
+**Configuration:**
+Test parameters are defined in `backend/config/config.advanced.json`:
 ```json
 {
-  "llm_provider": "OpenAI",    // or "ECB-LLM"
-  "model": "gpt-4o",           // or "gpt-5.1" for ECB-LLM
-  "translation_mode": "accurate"  // "fast" or "accurate"
+  "testing": {
+    "folders": {
+      "test_images": "test/input/images",
+      "test_context": "test/input/context",
+      "test_reports": "test/output/reports"
+    },
+    "batch_comparison": {
+      "test_name": "Prompt Comparison Test",
+      "prompts": [
+        {"file": "processing_prompt_v0.txt", "label": "v0: base prompt"},
+        {"file": "processing_prompt_v2.txt", "label": "v2: WCAG focused"}
+      ],
+      "test_images": ["1.png", "2.png", "3.png"],
+      "language": "en"
+    }
+  }
+}
+```
+
+**Output:**
+- CSV: `test/output/reports/prompt_comparison_[timestamp].csv`
+- HTML: `test/output/reports/prompt_comparison_[timestamp].html`
+
+**Example Results:**
+```csv
+Image Filename,Alt Text (v0),Alt Text (v2)
+1.png,"Monetary policy graphic","Illustration showing ECB monetary policy with 2% inflation target"
+2.png,"Interest rate chart","Chart displaying key ECB interest rates over time"
+```
+
+## Configuration
+
+MyAccessibilityBuddy uses a split configuration system for better usability:
+
+- **[config.json](backend/config/config.json)** - Basic settings (LLM, logging, prompts)
+- **[config.advanced.json](backend/config/config.advanced.json)** - Advanced settings (folders, scraping, context extraction, languages)
+
+Both files are automatically loaded and merged at startup. Basic config takes precedence for overlapping keys.
+
+### Basic Configuration (config.json)
+
+Settings that users commonly adjust:
+
+#### LLM Provider Settings
+```json
+{
+  "llm_provider": "Ollama",        // Options: "OpenAI", "ECB-LLM", or "Ollama"
+  "two_step_processing": true,     // Enable two-step processing (recommended)
+  "translation_mode": "fast",      // "fast" or "accurate"
+
+  "openai": {
+    "vision_model": "gpt-4o",      // Step 1: Image description
+    "processing_model": "gpt-4o"   // Step 2: WCAG alt-text generation
+  },
+
+  "ecb_llm": {
+    "vision_model": "gpt-4o",      // Can use gpt-4o or gpt-5.1
+    "processing_model": "gpt-4o"
+  },
+
+  "ollama": {
+    "base_url": "http://192.168.64.1:11434",
+    "vision_model": "granite3.2-vision",
+    "processing_model": "phi3"
+  }
+}
+```
+
+**LLM Providers:**
+- **OpenAI**: Cloud-based GPT-4o (requires `OPENAI_API_KEY` in `.env`)
+- **ECB-LLM**: ECB internal service (requires `CLIENT_ID_U2A` and `CLIENT_SECRET_U2A` in `.env`)
+- **Ollama**: Local models via Ollama server (free, runs locally, no API key needed)
+
+**Processing Workflow:**
+When `two_step_processing: true` (recommended), all providers use a multi-step workflow:
+1. **Step 1 - Vision**: Vision model analyzes image → generates detailed description (uses prompts from `prompt/vision/`)
+2. **Step 2 - Processing**: Processing model → generates WCAG-compliant alt-text (uses prompts from `prompt/processing/`)
+3. **Step 3 - Translation** (optional): Translation model translates alt-text to target language(s) in "fast" multilingual mode (uses prompts from `prompt/translation/`)
+
+When `two_step_processing: false`, uses legacy single-step mode (vision model does everything).
+
+**Translation Step Behavior:**
+- **Single language**: Translation step is skipped (alt-text generated directly in target language)
+- **Multiple languages (fast mode)**: Generate once in first language, then translate to others using Step 3
+- **Multiple languages (accurate mode)**: Generate fresh alt-text for each language (no translation step)
+
+**Model Flexibility:**
+You can mix and match models within the same provider:
+```json
+{
+  "openai": {
+    "vision_model": "gpt-4o",       // High-quality image analysis
+    "processing_model": "gpt-4o-mini"  // Cheaper model for text processing
+  },
+  "ollama": {
+    "vision_model": "llama3.2-vision",  // Or granite3.2-vision, moondream
+    "processing_model": "phi3"           // Or llama3.2, granite3.2
+  }
 }
 ```
 
@@ -197,9 +338,93 @@ python3 tools/batch_compare_prompts.py
 - **"fast"**: Generate once in first language, then translate others (faster, cheaper)
 - **"accurate"**: Generate fresh alt-text for each language (better quality, slower)
 
-Note: Legacy config used `full_translation_mode: boolean`. Code at line 2161 handles backward compatibility.
+**Setting up Ollama:**
+```bash
+# Install Ollama: https://ollama.ai
+# Pull required models
+ollama pull granite3.2-vision  # Or llama3.2-vision
+ollama pull phi3               # Or llama3.2, granite3.2
 
-### Folder Paths
+# Configure in config.json
+"llm_provider": "Ollama"
+```
+
+#### Logging Settings
+```json
+{
+  "debug_mode": true,  // Enables file logging to logs/
+  "logging": {
+    "show_debug": true,     // Technical details
+    "show_progress": true,  // Progress updates
+    "show_warnings": true,  // Potential issues
+    "show_errors": true     // Failures
+  }
+}
+```
+
+#### Prompt Selection
+```json
+{
+  "prompt": {
+    "processing_files": ["processing_prompt_v0.txt"],
+    "default_processing_prompt": "processing_prompt_v0.txt",
+    "vision_files": ["vision_prompt_v0.txt"],
+    "default_vision_prompt": "vision_prompt_v0.txt",
+    "translation_files": ["translation_prompt_v0.txt"],
+    "default_translation_prompt": "translation_prompt_v0.txt",
+    "translation_system_files": ["translation_system_prompt_v0.txt"],
+    "default_translation_system_prompt": "translation_system_prompt_v0.txt"
+  }
+}
+```
+
+**Prompt Organization:**
+Prompts are organized into three categories based on the processing workflow:
+
+```
+prompt/
+├── vision/                              # Step 1: Image description
+│   └── vision_prompt_v0.txt            # "Describe this image in detail."
+├── processing/                          # Step 2: WCAG alt-text generation
+│   ├── processing_prompt_v0.txt        # Minimal baseline with JSON output
+│   ├── processing_prompt_v1.txt        # Basic classification
+│   ├── processing_prompt_v2.txt        # WCAG 2.2 focused (recommended)
+│   ├── processing_prompt_v3.txt        # Comprehensive
+│   └── processing_prompt_v4.txt        # Advanced multi-file modular system
+└── translation/                         # Step 3: Translation (multilingual mode)
+    ├── translation_prompt_v0.txt        # User prompt for translation
+    └── translation_system_prompt_v0.txt # System prompt (provider-specific)
+```
+
+**Available Processing Prompts** in `prompt/processing/`:
+- `processing_prompt_v0.txt` - Minimal baseline with JSON output
+- `processing_prompt_v1.txt` - Basic classification (decorative/informative/functional)
+- `processing_prompt_v2.txt` - WCAG 2.2 focused with decision tree (recommended)
+- `processing_prompt_v3.txt` - Comprehensive with phased execution and optimization
+- `processing_prompt_v4.txt` - Advanced multi-file modular system
+- `processing_prompt_v4-*.txt` - Supporting files for prompt_v4
+
+**Customizing Prompts:**
+- **Vision prompts** (`prompt/vision/`): Control how the image is analyzed in Step 1
+- **Processing prompts** (`prompt/processing/`): Control WCAG alt-text generation in Step 2
+- **Translation prompts** (`prompt/translation/`): Control how alt-text is translated in multilingual mode (Step 3)
+
+**Translation Prompts** (used only in multilingual "fast" mode):
+- `translation_prompt_v0.txt` - Main user prompt sent to the translation model with the text to translate
+- `translation_system_prompt_v0.txt` - System-level instructions for the translation model (used by providers like Claude that support separate system prompts)
+
+Both translation prompts support the `{TARGET_LANGUAGE}` placeholder which is replaced with the target language name at runtime.
+
+**Language Placeholders**:
+- Processing and vision prompts use `{LANGUAGE}` - replaced with target language name (e.g., "Italian", "German")
+- Translation prompts use `{TARGET_LANGUAGE}` - replaced with target language for translation
+These placeholders ensure alt-text is generated in the correct language for multilingual workflows.
+
+### Advanced Configuration (config.advanced.json)
+
+Technical settings rarely modified by most users:
+
+#### Folder Paths
 All paths are relative to project root. Accessed via `config.settings.get_folder_path(name)`:
 ```json
 {
@@ -209,33 +434,31 @@ All paths are relative to project root. Accessed via `config.settings.get_folder
     "alt_text": "output/alt-text",
     "reports": "output/reports",
     "prompt": "prompt",
+    "prompt_processing": "prompt/processing",
+    "prompt_vision": "prompt/vision",
+    "prompt_translation": "prompt/translation",
     "logs": "logs"
   }
 }
 ```
 
-### Prompt Templates
+#### Supported Languages
 ```json
 {
-  "prompt": {
-    "files": ["prompt_v0.txt"],  // List of prompts to merge
-    "merge_separator": "\n\n---\n\n",
-    "default_prompt": "prompt_v0.txt"   // Fallback
+  "languages": {
+    "allowed": [
+      {"code": "bg", "name": "Български"},
+      {"code": "en", "name": "English"},
+      ...24 EU languages total
+    ],
+    "default": "en"
   }
 }
 ```
 
-Available prompts in `prompt/`:
-- `prompt_v0.txt` - Minimal baseline with JSON output
-- `prompt_v1.txt` - Basic classification (decorative/informative/functional)
-- `prompt_v2.txt` - WCAG 2.2 focused with decision tree (recommended)
-- `prompt_v3.txt` - Comprehensive with phased execution and optimization
-- `prompt_v4.txt` - Advanced multi-file modular system
-- `prompt_v4-*.txt` - Supporting files for prompt_v4
+View full list with: `python3 app.py -al`
 
-**Language Placeholder**: All prompts support the `{LANGUAGE}` placeholder which is automatically replaced with the target language name (e.g., "Italian", "German") at runtime. This ensures alt-text is generated in the correct language for multilingual workflows.
-
-### Web Scraping Configuration
+#### Web Scraping Configuration
 ```json
 {
   "download": {
@@ -287,20 +510,32 @@ Available prompts in `prompt/`:
 - `display_reasoning`: Show/hide AI's explanation for classification
 - `display_context`: Show/hide extracted webpage context
 
-**Note**: These settings are embedded in each JSON file's `html_display` object and read during report generation. Changes to config.json only affect newly generated JSON files.
+**Note**: These settings are read from `config.advanced.json` during HTML report generation. The `html_display` field is NOT included in generated JSON files.
 
-### Logging
+#### Context Extraction
 ```json
 {
-  "debug_mode": true,  // Enables file logging to logs/
-  "logging": {
-    "show_debug": true,     // Technical details
-    "show_progress": true,  // Progress updates
-    "show_warnings": true,  // Potential issues
-    "show_errors": true     // Failures
+  "context": {
+    "max_text_length": 1000,       // Max chars per text element
+    "max_parent_levels": 5,        // DOM levels to traverse
+    "min_text_length": 20,         // Minimum chars to include
+    "max_sibling_text_length": 500 // Max chars from sibling elements
   }
 }
 ```
+
+#### ECB-LLM OAuth2 Configuration
+```json
+{
+  "ecb_llm": {
+    "token_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/token",
+    "scope": "openid profile LLM.api.read",
+    "authorize_url": "https://igam.escb.eu/igam-oauth/oauth2/rest/authorize"
+  }
+}
+```
+
+**Note**: These OAuth2 endpoints should rarely need modification.
 
 ## Authentication (ECB-LLM only)
 
@@ -369,15 +604,6 @@ All functions are in the monolithic `app.py` file:
 - `generate_html_report(...)` - Create accessible HTML report
 - `clear_folders(folders_to_clear)` - Cleanup utility
 
-## Supported Languages
-
-24 EU languages configured in `config.json`:
-```
-bg, cs, da, de, el, en, es, et, fi, fr, ga, hr, hu, it, lt, lv, mt, nl, pl, pt, ro, sk, sl, sv
-```
-
-View full list with: `python3 app.py -al`
-
 ## Troubleshooting
 
 ### "Failed to fetch" error in Web UI
@@ -428,14 +654,14 @@ lsof -ti:8000,8080
 grep "{LANGUAGE}" prompt/prompt_v0.txt
 
 # 2. Use "accurate" mode for multilingual (generates fresh alt-text per language)
-# Edit config.json: "translation_mode": "accurate"
+# Edit backend/config/config.json: "translation_mode": "accurate"
 
 # 3. Test with multiple languages
 python3 app.py -g test.png --language en it de
 ```
 
 ### Rate limiting (429 errors)
-Edit `config.json` → `download.delay_between_requests` → increase to 5+ seconds
+Edit `backend/config/config.advanced.json` → `download.delay_between_requests` → increase to 5+ seconds
 
 ### SVG support not working
 ```bash
@@ -445,7 +671,129 @@ pip install cairosvg
 ### Logs
 Debug logs (when `debug_mode: true`) are written to `logs/` with timestamps.
 ```bash
+# Local mode
 tail -f logs/*.log
+
+# Docker mode
+docker-compose logs -f
+```
+
+### Docker-specific issues
+
+**Container won't start:**
+```bash
+# Check logs for errors
+docker-compose logs
+
+# Verify .env file exists and is mounted
+docker-compose config
+
+# Rebuild from scratch
+docker-compose down -v
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+**Permission errors in Docker:**
+```bash
+# The container runs as user 'appuser' (UID 1000)
+# If you have permission errors with mounted volumes, check ownership:
+ls -la input/ output/ logs/
+
+# Fix ownership if needed (Linux/Mac)
+sudo chown -R 1000:1000 input/ output/ logs/
+```
+
+**Cannot access OAuth callback (ECB-LLM):**
+```bash
+# Port 3001 must be accessible from your browser
+# Check if port is exposed in docker-compose.yml
+# For ECB-LLM, the OAuth flow requires browser access to localhost:3001
+```
+
+**Changes to code not reflected:**
+```bash
+# Rebuild the Docker image after code changes
+docker-compose up -d --build
+
+# Or rebuild specific service
+docker-compose build myaccessibilitybuddy
+docker-compose up -d
+```
+
+## Docker Deployment
+
+### Container Architecture
+
+The Docker setup includes:
+- **Dockerfile**: Multi-stage Python 3.12 slim image with all dependencies
+- **docker-compose.yml**: Orchestrates frontend (8080) and backend (8000) services
+- **docker-entrypoint.sh**: Startup script managing both servers
+- **Volumes**: Persistent data for input/, output/, logs/, config.json, and .env
+
+### Production Considerations
+
+**Security:**
+- Container runs as non-root user (appuser, UID 1000)
+- .env file never included in image (mounted as volume)
+- Minimal base image (python:3.12-slim) reduces attack surface
+- Health checks monitor API availability
+
+**Volumes:**
+```yaml
+# docker-compose.yml mounts these directories:
+- ./input:/app/input           # Image input files
+- ./output:/app/output         # Generated alt-text and reports
+- ./logs:/app/logs             # Application logs
+- ./backend/config/config.json:/app/backend/config/config.json
+- ./backend/.env:/app/backend/.env
+```
+
+**Environment Variables:**
+All configuration via `backend/.env`:
+- `OPENAI_API_KEY` - For OpenAI provider
+- `CLIENT_ID_U2A` / `CLIENT_SECRET_U2A` - For ECB-LLM provider
+
+**Scaling:**
+Current setup runs both frontend and backend in single container. For production:
+1. Separate frontend static files → nginx
+2. Run multiple API containers behind load balancer
+3. External volume/object storage for input/output
+4. Centralized logging (stdout/stderr captured by Docker)
+
+### Docker Commands Reference
+
+```bash
+# Build and start
+docker-compose up -d
+
+# View logs (follow)
+docker-compose logs -f
+
+# Restart services
+docker-compose restart
+
+# Stop services (keep volumes)
+docker-compose down
+
+# Stop and remove volumes
+docker-compose down -v
+
+# Rebuild after code changes
+docker-compose up -d --build
+
+# Run CLI commands inside container
+docker-compose exec myaccessibilitybuddy bash
+# Then inside container:
+cd /app/backend
+python3 app.py -g /app/input/images/1.png --language en
+
+# Run test suite
+docker-compose --profile test run myaccessibilitybuddy-test
+
+# Check container health
+docker-compose ps
+docker inspect myaccessibilitybuddy | grep -A 10 Health
 ```
 
 ## Dependencies (requirements.txt)
@@ -454,12 +802,27 @@ tail -f logs/*.log
 - fastapi, uvicorn - Web server
 - beautifulsoup4, requests - Web scraping
 - openai - OpenAI API client
+- ollama - Ollama client for local models
 - Pillow - Image processing
 - python-dotenv - Environment variables
 
 **Optional:**
 - CairoSVG - SVG to PNG conversion
 - ecb_llm_client - ECB-LLM provider (ECB internal package)
+
+**Installing Ollama:**
+```bash
+# 1. Install Ollama from https://ollama.ai
+# 2. Install Python client
+pip install ollama
+
+# 3. Pull required models
+ollama pull granite3.2-vision  # Vision model
+ollama pull phi3               # Processing model
+
+# 4. Verify Ollama is running
+curl http://localhost:11434/api/tags
+```
 
 ## Development Notes
 

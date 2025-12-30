@@ -10,8 +10,8 @@
     "show_warnings": true,
     "show_errors": true
   },
-  "_comment_two_step_processing": "Two-step processing: use separate models for vision (Step 1: image description) and processing (Step 2: WCAG alt-text generation). Set to false to use single-step processing with vision_model only.",
-  "two_step_processing": true,
+  "_comment_two_step_processing": "Two-step processing: use separate models for vision (Step 1: image description) and processing (Step 2: WCAG alt-text generation). Set to false to use single-step processing with vision_model only. This is the default for Basic mode in the web UI.",
+  "two_step_processing": false,
   "_comment_steps": "Configure provider and model for each step. You can mix providers (e.g., Claude for vision, OpenAI for processing, ECB-LLM for translation)",
   "steps": {
     "vision": {
@@ -23,8 +23,8 @@
       "model": "gpt-4o"
     },
     "translation": {
-      "provider": "Ollama",
-      "model": "phi3"
+      "provider": "OpenAI",
+      "model": "gpt-4o"
     }
   },
   "_comment_provider_configs": "Provider-specific configurations and authentication",
@@ -32,34 +32,34 @@
     "available_models": {
       "vision": [
         "gpt-4o",
-        "gpt-4o-mini"
+        "gpt-5.1",
+        "gpt-5.2"
       ],
       "processing": [
         "gpt-4o",
-        "gpt-4o-mini"
+        "gpt-5.1",
+        "gpt-5.2"
       ],
       "translation": [
         "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-3.5-turbo"
+        "gpt-5.1",
+        "gpt-5.2"
       ]
     }
   },
   "claude": {
     "available_models": {
       "vision": [
-        "claude-3-5-sonnet-20241022",
-        "claude-3-opus-20240229",
-        "claude-3-sonnet-20240229"
+        "claude-sonnet-4-20250514",
+        "claude-opus-4-20250514"
       ],
       "processing": [
-        "claude-3-5-sonnet-20241022",
-        "claude-3-opus-20240229",
-        "claude-3-sonnet-20240229"
+        "claude-sonnet-4-20250514",
+        "claude-opus-4-20250514"
       ],
       "translation": [
-        "claude-3-5-haiku-20241022",
-        "claude-3-haiku-20240307"
+        "claude-sonnet-4-20250514",
+        "claude-3-5-haiku-20241022"
       ]
     }
   },
@@ -112,9 +112,9 @@
   "_comment_prompt": "Prompt template configuration: processing_files (list of processing prompt files), default_processing_prompt (fallback), vision_files (list of vision prompt files), default_vision_prompt (fallback), translation_files (list of translation prompt files), default_translation_prompt (fallback). For merge_separator setting, see config.advanced.json",
   "prompt": {
     "processing_files": [
-      "processing_prompt_v3bis.txt"
+      "processing_prompt_v3.txt"
     ],
-    "default_processing_prompt": "processing_prompt_v0.txt",
+    "default_processing_prompt": "processing_prompt_v3.txt",
     "vision_files": [
       "vision_prompt_v0.txt"
     ],

@@ -1,0 +1,2 @@
+  "translation_method": "direct", --> it should Translation Mode and Fast or accurate.
+  Sometimes it is not recorded ()

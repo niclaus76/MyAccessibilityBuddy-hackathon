@@ -1493,6 +1493,7 @@ def analyze_image_with_ollama(image_path, combined_prompt, credentials, language
         # Get provider and model configuration for each step
         vision_provider, vision_model, vision_creds = get_step_config('vision')
         processing_provider, processing_model, processing_creds = get_step_config('processing')
+        translation_provider, translation_model, _ = get_step_config('translation')
 
         if not vision_provider or not processing_provider:
             debug_log("Failed to retrieve step configurations", "ERROR")
@@ -1500,6 +1501,7 @@ def analyze_image_with_ollama(image_path, combined_prompt, credentials, language
 
         debug_log(f"Vision step: {vision_provider} / {vision_model}")
         debug_log(f"Processing step: {processing_provider} / {processing_model}")
+        debug_log(f"Translation step: {translation_provider} / {translation_model}")
 
         # Load vision prompt if not provided
         if vision_prompt is None:
@@ -1737,7 +1739,9 @@ Based on this image description, generate the required JSON output:
             'vision_provider': vision_provider,
             'vision_model': vision_model,
             'processing_provider': processing_provider,
-            'processing_model': processing_model
+            'processing_model': processing_model,
+            'translation_provider': translation_provider,
+            'translation_model': translation_model
         }
 
         return result
@@ -1869,9 +1873,14 @@ def analyze_image_with_openai(image_path, combined_prompt, language=None):
                 if isinstance(parsed_response, dict):
                     debug_log("Successfully parsed entire response as JSON", "INFORMATION")
                     # Add model information to the result (single-step uses vision_model only)
+                    translation_provider, translation_model, _ = get_step_config('translation')
                     parsed_response['_models_used'] = {
+                        'vision_provider': provider,
                         'vision_model': model,
-                        'processing_model': None  # Single-step doesn't use processing model
+                        'processing_provider': None,  # Single-step doesn't use processing model
+                        'processing_model': None,
+                        'translation_provider': translation_provider,
+                        'translation_model': translation_model
                     }
                     return parsed_response
                 else:
@@ -1890,9 +1899,14 @@ def analyze_image_with_openai(image_path, combined_prompt, language=None):
                     parsed_response = json.loads(json_str)
                     debug_log("Successfully extracted and parsed JSON from response", "INFORMATION")
                     # Add model information to the result (single-step uses vision_model only)
+                    translation_provider, translation_model, _ = get_step_config('translation')
                     parsed_response['_models_used'] = {
+                        'vision_provider': provider,
                         'vision_model': model,
-                        'processing_model': None  # Single-step doesn't use processing model
+                        'processing_provider': None,  # Single-step doesn't use processing model
+                        'processing_model': None,
+                        'translation_provider': translation_provider,
+                        'translation_model': translation_model
                     }
                     return parsed_response
                 except json.JSONDecodeError as e:
@@ -2626,6 +2640,8 @@ def clear_folders(folders=None):
                         if filename == 'report_template.html':
                             debug_log(f"Skipping report template: {os.path.join(folder, filename)}")
                             continue
+                        # Also delete prompt_comparison files from reports folder
+                        # (these start with "prompt_comparison_" and have .html or .json extensions)
 
                         filepath = os.path.join(folder, filename)
                         try:
@@ -2827,6 +2843,20 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         # Try LLM analysis (OpenAI or ECB-LLM based on configuration)
         translation_method = None  # Track translation method used
         models_used = None  # Track which models were used for generation
+
+        # Determine translation method based on language configuration
+        if not is_multilingual and len(target_languages) == 1:
+            # Single language mode - check if it's non-English
+            single_lang = target_languages[0]
+            if single_lang != 'en':
+                # Non-English single language - LLM will be prompted to generate directly in that language
+                translation_method = "direct"
+                debug_log(f"Single non-English language ({single_lang}) - translation_method set to 'direct'")
+            else:
+                # English - no translation needed
+                translation_method = "none"
+                debug_log(f"Single English language - translation_method set to 'none'")
+
         if is_multilingual:
             # Generate alt-text for multiple languages
             debug_log(f"Generating alt-text for {len(target_languages)} languages: {target_languages}")
@@ -3052,12 +3082,12 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
             "proposed_alt_text": proposed_alt_text,
             "proposed_alt_text_length": characters,
             "ai_model": {
-                "vision_provider": models_used.get('vision_provider') if models_used else CONFIG.get('steps', {}).get('vision', {}).get('provider', 'Unknown'),
-                "vision_model": models_used.get('vision_model') if models_used else CONFIG.get('steps', {}).get('vision', {}).get('model', 'Unknown'),
-                "processing_provider": models_used.get('processing_provider') if models_used else CONFIG.get('steps', {}).get('processing', {}).get('provider', 'Unknown'),
-                "processing_model": models_used.get('processing_model') if models_used else CONFIG.get('steps', {}).get('processing', {}).get('model', 'Unknown'),
-                "translation_provider": CONFIG.get('steps', {}).get('translation', {}).get('provider', 'Unknown'),
-                "translation_model": CONFIG.get('steps', {}).get('translation', {}).get('model', 'Unknown')
+                "vision_provider": models_used.get('vision_provider') if (models_used and models_used.get('vision_provider')) else CONFIG.get('steps', {}).get('vision', {}).get('provider', 'Unknown'),
+                "vision_model": models_used.get('vision_model') if (models_used and models_used.get('vision_model')) else CONFIG.get('steps', {}).get('vision', {}).get('model', 'Unknown'),
+                "processing_provider": models_used.get('processing_provider') if (models_used and models_used.get('processing_provider')) else CONFIG.get('steps', {}).get('processing', {}).get('provider', 'Unknown'),
+                "processing_model": models_used.get('processing_model') if (models_used and models_used.get('processing_model')) else CONFIG.get('steps', {}).get('processing', {}).get('model', 'Unknown'),
+                "translation_provider": models_used.get('translation_provider') if (models_used and models_used.get('translation_provider')) else CONFIG.get('steps', {}).get('translation', {}).get('provider', 'Unknown'),
+                "translation_model": models_used.get('translation_model') if (models_used and models_used.get('translation_model')) else CONFIG.get('steps', {}).get('translation', {}).get('model', 'Unknown')
             },
             "translation_method": translation_method if translation_method else "none",
             "processing_time_seconds": processing_time
