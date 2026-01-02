@@ -720,8 +720,24 @@
         resultSection.classList.add('d-none');
     }
 
-    // API Configuration - use relative path for production deployment
-    const API_BASE_URL = '/api';
+    // API Configuration - dynamically determine backend URL
+    // In Docker/AWS: frontend on :8080, backend on :8000
+    // Use current hostname but with port 8000 for API calls
+    const currentHost = window.location.hostname;
+    const currentPort = window.location.port;
+    const currentProtocol = window.location.protocol;
+
+    let API_BASE_URL;
+    if (currentPort === '8080') {
+        // Frontend is on 8080, backend is on 8000
+        API_BASE_URL = `${currentProtocol}//${currentHost}:8000/api`;
+    } else if (currentPort === '8000') {
+        // Accessing backend directly
+        API_BASE_URL = '/api';
+    } else {
+        // Production with reverse proxy - use relative path
+        API_BASE_URL = '/api';
+    }
 
     // Screen reader announcement utility
     function announceToScreenReader(message, assertive = false) {
