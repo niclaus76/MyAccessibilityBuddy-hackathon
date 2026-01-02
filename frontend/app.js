@@ -720,8 +720,8 @@
         resultSection.classList.add('d-none');
     }
 
-    // API Configuration
-    const API_BASE_URL = 'http://localhost:8000/api';
+    // API Configuration - use relative path for production deployment
+    const API_BASE_URL = '/api';
 
     // Screen reader announcement utility
     function announceToScreenReader(message, assertive = false) {

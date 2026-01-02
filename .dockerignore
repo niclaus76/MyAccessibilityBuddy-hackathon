@@ -1,10 +1,14 @@
+# ===============================
 # Git files
-.git
+# ===============================
+.git/
 .gitignore
 .gitattributes
 
-# Python cache and virtual environments
-__pycache__
+# ===============================
+# Python cache and virtual envs
+# ===============================
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -13,9 +17,11 @@ backend/venv/
 venv/
 env/
 ENV/
-.venv
+.venv/
 
+# ===============================
 # IDE and editor files
+# ===============================
 .vscode/
 .idea/
 *.swp
@@ -23,44 +29,37 @@ ENV/
 *~
 .DS_Store
 
-# Documentation (keep only essential docs in image)
-*.md
-!README.md
-docs/
-
-# Output and logs (these are mounted as volumes)
-output/
-logs/
-*.log
-
-# Test data (mounted as volume when needed)
-# test/
-
-# Environment files (mounted as volume)
+# ===============================
+# Environment files (never bake)
+# ===============================
 .env
 .env.*
 backend/.env
 
-# Docker files
+# ===============================
+# Docker files (not needed inside)
+# ===============================
 Dockerfile
 docker-compose.yml
 .dockerignore
 
-# Development tools
+# ===============================
+# Development-only tools
+# ===============================
 ollama.py
-tools/batch_compare_prompts.sh
 
-# Backup files
+# ===============================
+# Backup and temp files
+# ===============================
 *.backup
 *.bak
 *.old
-
-# OS files
-Thumbs.db
-.DS_Store
-
-# Temporary files
 *.tmp
 *.temp
 tmp/
 temp/
+
+# ===============================
+# OS noise
+# ===============================
+Thumbs.db

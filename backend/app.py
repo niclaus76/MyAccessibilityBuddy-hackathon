@@ -25,8 +25,7 @@ try:
     ECB_LLM_AVAILABLE = True
 except ImportError:
     ECB_LLM_AVAILABLE = False
-    STARTUP_MESSAGES.append(("WARNING", "ecb_llm_client not installed. ECB-LLM provider will not be available."))
-    STARTUP_MESSAGES.append(("INFO", "To use ECB-LLM, install with: pip install ecb_llm_client"))
+    # Note: Warning message will be conditionally added based on config.ecb_llm.enabled setting
 
 # Import SVG conversion library if available
 try:
@@ -44,8 +43,7 @@ try:
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
-    STARTUP_MESSAGES.append(("WARNING", "ollama not installed. Ollama provider will not be available."))
-    STARTUP_MESSAGES.append(("INFO", "To use Ollama, install with: pip install ollama"))
+    # Note: Warning message will be conditionally added based on config.ollama.enabled setting
 
 # Load environment variables from .env file
 try:
@@ -83,6 +81,17 @@ def load_config(config_file=None):
 
         DEBUG_MODE = CONFIG.get('debug_mode', True)
         debug_log(f"Configuration loaded from {config_settings.CONFIG_FILE}")
+
+        # Add provider warnings if enabled but not available
+        ecb_llm_enabled = CONFIG.get('ecb_llm', {}).get('enabled', True)  # Default True for backward compatibility
+        if ecb_llm_enabled and not ECB_LLM_AVAILABLE:
+            STARTUP_MESSAGES.append(("WARNING", "ecb_llm_client not installed. ECB-LLM provider will not be available."))
+            STARTUP_MESSAGES.append(("INFORMATION", "To use ECB-LLM, install with: pip install ecb_llm_client"))
+
+        ollama_enabled = CONFIG.get('ollama', {}).get('enabled', True)  # Default True for backward compatibility
+        if ollama_enabled and not OLLAMA_AVAILABLE:
+            STARTUP_MESSAGES.append(("WARNING", "ollama not installed. Ollama provider will not be available."))
+            STARTUP_MESSAGES.append(("INFORMATION", "To use Ollama, install with: pip install ollama"))
 
         # Output deferred startup messages now that logging is initialized
         for level, message in STARTUP_MESSAGES:
