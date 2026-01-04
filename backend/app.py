@@ -1669,8 +1669,7 @@ def analyze_image_with_ai(image_path, combined_prompt, credentials, language=Non
                             },
                             {
                                 'type': 'text',
-                                # FIX: Use combined_prompt for Claude to enable single-step mode
-                                'text': combined_prompt
+                                'text': vision_prompt
                             }
                         ]
                     }]

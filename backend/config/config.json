@@ -124,9 +124,9 @@
     ],
     "default_processing_prompt": "processing_prompt_v3.txt",
     "vision_files": [
-      "vision_prompt_v0.txt"
+      "vision_prompt_v1.txt"
     ],
-    "default_vision_prompt": "vision_prompt_v0.txt",
+    "default_vision_prompt": "vision_prompt_v1.txt",
     "translation_files": [
       "translation_prompt_v0.txt"
     ],

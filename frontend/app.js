@@ -726,6 +726,7 @@
             uploadArea.classList.add('d-none');
             previewContainer.classList.remove('d-none');
             generateBtn.disabled = false;
+            generateBtn.focus();
 
             // Clear any previous errors
             clearErrorMessages();
@@ -828,6 +829,7 @@
         clearContextBtn.classList.add('d-none');
         contextPreviewContainer.classList.add('d-none');
         contextDragdrop.classList.remove('d-none');
+        contextDragdrop.focus();
     });
 
     // Clear context button handler
@@ -881,6 +883,7 @@
         contextDragdrop.classList.remove('d-none');
         generateBtn.disabled = true;
         resultSection.classList.add('d-none');
+        uploadArea.focus();
     }
 
     // API Configuration - dynamically determine backend URL
@@ -1204,4 +1207,5 @@
 
         // Scroll back to top
         window.scrollTo({ top: 0, behavior: 'smooth' });
+        uploadArea.focus();
     });

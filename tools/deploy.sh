@@ -7,29 +7,36 @@
 
 set -e
 
-# Color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+# Source configuration file if it exists
+if [ -f "$(dirname "$0")/deploy.conf" ]; then
+    # shellcheck source=deploy.conf
+    source "$(dirname "$0")/deploy.conf"
+fi
 
-# Configuration
-VM_USER="developer"
-VM_HOST="192.168.64.4"
-VM_SOURCE_PATH="/home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy"
-LOCAL_DEST_PATH="$HOME/Documents/ECB/AWS-Caionen/"
-AWS_REGION="eu-central-1"
-ECR_REGISTRY="514201995752.dkr.ecr.eu-central-1.amazonaws.com"
-ECR_REPO="myaccessibilitybuddy-api"
+# Color codes
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+CYAN=$'\033[0;36m'
+NC=$'\033[0m'
+
+# Configuration (with defaults)
+# These can be overridden by creating a 'deploy.conf' file in the same directory.
+VM_USER="${VM_USER:-developer}"
+VM_HOST="${VM_HOST:-192.168.64.4}"
+VM_SOURCE_PATH="${VM_SOURCE_PATH:-/home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy}"
+LOCAL_DEST_PATH="${LOCAL_DEST_PATH:-$HOME/Documents/ECB/AWS-Caionen/}"
+AWS_REGION="${AWS_REGION:-eu-central-1}"
+ECR_REGISTRY="${ECR_REGISTRY:-514201995752.dkr.ecr.eu-central-1.amazonaws.com}"
+ECR_REPO="${ECR_REPO:-myaccessibilitybuddy-api}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
-S3_BUCKET="myaccessibilitybuddy-frontend-1"
-CLOUDFRONT_DIST_ID="E1INLYHYA11V49"
-ECS_CLUSTER="myaccessibilitybuddy-cluster"
-ECS_SERVICE="myaccessibilitybuddy-service"
-TASK_FAMILY="myaccessibilitybuddy-task"
-FRONTEND_DIR="/home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy/frontend"
+S3_BUCKET="${S3_BUCKET:-myaccessibilitybuddy-frontend-1}"
+CLOUDFRONT_DIST_ID="${CLOUDFRONT_DIST_ID:-E1INLYHYA11V49}"
+ECS_CLUSTER="${ECS_CLUSTER:-myaccessibilitybuddy-cluster}"
+ECS_SERVICE="${ECS_SERVICE:-myaccessibilitybuddy-service}"
+TASK_FAMILY="${TASK_FAMILY:-myaccessibilitybuddy-task}"
+FRONTEND_DIR="${FRONTEND_DIR:-/home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy/frontend}"
 
 # Options
 MODE="full"  # full, frontend, backend, ecs, verify, check-invalidation, run-tests
@@ -78,8 +85,8 @@ show_help() {
     cat << EOF
 ${BLUE}╔════════════════════════════════════════════════════════════════╗
 ║                                                                ║
-║      MyAccessibilityBuddy - Universal Deployment Script       ║
-║                    All-in-One Deployment Tool                 ║
+║      MyAccessibilityBuddy - Universal Deployment Script        ║
+║                    All-in-One Deployment Tool                  ║
 ║                                                                ║
 ╚════════════════════════════════════════════════════════════════╝${NC}
 
@@ -192,7 +199,15 @@ ${GREEN}TEST MODE:${NC}
     • No ECS deployments
     • Safe to run anytime
 
+${GREEN}VERBOSITY LEVELS:${NC}
+    Normal (default)        Show info, warnings, and errors
+    --quiet (-q)            Show errors only (Level 0)
+    --debug (-d)            Show all messages including debug info (Level 2)
+
 ${GREEN}CONFIGURATION:${NC}
+    Settings are loaded from 'deploy.conf' if present.
+    Current resolved values:
+
     VM Host:      $VM_USER@$VM_HOST
     ECR:          $ECR_REGISTRY/$ECR_REPO
     S3 Bucket:    $S3_BUCKET
@@ -202,17 +217,13 @@ ${GREEN}CONFIGURATION:${NC}
 
 ${GREEN}COMMON WORKFLOWS:${NC}
 
-    ${YELLOW}HTML/CSS/JS changes:${NC}
-      $0 --frontend
+    ${YELLOW}HTML/CSS/JS changes:${NC} $0 --frontend
 
-    ${YELLOW}Backend API changes:${NC}
-      $0 --backend
+    ${YELLOW}Backend API changes:${NC} $0 --backend
 
-    ${YELLOW}Emergency hotfix:${NC}
-      $0 --fast
+    ${YELLOW}Emergency hotfix:${NC} $0 --fast
 
-    ${YELLOW}New feature (backend + frontend):${NC}
-      $0
+    ${YELLOW}New feature (backend + frontend):${NC} $0
 
 ${GREEN}ADDITIONAL UTILITIES:${NC}
     $0 --check-invalidation   - Monitor CloudFront cache status
@@ -297,7 +308,7 @@ clear
 echo -e "${BLUE}"
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║                                                                ║"
-echo "║      MyAccessibilityBuddy - Universal Deployment              ║"
+echo "║      MyAccessibilityBuddy - Universal Deployment               ║"
 echo "║                                                                ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
@@ -1392,7 +1403,6 @@ case $MODE in
             # Check frontend status
             if [ "$FRONTEND_DONE" = false ] && ! kill -0 $FRONTEND_PID 2>/dev/null; then
                 FRONTEND_DONE=true
-                print_header "FRONTEND DEPLOYMENT COMPLETED"
                 cat "$FRONTEND_LOG"
                 FRONTEND_EXIT_CODE=$(cat "$FRONTEND_STATUS_FILE" 2>/dev/null || echo "1")
                 if [ "$FRONTEND_EXIT_CODE" -eq 0 ]; then
@@ -1406,7 +1416,6 @@ case $MODE in
             # Check backend status
             if [ "$BACKEND_DONE" = false ] && ! kill -0 $BACKEND_PID 2>/dev/null; then
                 BACKEND_DONE=true
-                print_header "BACKEND DEPLOYMENT COMPLETED"
                 cat "$BACKEND_LOG"
                 BACKEND_EXIT_CODE=$(cat "$BACKEND_STATUS_FILE" 2>/dev/null || echo "1")
                 if [ "$BACKEND_EXIT_CODE" -eq 0 ]; then
