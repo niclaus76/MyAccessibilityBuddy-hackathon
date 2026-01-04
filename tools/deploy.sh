@@ -80,6 +80,76 @@ print_header() {
     echo ""
 }
 
+# Progress bar display function
+show_progress_bar() {
+    local label="$1"
+    local current="$2"
+    local total="$3"
+    local width=40
+    local percentage=0
+
+    if [ "$total" -gt 0 ]; then
+        percentage=$((current * 100 / total))
+    fi
+
+    local filled=$((percentage * width / 100))
+    local empty=$((width - filled))
+
+    # Build progress bar
+    local bar="["
+    for ((i=0; i<filled; i++)); do
+        bar+="="
+    done
+    if [ $filled -lt $width ]; then
+        bar+=">"
+    fi
+    for ((i=0; i<empty-1; i++)); do
+        bar+=" "
+    done
+    bar+="]"
+
+    printf "\r${CYAN}%-20s${NC} %s %3d%%" "$label" "$bar" "$percentage"
+}
+
+# Progress display for parallel deployments
+display_parallel_progress() {
+    local backend_status="$1"
+    local frontend_status="$2"
+    local backend_progress="$3"
+    local frontend_progress="$4"
+
+    # Clear previous lines
+    if [ -n "$PROGRESS_DISPLAYED" ]; then
+        tput cuu 4 2>/dev/null || true
+        tput ed 2>/dev/null || true
+    fi
+    export PROGRESS_DISPLAYED=1
+
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+    # Backend progress
+    if [ "$backend_status" = "running" ]; then
+        show_progress_bar "⚙️  Backend" "$backend_progress" 100
+        echo ""
+    elif [ "$backend_status" = "done" ]; then
+        printf "${GREEN}%-20s [COMPLETE] ✓${NC}\n" "⚙️  Backend"
+    else
+        printf "${RED}%-20s [FAILED] ✗${NC}\n" "⚙️  Backend"
+    fi
+
+    # Frontend progress
+    if [ "$frontend_status" = "running" ]; then
+        show_progress_bar "🌐 Frontend" "$frontend_progress" 100
+        echo ""
+    elif [ "$frontend_status" = "done" ]; then
+        printf "${GREEN}%-20s [COMPLETE] ✓${NC}\n" "🌐 Frontend"
+    else
+        printf "${RED}%-20s [FAILED] ✗${NC}\n" "🌐 Frontend"
+    fi
+
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+
 # Show help
 show_help() {
     cat << EOF
@@ -379,6 +449,9 @@ START_TIME=$(date +%s)
 deploy_frontend() {
     print_header "FRONTEND DEPLOYMENT"
 
+    # Update progress if in parallel mode
+    [ -f "$FRONTEND_PROGRESS_FILE" ] && echo "15" > "$FRONTEND_PROGRESS_FILE"
+
     print_debug "Frontend directory: $FRONTEND_DIR"
     print_debug "S3 bucket: $S3_BUCKET"
     print_debug "AWS region: $AWS_REGION"
@@ -392,6 +465,7 @@ deploy_frontend() {
     # Analyze changes
     print_info "Analyzing changes..."
     print_debug "Running S3 sync --dryrun to detect changes..."
+    [ -f "$FRONTEND_PROGRESS_FILE" ] && echo "25" > "$FRONTEND_PROGRESS_FILE"
     SYNC_PREVIEW=$(aws s3 sync "$FRONTEND_DIR/" "s3://$S3_BUCKET/" \
         --dryrun \
         --delete \
@@ -458,12 +532,14 @@ deploy_frontend() {
     echo ""
     print_info "Syncing to S3..."
     print_debug "Uploading $UPLOAD_COUNT files, deleting $DELETE_COUNT files..."
+    [ -f "$FRONTEND_PROGRESS_FILE" ] && echo "40" > "$FRONTEND_PROGRESS_FILE"
     if aws s3 sync "$FRONTEND_DIR/" "s3://$S3_BUCKET/" \
         --delete \
         --exact-timestamps \
         --region "$AWS_REGION"; then
         print_success "Frontend synced to S3"
         print_debug "S3 sync completed successfully"
+        [ -f "$FRONTEND_PROGRESS_FILE" ] && echo "70" > "$FRONTEND_PROGRESS_FILE"
     else
         print_error "S3 sync failed"
         return 1
@@ -473,6 +549,7 @@ deploy_frontend() {
     if [ "$SKIP_INVALIDATION" = false ]; then
         echo ""
         print_debug "CloudFront distribution ID: $CLOUDFRONT_DIST_ID"
+        [ -f "$FRONTEND_PROGRESS_FILE" ] && echo "75" > "$FRONTEND_PROGRESS_FILE"
 
         # Smart invalidation strategy
         if [ "$TOTAL_CHANGES" -gt 10 ]; then
@@ -495,6 +572,7 @@ deploy_frontend() {
             print_success "CloudFront invalidation created: $INVALIDATION_ID"
             print_debug "Invalidation ID: $INVALIDATION_ID"
             print_warning "Cache clearing takes 5-15 minutes to complete"
+            [ -f "$FRONTEND_PROGRESS_FILE" ] && echo "95" > "$FRONTEND_PROGRESS_FILE"
 
             echo ""
             print_info "Checking invalidation status..."
@@ -509,6 +587,9 @@ deploy_frontend() {
     else
         print_warning "Skipping CloudFront invalidation (--skip-invalidation)"
     fi
+
+    # Mark as complete
+    [ -f "$FRONTEND_PROGRESS_FILE" ] && echo "100" > "$FRONTEND_PROGRESS_FILE"
 }
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -564,6 +645,9 @@ check_prerequisites() {
 deploy_backend_build() {
     print_header "BACKEND BUILD & PUSH TO ECR"
 
+    # Update progress if in parallel mode
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "15" > "$BACKEND_PROGRESS_FILE"
+
     print_debug "ECR registry: $ECR_REGISTRY"
     print_debug "ECR repository: $ECR_REPO"
     print_debug "Image tag: $IMAGE_TAG"
@@ -572,6 +656,8 @@ deploy_backend_build() {
     if ! check_prerequisites; then
         return 1
     fi
+
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "20" > "$BACKEND_PROGRESS_FILE"
 
     local build_dir
     if [ "$FROM_VM" = true ]; then
@@ -608,10 +694,12 @@ deploy_backend_build() {
     print_info "Building Docker image..."
     print_info "Build context: $build_dir"
     print_debug "Docker build command: docker build -t $ECR_REPO:$IMAGE_TAG ."
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "25" > "$BACKEND_PROGRESS_FILE"
 
     if docker build -t "$ECR_REPO:$IMAGE_TAG" .; then
         print_success "Docker image built successfully"
         print_debug "Image: $ECR_REPO:$IMAGE_TAG"
+        [ -f "$BACKEND_PROGRESS_FILE" ] && echo "50" > "$BACKEND_PROGRESS_FILE"
     else
         print_error "Docker build failed"
         return 1
@@ -673,9 +761,11 @@ deploy_backend_build() {
     # Login to ECR
     print_info "Logging into AWS ECR..."
     print_debug "ECR registry: $ECR_REGISTRY, Region: $AWS_REGION"
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "52" > "$BACKEND_PROGRESS_FILE"
     if aws ecr get-login-password --region "$AWS_REGION" | \
         docker login --username AWS --password-stdin "$ECR_REGISTRY" >/dev/null 2>&1; then
         print_success "ECR login successful"
+        [ -f "$BACKEND_PROGRESS_FILE" ] && echo "55" > "$BACKEND_PROGRESS_FILE"
     else
         print_error "ECR login failed"
         return 1
@@ -688,9 +778,11 @@ deploy_backend_build() {
 
     print_info "Pushing image to ECR..."
     print_debug "Pushing: $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "58" > "$BACKEND_PROGRESS_FILE"
     if docker push "$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"; then
         print_success "Image pushed to ECR successfully"
         print_debug "Image available at: $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
+        [ -f "$BACKEND_PROGRESS_FILE" ] && echo "60" > "$BACKEND_PROGRESS_FILE"
     else
         print_error "Image push failed"
         return 1
@@ -702,6 +794,9 @@ deploy_backend_build() {
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 deploy_ecs() {
     print_header "ECS SERVICE DEPLOYMENT"
+
+    # Update progress if in parallel mode
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "65" > "$BACKEND_PROGRESS_FILE"
 
     FULL_IMAGE_NAME="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
 
@@ -720,6 +815,7 @@ deploy_ecs() {
     # Get current task definition
     print_info "Retrieving current task definition..."
     print_debug "Running: aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_SERVICE"
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "70" > "$BACKEND_PROGRESS_FILE"
     CURRENT_TASK_DEF=$(aws ecs describe-services \
         --cluster "$ECS_CLUSTER" \
         --services "$ECS_SERVICE" \
@@ -784,6 +880,7 @@ deploy_ecs() {
 
     NEW_REVISION=$(echo "$NEW_TASK_DEF_ARN" | grep -o '[0-9]*$')
     print_success "New task definition registered: revision $NEW_REVISION"
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "75" > "$BACKEND_PROGRESS_FILE"
 
     # Update service
     print_info "Updating ECS service..."
@@ -796,6 +893,7 @@ deploy_ecs() {
         --output json > /dev/null
 
     print_success "Service update initiated"
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "80" > "$BACKEND_PROGRESS_FILE"
 
     # Monitor deployment
     if [ "$MONITOR_DEPLOYMENT" = true ]; then
@@ -803,6 +901,7 @@ deploy_ecs() {
         print_info "Monitoring deployment progress..."
         print_warning "This may take 2-5 minutes. Press Ctrl+C to skip monitoring."
         echo ""
+        [ -f "$BACKEND_PROGRESS_FILE" ] && echo "85" > "$BACKEND_PROGRESS_FILE"
 
         DEPLOYMENT_TIMEOUT=600
         ELAPSED=0
@@ -836,8 +935,15 @@ deploy_ecs() {
             PRIMARY_RUNNING=$(echo "$DEPLOYMENTS" | jq -r '.[] | select(.status=="PRIMARY") | .runningCount')
             PRIMARY_DESIRED=$(echo "$DEPLOYMENTS" | jq -r '.[] | select(.status=="PRIMARY") | .desiredCount')
 
+            # Update progress based on deployment status
+            if [ -f "$BACKEND_PROGRESS_FILE" ]; then
+                local progress=$((85 + (ELAPSED * 15 / DEPLOYMENT_TIMEOUT)))
+                echo "$progress" > "$BACKEND_PROGRESS_FILE"
+            fi
+
             if [ "$DEPLOYMENT_COUNT" -eq 1 ] && [ "$PRIMARY_RUNNING" -eq "$PRIMARY_DESIRED" ]; then
                 print_success "Deployment completed successfully!"
+                [ -f "$BACKEND_PROGRESS_FILE" ] && echo "100" > "$BACKEND_PROGRESS_FILE"
                 break
             fi
 
@@ -847,6 +953,7 @@ deploy_ecs() {
 
         if [ $ELAPSED -ge $DEPLOYMENT_TIMEOUT ]; then
             print_warning "Monitoring timed out - deployment may still be in progress"
+            [ -f "$BACKEND_PROGRESS_FILE" ] && echo "95" > "$BACKEND_PROGRESS_FILE"
         fi
 
         # Get service endpoint
@@ -1367,17 +1474,29 @@ case $MODE in
         print_info "Starting parallel deployment: Backend + Frontend"
         echo ""
 
-        # Temporary files for capturing results
+        # Temporary files for capturing results and progress
         BACKEND_LOG="/tmp/backend_deploy_$$.log"
         FRONTEND_LOG="/tmp/frontend_deploy_$$.log"
         BACKEND_STATUS_FILE="/tmp/backend_status_$$"
         FRONTEND_STATUS_FILE="/tmp/frontend_status_$$"
+        BACKEND_PROGRESS_FILE="/tmp/backend_progress_$$"
+        FRONTEND_PROGRESS_FILE="/tmp/frontend_progress_$$"
+
+        # Initialize progress files
+        echo "0" > "$BACKEND_PROGRESS_FILE"
+        echo "0" > "$FRONTEND_PROGRESS_FILE"
 
         # Backend deployment (build + ECR push + ECS) in background
         (
             {
-                deploy_backend_build && deploy_ecs
-                echo $? > "$BACKEND_STATUS_FILE"
+                echo "10" > "$BACKEND_PROGRESS_FILE"  # Starting
+                deploy_backend_build && {
+                    echo "60" > "$BACKEND_PROGRESS_FILE"  # Build complete
+                    deploy_ecs
+                }
+                local exit_code=$?
+                echo "100" > "$BACKEND_PROGRESS_FILE"  # Complete
+                echo $exit_code > "$BACKEND_STATUS_FILE"
             } > "$BACKEND_LOG" 2>&1
         ) &
         BACKEND_PID=$!
@@ -1385,46 +1504,51 @@ case $MODE in
         # Frontend deployment (S3 sync + CloudFront) in background
         (
             {
+                echo "10" > "$FRONTEND_PROGRESS_FILE"  # Starting
                 deploy_frontend
-                echo $? > "$FRONTEND_STATUS_FILE"
+                local exit_code=$?
+                echo "100" > "$FRONTEND_PROGRESS_FILE"  # Complete
+                echo $exit_code > "$FRONTEND_STATUS_FILE"
             } > "$FRONTEND_LOG" 2>&1
         ) &
         FRONTEND_PID=$!
 
-        print_info "⚙️  Backend (PID $BACKEND_PID): Docker build → ECR push → ECS deploy"
-        print_info "🌐 Frontend (PID $FRONTEND_PID): S3 sync → CloudFront invalidation"
-        echo ""
-
-        # Wait for both processes and display results as they complete
+        # Monitor progress with real-time updates
         BACKEND_DONE=false
         FRONTEND_DONE=false
+        BACKEND_STATUS="running"
+        FRONTEND_STATUS="running"
+        PROGRESS_START_TIME=$(date +%s)
 
+        echo ""
         while [ "$BACKEND_DONE" = false ] || [ "$FRONTEND_DONE" = false ]; do
-            # Check frontend status
-            if [ "$FRONTEND_DONE" = false ] && ! kill -0 $FRONTEND_PID 2>/dev/null; then
-                FRONTEND_DONE=true
-                cat "$FRONTEND_LOG"
-                FRONTEND_EXIT_CODE=$(cat "$FRONTEND_STATUS_FILE" 2>/dev/null || echo "1")
-                if [ "$FRONTEND_EXIT_CODE" -eq 0 ]; then
-                    print_success "Frontend deployment successful ✓"
-                else
-                    print_error "Frontend deployment failed ✗"
-                fi
-                echo ""
-            fi
+            # Read current progress
+            BACKEND_PROGRESS=$(cat "$BACKEND_PROGRESS_FILE" 2>/dev/null || echo "0")
+            FRONTEND_PROGRESS=$(cat "$FRONTEND_PROGRESS_FILE" 2>/dev/null || echo "0")
 
-            # Check backend status
+            # Check if processes are still running
             if [ "$BACKEND_DONE" = false ] && ! kill -0 $BACKEND_PID 2>/dev/null; then
                 BACKEND_DONE=true
-                cat "$BACKEND_LOG"
                 BACKEND_EXIT_CODE=$(cat "$BACKEND_STATUS_FILE" 2>/dev/null || echo "1")
                 if [ "$BACKEND_EXIT_CODE" -eq 0 ]; then
-                    print_success "Backend deployment successful ✓"
+                    BACKEND_STATUS="done"
                 else
-                    print_error "Backend deployment failed ✗"
+                    BACKEND_STATUS="failed"
                 fi
-                echo ""
             fi
+
+            if [ "$FRONTEND_DONE" = false ] && ! kill -0 $FRONTEND_PID 2>/dev/null; then
+                FRONTEND_DONE=true
+                FRONTEND_EXIT_CODE=$(cat "$FRONTEND_STATUS_FILE" 2>/dev/null || echo "1")
+                if [ "$FRONTEND_EXIT_CODE" -eq 0 ]; then
+                    FRONTEND_STATUS="done"
+                else
+                    FRONTEND_STATUS="failed"
+                fi
+            fi
+
+            # Display progress
+            display_parallel_progress "$BACKEND_STATUS" "$FRONTEND_STATUS" "$BACKEND_PROGRESS" "$FRONTEND_PROGRESS"
 
             # Small sleep to avoid busy waiting
             if [ "$BACKEND_DONE" = false ] || [ "$FRONTEND_DONE" = false ]; then
@@ -1432,12 +1556,34 @@ case $MODE in
             fi
         done
 
+        # Clear progress display
+        echo ""
+        echo ""
+
         # Final wait to ensure processes are cleaned up
         wait $BACKEND_PID 2>/dev/null || true
         wait $FRONTEND_PID 2>/dev/null || true
 
+        # Show detailed logs
+        echo ""
+        print_header "DEPLOYMENT LOGS"
+        echo ""
+
+        if [ -s "$BACKEND_LOG" ]; then
+            echo -e "${BLUE}Backend Deployment:${NC}"
+            cat "$BACKEND_LOG"
+            echo ""
+        fi
+
+        if [ -s "$FRONTEND_LOG" ]; then
+            echo -e "${BLUE}Frontend Deployment:${NC}"
+            cat "$FRONTEND_LOG"
+            echo ""
+        fi
+
         # Clean up temporary files
         rm -f "$BACKEND_LOG" "$FRONTEND_LOG" "$BACKEND_STATUS_FILE" "$FRONTEND_STATUS_FILE"
+        rm -f "$BACKEND_PROGRESS_FILE" "$FRONTEND_PROGRESS_FILE"
 
         # Check if either deployment failed
         BACKEND_EXIT_CODE=${BACKEND_EXIT_CODE:-1}

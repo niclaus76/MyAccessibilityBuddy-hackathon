@@ -2,7 +2,7 @@
 
 ## Why
 
-When using the "Save and generate report" functionality in the webmaster tool, users need a comprehensive report that documents all images processed, the prompts used for analysis, and the generated alt text. This enables:
+When using the "Save and generate report" functionality in the webmaster tool, users need a comprehensive report that documents the image processed, the prompts used for analysis, and the generated alt text. This enables:
 - Traceability of accessibility improvements
 - Quality assurance review
 - Documentation for compliance audits
@@ -843,12 +843,424 @@ This feature relates to:
 
 ---
 
+## JSON File Management Strategy
+
+### Problem Statement
+
+Web application uploads create JSON files in `output/alt-text/` that accumulate indefinitely:
+- Files persist across sessions
+- Each new upload adds more JSON files (or overwrites if same filename)
+- Reports include ALL JSON files in the folder
+- Multi-user deployments mix all users' data
+- Users may not expect old images in new reports
+
+### Approved Solution: Session-Based with User Control
+
+**Combination of Option 2 (Session-based folders) + Option 4 (User-controlled clearing)**
+
+#### Implementation Design
+
+**Default Behavior:** Clear all previous images after each report generation (safe default)
+
+**User Control:** Checkbox option to accumulate images for multi-image reports
+
+**Report Configuration:** Disable tag/attribute display for web app reports (not relevant for single source)
+
+#### Frontend UI Changes
+
+**Location:** `frontend/home.html` - Add before "Save and generate report" button
+
+**UI Components:**
+
+```html
+<!-- Add in result section, before save button -->
+<div class="form-check mb-3" id="reportOptionsContainer" style="display: none;">
+    <input class="form-check-input" type="checkbox" id="clearAfterReportCheckbox" checked>
+    <label class="form-check-label" for="clearAfterReportCheckbox">
+        Clear all previous images after generating report (recommended)
+    </label>
+    <small class="form-text text-muted d-block mt-1">
+        Uncheck to accumulate multiple images for a comprehensive report
+    </small>
+</div>
+```
+
+**Show/Hide Logic:**
+- Display options container when user has generated alt text
+- Hide when cleared or new upload starts
+
+#### Backend API Changes
+
+**1. Modify `/api/generate-report` endpoint**
+
+**New Parameters:**
+- `clear_after: bool = True` - Clear JSON files after report generation
+- `session_id: Optional[str] = None` - Future: support for session-based folders
+
+**Implementation:**
+
+```python
+@app.post("/api/generate-report")
+async def generate_report_endpoint(clear_after: bool = True):
+    """
+    Generate HTML report for webmaster tool.
+
+    Args:
+        clear_after: If True, clears all JSON files from output/alt-text after generating report
+
+    Returns:
+        FileResponse: HTML report file for download
+
+    Raises:
+        HTTPException: If report generation fails or no images to report
+    """
+    from app import generate_html_report, CONFIG
+    from datetime import datetime
+    from fastapi.responses import FileResponse
+    import os
+    import json
+
+    try:
+        # Generate timestamp for filename
+        timestamp = datetime.now().strftime('%Y-%m-%d-%H%M%S')
+        output_filename = f"webmaster-report-{timestamp}.html"
+
+        # Get alt-text folder path
+        alt_text_folder = get_absolute_folder_path('output/alt-text')
+
+        # Temporarily override config for web app reports
+        # Disable tag/attribute display (not relevant for web uploads)
+        original_config = CONFIG.get('html_report_display', {}).copy()
+        if 'html_report_display' not in CONFIG:
+            CONFIG['html_report_display'] = {}
+
+        CONFIG['html_report_display']['display_html_tags_used'] = False
+        CONFIG['html_report_display']['display_html_attributes_used'] = False
+        CONFIG['html_report_display']['display_current_alt_text'] = False
+        CONFIG['html_report_display']['display_image_tag_attribute'] = False
+
+        try:
+            # Generate report
+            report_path = generate_html_report(
+                alt_text_folder=alt_text_folder,
+                output_filename=output_filename
+            )
+
+            if not report_path:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Report generation failed - no images found or internal error"
+                )
+
+            # Check if file exists
+            if not os.path.exists(report_path):
+                raise HTTPException(
+                    status_code=500,
+                    detail="Report file was not created"
+                )
+
+            # Clear JSON files if requested (AFTER successful report generation)
+            if clear_after:
+                cleared_count = 0
+                for filename in os.listdir(alt_text_folder):
+                    if filename.endswith('.json'):
+                        try:
+                            os.remove(os.path.join(alt_text_folder, filename))
+                            cleared_count += 1
+                        except Exception as e:
+                            # Log but don't fail - clearing is optional cleanup
+                            print(f"Warning: Could not delete {filename}: {e}")
+
+                print(f"Cleared {cleared_count} JSON files from {alt_text_folder}")
+
+            # Return file for download
+            return FileResponse(
+                path=report_path,
+                media_type='text/html',
+                filename=os.path.basename(report_path),
+                headers={
+                    "Content-Disposition": f'attachment; filename="{os.path.basename(report_path)}"'
+                }
+            )
+
+        finally:
+            # Restore original config
+            CONFIG['html_report_display'] = original_config
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating report: {str(e)}"
+        )
+```
+
+#### Frontend JavaScript Changes
+
+**Location:** `frontend/app.js` - Modify `saveAllReviewedAltTexts()` function
+
+**Integration:**
+
+```javascript
+// Show results
+if (errorCount === 0) {
+    saveAllSuccessMsg.textContent = `✓ Successfully saved all ${savedCount} language(s)!`;
+    saveAllMessage.classList.remove('d-none');
+
+    // Generate and download report
+    try {
+        saveAllBtnText.textContent = 'Generating report...';
+
+        // Get user preference for clearing files
+        const clearAfterCheckbox = document.getElementById('clearAfterReportCheckbox');
+        const clearAfter = clearAfterCheckbox ? clearAfterCheckbox.checked : true;
+
+        const reportResponse = await fetch(`${API_BASE_URL}/generate-report?clear_after=${clearAfter}`, {
+            method: 'POST'
+        });
+
+        if (reportResponse.ok) {
+            // Convert response to blob
+            const blob = await reportResponse.blob();
+
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const timestamp = new Date().toISOString().slice(0,19).replace(/:/g,'-');
+            const filename = `webmaster-report-${timestamp}.html`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+
+            // Cleanup
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            // Update success message based on clear preference
+            if (clearAfter) {
+                saveAllSuccessMsg.textContent = `✓ Successfully saved all ${savedCount} language(s) and generated report! Previous images cleared.`;
+                announceToScreenReader(`Report generated and download started. Previous images have been cleared. Check your downloads folder for ${filename}`);
+            } else {
+                saveAllSuccessMsg.textContent = `✓ Successfully saved all ${savedCount} language(s) and generated report! Images preserved for next report.`;
+                announceToScreenReader(`Report generated and download started. Images preserved for accumulation. Check your downloads folder for ${filename}`);
+            }
+        } else {
+            // Report generation failed but saves succeeded
+            console.error('Report generation failed:', await reportResponse.text());
+            saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s) (report generation failed)`;
+        }
+    } catch (error) {
+        // Report generation error - don't block success message for saves
+        console.error('Error generating report:', error);
+        saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s) (report generation unavailable)`;
+    }
+
+    setTimeout(() => {
+        saveAllMessage.classList.add('d-none');
+    }, 5000); // Longer timeout to show report message
+}
+```
+
+**Show options container when alt text is generated:**
+
+```javascript
+// In the alt text generation success handler
+function showReportOptions() {
+    const reportOptionsContainer = document.getElementById('reportOptionsContainer');
+    if (reportOptionsContainer) {
+        reportOptionsContainer.style.display = 'block';
+    }
+}
+
+// In the clear/reset handler
+function hideReportOptions() {
+    const reportOptionsContainer = document.getElementById('reportOptionsContainer');
+    if (reportOptionsContainer) {
+        reportOptionsContainer.style.display = 'none';
+    }
+}
+```
+
+#### Configuration Changes
+
+**File:** `backend/config/config.json`
+
+**Default for Web App Reports:**
+
+No changes needed to config file - the `/api/generate-report` endpoint temporarily overrides these settings:
+
+```json
+{
+  "html_report_display": {
+    "display_html_tags_used": false,           // Disabled - all web uploads are <img> tags
+    "display_html_attributes_used": false,     // Disabled - all web uploads use "alt" attribute
+    "display_current_alt_text": false,         // Disabled - web uploads don't have original alt text
+    "display_image_tag_attribute": false       // Disabled - redundant (always img/alt)
+  }
+}
+```
+
+**Rationale:**
+
+**Sections Disabled (4 total):**
+1. **`display_html_tags_used`** - Web uploads are always `<img>` tags, no variety to analyze
+2. **`display_html_attributes_used`** - Web uploads always use `alt` attribute, no variety to analyze
+3. **`display_current_alt_text`** - Web uploads don't have original alt text from HTML (field would be empty)
+4. **`display_image_tag_attribute`** - Would always show "Tag: img, Attribute: alt" (redundant information)
+
+**Sections Kept Enabled (7 total):**
+1. **`display_image_analysis_overview`** - Useful summary statistics even for single/accumulated images
+2. **`display_image_type_distribution`** - Shows informative/decorative breakdown for WCAG compliance
+3. **`display_image_preview`** - Essential visual reference for reviewing alt text
+4. **`display_image_type`** - Badge showing informative/decorative/functional classification
+5. **`display_proposed_alt_text`** - Primary output, must be shown
+6. **`display_reasoning`** - AI explanation helps users understand and trust the output
+7. **`display_context`** - Shows user-provided context, useful for review and audit trail
+
+This creates a cleaner, more focused report for web app users while removing redundant technical details that only matter for CLI batch processing of existing HTML pages.
+
+#### User Experience Flows
+
+**Flow 1: Single Image Report (Default)**
+
+1. User uploads `screenshot.png`
+2. Generates alt text in English
+3. Reviews and edits
+4. Checkbox shows: ☑ "Clear all previous images after generating report (recommended)"
+5. Clicks "Save and generate report"
+6. Backend generates report with only `screenshot.png`
+7. Backend deletes `screenshot_en.json` after report is downloaded
+8. Next upload starts fresh
+
+**Flow 2: Multi-Image Accumulated Report**
+
+1. User uploads `hero-banner.jpg`
+2. Generates alt text, reviews
+3. **Unchecks** "Clear all previous images after generating report"
+4. Clicks "Save and generate report"
+5. Report includes only `hero-banner.jpg`
+6. JSON file is preserved
+7. User uploads `logo.png`
+8. Generates alt text, reviews
+9. Checkbox still unchecked (or user unchecks again)
+10. Clicks "Save and generate report"
+11. Report now includes BOTH `hero-banner.jpg` AND `logo.png`
+12. JSON files preserved
+13. User can continue adding images...
+14. When done, user checks the box to clear accumulated files
+
+**Flow 3: Manual Clearing Mid-Session**
+
+1. User has accumulated 5 images
+2. Wants to start fresh without generating report
+3. Checks "Clear all previous images..." box
+4. Generates report (downloads report with all 5 images)
+5. Files are cleared
+6. User can start new accumulation session
+
+#### Privacy and Security Benefits
+
+**Single-User Deployment:**
+- ✅ Clean slate after each report (default)
+- ✅ User controls when to accumulate
+- ✅ No surprise old images in reports
+
+**Multi-User Deployment:**
+- ⚠️ Still needs session-based folders for full isolation
+- ✅ Clearing reduces data mixing
+- ✅ Users won't accidentally include others' recent images
+
+**Future Enhancement: Session-Based Folders**
+
+For true multi-user support, implement session folders:
+
+```python
+# Generate session ID on first upload (store in cookie/localStorage)
+session_id = request.cookies.get('session_id') or str(uuid.uuid4())
+
+# Use session-specific folder
+alt_text_folder = f'output/alt-text/{session_id}/'
+
+# Auto-cleanup old sessions (older than 24 hours)
+cleanup_old_sessions(base_folder='output/alt-text/', max_age_hours=24)
+```
+
+#### Implementation Checklist
+
+**Frontend Changes:**
+
+- [ ] Add checkbox UI in `home.html` before save button
+- [ ] Add helper text explaining the option
+- [ ] Show/hide checkbox when alt text is generated/cleared
+- [ ] Read checkbox state in `saveAllReviewedAltTexts()`
+- [ ] Pass `clear_after` parameter to API
+- [ ] Update success messages based on clear preference
+- [ ] Update screen reader announcements
+- [ ] Test checkbox persistence (or reset) behavior
+
+**Backend Changes:**
+
+- [ ] Add `clear_after: bool = True` parameter to `/api/generate-report`
+- [ ] Temporarily override 4 config display settings:
+  - [ ] `display_html_tags_used` to `false`
+  - [ ] `display_html_attributes_used` to `false`
+  - [ ] `display_current_alt_text` to `false`
+  - [ ] `display_image_tag_attribute` to `false`
+- [ ] Restore original config after report generation
+- [ ] Implement post-generation cleanup logic
+- [ ] Handle cleanup errors gracefully (log, don't fail)
+- [ ] Test with single JSON file
+- [ ] Test with multiple JSON files
+- [ ] Verify config override doesn't persist
+
+**Testing Scenarios:**
+
+- [ ] **Default behavior:** Upload → Generate → Report → Verify files cleared
+- [ ] **Accumulation:** Uncheck → Upload 3 images → Report includes all 3
+- [ ] **Mixed:** Upload 2 → Report (clear) → Upload 2 more → Report includes only 2
+- [ ] **Error handling:** Report fails → Files NOT cleared (safe behavior)
+- [ ] **Config override:** Verify web reports don't show tag/attribute sections
+- [ ] **Config restoration:** Verify CLI reports still show tag/attribute sections
+- [ ] **Mobile:** Test checkbox rendering and functionality on mobile
+
+#### Alternative: Manual "Clear All" Button
+
+If checkbox before report generation feels complex, consider adding a separate manual clear button:
+
+```html
+<button type="button" class="btn btn-outline-danger btn-sm" id="clearAllImagesBtn">
+    Clear All Previous Images
+</button>
+```
+
+**Pros:**
+- Simpler UI flow
+- Explicit user action
+- Can be used without generating report
+
+**Cons:**
+- Requires extra click
+- Users might forget to clear
+- Less integrated with report workflow
+
+**Decision:** Use checkbox approach (integrated, default-safe, clear intent)
+
+---
+
 ## Next Steps
 
 1. **Review this specification** with stakeholders
-2. **Approve implementation approach**
-3. **Implement backend endpoint** (`/api/generate-report`)
-4. **Implement frontend integration** (modify `saveAllReviewedAltTexts()`)
-5. **Test on target devices** (desktop, iOS, Android)
-6. **Deploy to staging** for user acceptance testing
-7. **Deploy to production** after approval
+2. **Approve implementation approach** (session-based + user control)
+3. **Implement frontend checkbox UI** (`home.html`)
+4. **Implement backend endpoint** with clearing logic (`/api/generate-report`)
+5. **Implement frontend integration** (modify `saveAllReviewedAltTexts()`)
+6. **Add config override** for web app reports (disable tag/attribute display)
+7. **Test all user flows** (single, accumulated, mixed)
+8. **Test on target devices** (desktop, iOS, Android)
+9. **Deploy to staging** for user acceptance testing
+10. **Deploy to production** after approval
+11. **Future:** Implement session-based folders for multi-user isolation
