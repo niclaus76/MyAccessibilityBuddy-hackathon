@@ -1669,8 +1669,7 @@ def analyze_image_with_ai(image_path, combined_prompt, credentials, language=Non
                             },
                             {
                                 'type': 'text',
-                                # FIX: Use combined_prompt for Claude to enable single-step mode
-                                'text': combined_prompt
+                                'text': vision_prompt
                             }
                         ]
                     }]
@@ -1902,6 +1901,205 @@ def _analyze_image_with_openai_legacy(image_path, combined_prompt, language=None
     debug_log(f"WARNING: Using deprecated legacy function - this should not be called", "ERROR")
     raise DeprecationWarning("This legacy function should not be called. Use analyze_image_with_ai() instead.")
 
+
+def download_images_from_url(url, images_folder=None, max_images=None):
+    """
+    Downloads images from a given URL to the specified folder.
+
+    Args:
+        url (str): The URL to scrape images from
+        images_folder (str): Folder to save images (uses config default if None)
+        max_images (int): Maximum number of images to download (None for all)
+
+    Returns:
+        tuple: (list of filenames, dict of {filename: {tag, attribute, url}}, page_title)
+    """
+    func_name = "download_images_from_url"
+    debug_log(f"Starting {func_name} for URL: {url}")
+            client = OpenAI(api_key=credentials['api_key'])
+            debug_log("OpenAI client initialized")
+        elif provider == 'ECB-LLM':
+            # ECB-LLM with U2A authentication
+            debug_log(f"Using LLM provider: {provider} (U2A OAuth2)")
+
+            # Use ECBAzureOpenAI client (automatic U2A token refresh)
+            if not ECB_LLM_AVAILABLE:
+                debug_log("ECB-LLM client not available", "ERROR")
+                return None
+
+            client = ECBAzureOpenAI()
+            debug_log("ECBAzureOpenAI client initialized (U2A mode)")
+        else:
+            debug_log(f"Unsupported provider: {provider}", "ERROR")
+            return None
+
+        # Convert image to data URL with proper MIME type detection
+        image_data_url = local_image_to_data_url(image_path)
+        debug_log(f"Image converted to data URL")
+
+        # Prepare messages - no system message needed, prompt file has WHO YOU ARE section
+        messages = []
+
+        # Add user message with prompt and image
+        messages.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": combined_prompt
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_data_url
+                    }
+                }
+            ]
+        })
+        debug_log(f"Added user message with prompt and image")
+
+        # Get vision model from credentials (for single-step, use vision_model)
+        model = credentials.get('vision_model', 'gpt-4o')
+        debug_log(f"Using model: {model}")
+
+        # Make API request
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_completion_tokens=1000
+        )
+
+        debug_log(f"{provider} API response received")
+
+        # Parse the response
+        response_text = response.choices[0].message.content
+
+        # Check if response is None or empty
+        if response_text is None:
+            debug_log(f"{provider} returned None response", "ERROR")
+            debug_log(f"Full API response object: {response}", "ERROR")
+            return None
+
+        if not response_text or len(response_text) == 0:
+            debug_log(f"{provider} returned empty response (0 characters)", "ERROR")
+            debug_log(f"Response object: {response}", "ERROR")
+            debug_log(f"Message content type: {type(response.choices[0].message.content)}", "ERROR")
+            return None
+
+        debug_log(f"{provider} response (first 500 chars): {response_text[:500]}...")
+        debug_log(f"Full response length: {len(response_text)} characters")
+        
+        # Try to extract JSON from response
+        try:
+            # Look for JSON block in the response
+            import re
+
+            # First, try to parse the entire response as JSON
+            try:
+                parsed_response = json.loads(response_text)
+                # Ensure the response is a dictionary, not a string or other type
+                if isinstance(parsed_response, dict):
+                    debug_log("Successfully parsed entire response as JSON", "INFORMATION")
+                    # Add model information to the result (single-step uses vision_model only)
+                    translation_provider, translation_model, _ = get_step_config('translation')
+                    parsed_response['_models_used'] = {
+                        'vision_provider': provider,
+                        'vision_model': model,
+                        'processing_provider': None,  # Single-step doesn't use processing model
+                        'processing_model': None,
+                        'translation_provider': translation_provider,
+                        'translation_model': translation_model
+                    }
+                    return parsed_response
+                else:
+                    debug_log(f"Response parsed as JSON but is not a dict (type: {type(parsed_response).__name__}), attempting to extract JSON object", "WARNING")
+            except json.JSONDecodeError:
+                debug_log("Response from LLM contains additional text, extracting JSON block", "INFORMATION")
+
+            # If that fails, try to find JSON within the text (may be surrounded by explanation)
+            # Look for content between first { and last }
+            first_brace = response_text.find('{')
+            last_brace = response_text.rfind('}')
+
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                json_str = response_text[first_brace:last_brace + 1]
+                try:
+                    parsed_response = json.loads(json_str)
+                    debug_log("Successfully extracted and parsed JSON from response", "INFORMATION")
+                    # Add model information to the result (single-step uses vision_model only)
+                    translation_provider, translation_model, _ = get_step_config('translation')
+                    parsed_response['_models_used'] = {
+                        'vision_provider': provider,
+                        'vision_model': model,
+                        'processing_provider': None,  # Single-step doesn't use processing model
+                        'processing_model': None,
+                        'translation_provider': translation_provider,
+                        'translation_model': translation_model
+                    }
+                    return parsed_response
+                except json.JSONDecodeError as e:
+                    debug_log(f"Extracted JSON is invalid: {str(e)}", "WARNING")
+
+            # No valid JSON found - try to extract alt text from plain text response
+            debug_log("No valid JSON found in response, attempting to extract alt text from plain text", "WARNING")
+
+            # Try to find alt_text in the response (various common formats)
+            import re
+
+            # Pattern 1: "alt_text": "value" or alt_text: "value"
+            alt_text_match = re.search(r'["\']?alt_text["\']?\s*:\s*["\']([^"\']+)["\']', response_text, re.IGNORECASE)
+            if not alt_text_match:
+                # Pattern 2: Alternative text: value
+                alt_text_match = re.search(r'(?:Alternative text|Alt text)\s*:\s*["\']?([^"\'.\n]+)["\']?', response_text, re.IGNORECASE)
+            if not alt_text_match:
+                # Pattern 3: Just use the first sentence or up to 125 chars
+                sentences = response_text.split('.')
+                extracted_text = sentences[0].strip() if sentences else response_text[:125].strip()
+            else:
+                extracted_text = alt_text_match.group(1).strip()
+
+            # Clean up the extracted text
+            # Remove common prefixes
+            for prefix in ['alt_text:', 'Alternative text:', 'Alt text:', '"', "'"]:
+                if extracted_text.startswith(prefix):
+                    extracted_text = extracted_text[len(prefix):].strip()
+
+            # Ensure it ends with a period and is within limit
+            if not extracted_text.endswith('.'):
+                extracted_text += '.'
+            if len(extracted_text) > 125:
+                extracted_text = extracted_text[:122] + '...'
+
+            debug_log(f"Extracted alt text from plain response: {extracted_text}")
+
+            # Fallback: create structure from text response
+            return {
+                "image_type": "informative",
+                "image_description": "AI-generated description not available in structured format",
+                "reasoning": "Response format parsing failed - extracted from plain text",
+                "alt_text": extracted_text,
+                "_models_used": {
+                    "vision_model": model,
+                    "processing_model": None  # Single-step doesn't use processing model
+                }
+            }
+        except json.JSONDecodeError as e:
+            debug_log(f"JSON parsing failed: {str(e)}", "WARNING")
+            # Fallback response
+            return {
+                "image_type": "informative",
+                "image_description": "AI analysis completed but format parsing failed",
+                "reasoning": "JSON parsing error in AI response",
+                "alt_text": "AI-analyzed image.",
+                "_models_used": {
+                    "vision_model": model,
+                    "processing_model": None  # Single-step doesn't use processing model
+                }
+            }
+            
+    except Exception as e:
+        handle_exception(func_name, e, f"analyzing image {image_path}")
+        return None
 
 def download_images_from_url(url, images_folder=None, max_images=None):
     """

@@ -16,14 +16,14 @@ from datetime import datetime, timedelta
 import uuid
 import secrets
 from urllib.parse import urlencode
+from starlette.middleware.base import BaseHTTPMiddleware
 
-# Load environment variables from .env file
+# Load environment variables from .env file if python-dotenv is available
 try:
     from dotenv import load_dotenv
-    load_dotenv()
-    print("Loaded environment variables from .env file")
+    load_dotenv()  # Silently loads .env if present, does nothing if not present
 except ImportError:
-    print("python-dotenv not installed. Using system environment variables only.")
+    pass  # python-dotenv not installed, environment variables must be set at system level
 
 # Import from the app module
 from app import (
@@ -40,6 +40,49 @@ from app import (
     OLLAMA_AVAILABLE
 )
 
+# Custom middleware to handle CloudFront/ALB proxy headers
+class ProxyHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to trust and process proxy headers from CloudFront + ALB.
+
+    CloudFront and ALB add these headers:
+    - X-Forwarded-For: Original client IP
+    - X-Forwarded-Proto: Original protocol (https)
+    - X-Forwarded-Host: Original host header
+    - X-Forwarded-Port: Original port
+
+    This middleware reconstructs the original request context.
+    """
+    async def dispatch(self, request: Request, call_next):
+        # Get forwarded headers
+        forwarded_proto = request.headers.get("X-Forwarded-Proto")
+        forwarded_host = request.headers.get("X-Forwarded-Host")
+        forwarded_port = request.headers.get("X-Forwarded-Port")
+        forwarded_for = request.headers.get("X-Forwarded-For")
+
+        # Update request scope with trusted proxy information
+        if forwarded_proto:
+            request.scope["scheme"] = forwarded_proto
+
+        if forwarded_host:
+            # Handle host:port format
+            if ":" in forwarded_host and not forwarded_port:
+                host_parts = forwarded_host.split(":")
+                request.scope["server"] = (host_parts[0], int(host_parts[1]))
+            else:
+                port = int(forwarded_port) if forwarded_port else (443 if forwarded_proto == "https" else 80)
+                request.scope["server"] = (forwarded_host, port)
+
+        if forwarded_for:
+            # X-Forwarded-For can be a comma-separated list: "client, proxy1, proxy2"
+            # First IP is the original client
+            client_ip = forwarded_for.split(",")[0].strip()
+            request.scope["client"] = (client_ip, 0)
+
+        response = await call_next(request)
+        return response
+
+
 # Initialize FastAPI app
 app = FastAPI(
     title="MyAccessibilityBuddy API",
@@ -48,6 +91,10 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc"
 )
+
+# Add proxy headers middleware FIRST (before CORS)
+# This must be added before CORS to ensure proper origin handling
+app.add_middleware(ProxyHeadersMiddleware)
 
 # Configure CORS to allow frontend access
 app.add_middleware(
@@ -414,7 +461,9 @@ async def health_check():
 @app.get("/api/available-providers")
 async def get_available_providers():
     """
-    Get list of available providers based on installed libraries.
+    Get list of available providers based on installed libraries and enabled status.
+
+    Only returns providers that are both installed AND enabled in config.json.
 
     Returns:
         Dictionary with available providers and their models from config
@@ -425,23 +474,36 @@ async def get_available_providers():
         load_config()
         from app import CONFIG
 
-    available_providers = {
-        'openai': CONFIG.get('openai', {}).get('available_models', {}),
-        'claude': CONFIG.get('claude', {}).get('available_models', {})
-    }
+    available_providers = {}
 
-    # Only include ECB-LLM if the library is installed
-    if ECB_LLM_AVAILABLE:
+    # Check OpenAI - only include if enabled
+    if CONFIG.get('openai', {}).get('enabled', False):
+        available_providers['openai'] = CONFIG.get('openai', {}).get('available_models', {})
+
+    # Check Claude - only include if enabled
+    if CONFIG.get('claude', {}).get('enabled', False):
+        available_providers['claude'] = CONFIG.get('claude', {}).get('available_models', {})
+
+    # Only include ECB-LLM if the library is installed AND enabled
+    if ECB_LLM_AVAILABLE and CONFIG.get('ecb_llm', {}).get('enabled', False):
         available_providers['ecb-llm'] = CONFIG.get('ecb_llm', {}).get('available_models', {})
 
-    # Only include Ollama if the library is installed
-    if OLLAMA_AVAILABLE:
+    # Only include Ollama if the library is installed AND enabled
+    if OLLAMA_AVAILABLE and CONFIG.get('ollama', {}).get('enabled', False):
         available_providers['ollama'] = CONFIG.get('ollama', {}).get('available_models', {})
+
+    # Get current config defaults from steps
+    current_config = CONFIG.get('steps', {
+        'vision': {'provider': 'OpenAI', 'model': 'gpt-4o'},
+        'processing': {'provider': 'OpenAI', 'model': 'gpt-4o'},
+        'translation': {'provider': 'OpenAI', 'model': 'gpt-4o'}
+    })
 
     return {
         'providers': available_providers,
-        'ecb_llm_available': ECB_LLM_AVAILABLE,
-        'ollama_available': OLLAMA_AVAILABLE
+        'ecb_llm_available': ECB_LLM_AVAILABLE and CONFIG.get('ecb_llm', {}).get('enabled', False),
+        'ollama_available': OLLAMA_AVAILABLE and CONFIG.get('ollama', {}).get('enabled', False),
+        'config_defaults': current_config
     }
 
 
@@ -578,9 +640,13 @@ async def generate_alt_text(
         )
 
         if not success or not json_path:
+            # Try to get more detailed error information
+            error_detail = "Failed to generate alt-text"
+            if vision_provider == 'claude' or vision_provider == 'Claude':
+                error_detail += ". Check that ANTHROPIC_API_KEY is set correctly."
             raise HTTPException(
                 status_code=500,
-                detail="Failed to generate alt-text"
+                detail=error_detail
             )
 
         # Read the generated JSON file
@@ -790,6 +856,43 @@ async def get_supported_languages():
     return {
         "supported_languages": allowed_languages,
         "default_language": default_language
+    }
+
+
+@app.get("/api/test/env-check")
+async def test_env_check():
+    """
+    Test endpoint to check if environment variables are properly loaded.
+    SECURITY WARNING: This endpoint exposes partial API key info - use only for testing!
+    Should be removed or secured in production.
+
+    Returns:
+        Dictionary with environment variable status
+    """
+    openai_key = os.environ.get('OPENAI_API_KEY', '')
+    client_id = os.environ.get('CLIENT_ID_U2A', '')
+    client_secret = os.environ.get('CLIENT_SECRET_U2A', '')
+
+    # Function to safely mask sensitive values
+    def mask_value(value):
+        if not value:
+            return None
+        if len(value) <= 8:
+            return "***"
+        return f"{value[:4]}...{value[-4:]}"
+
+    return {
+        "environment": "ECS" if os.environ.get('ECS_CONTAINER_METADATA_URI') else "local/docker",
+        "ecs_metadata_available": bool(os.environ.get('ECS_CONTAINER_METADATA_URI')),
+        "openai_api_key_present": bool(openai_key),
+        "openai_api_key_masked": mask_value(openai_key),
+        "openai_api_key_length": len(openai_key) if openai_key else 0,
+        "client_id_u2a_present": bool(client_id),
+        "client_id_u2a_masked": mask_value(client_id),
+        "client_secret_u2a_present": bool(client_secret),
+        "client_secret_u2a_masked": mask_value(client_secret),
+        "dotenv_loaded": "dotenv" in str(type(load_dotenv)) if 'load_dotenv' in dir() else False,
+        "warning": "This endpoint exposes partial credential info - disable in production!"
     }
 
 

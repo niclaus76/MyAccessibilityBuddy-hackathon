@@ -56,7 +56,7 @@
 
             modelOptions = data.providers;
 
-            // Build list of available providers
+            // Build list of available providers (only enabled ones)
             availableProviders = Object.keys(data.providers);
 
             // Store config defaults if provided
@@ -74,11 +74,16 @@
                 }
             }
 
-            // Populate provider dropdowns
-            populateProviderDropdowns();
-
-            // Set default values for advanced mode (OpenAI GPT-4o)
-            setDefaultProviders();
+            // Check if no providers are enabled
+            if (availableProviders.length === 0) {
+                showNoProvidersWarning();
+            } else {
+                hideNoProvidersWarning();
+                // Populate provider dropdowns
+                populateProviderDropdowns();
+                // Set default values from config
+                setDefaultProviders();
+            }
 
             console.log('[PROVIDERS] Loaded available providers:', availableProviders);
             console.log('[PROVIDERS] ECB-LLM available:', data.ecb_llm_available);
@@ -103,29 +108,119 @@
         }
     }
 
-    // Set default provider and model values (OpenAI GPT-4o)
+    // Set default provider and model values from config
     function setDefaultProviders() {
-        // Set OpenAI as default provider for all steps
-        if (availableProviders.includes('openai')) {
-            visionProviderSelect.value = 'openai';
-            populateModelDropdown('openai', 'vision', visionModelSelect);
-            visionModelSelect.value = 'gpt-4o';
+        // Use config defaults if available, otherwise fall back to first available provider
+        const visionDefaults = configDefaults.vision || {};
+        const processingDefaults = configDefaults.processing || {};
+        const translationDefaults = configDefaults.translation || {};
 
-            processingProviderSelect.value = 'openai';
-            populateModelDropdown('openai', 'processing', processingModelSelect);
-            processingModelSelect.value = 'gpt-4o';
+        // Helper function to normalize provider name to lowercase
+        const normalizeProviderName = (provider) => {
+            if (!provider) return '';
+            const providerMap = {
+                'OpenAI': 'openai',
+                'Claude': 'claude',
+                'ECB-LLM': 'ecb-llm',
+                'Ollama': 'ollama'
+            };
+            return providerMap[provider] || provider.toLowerCase();
+        };
 
-            translationProviderSelect.value = 'openai';
-            populateModelDropdown('openai', 'translation', translationModelSelect);
-            translationModelSelect.value = 'gpt-4o';
+        // Set vision provider and model
+        const visionProviderDefault = normalizeProviderName(visionDefaults.provider);
+        if (availableProviders.includes(visionProviderDefault)) {
+            visionProviderSelect.value = visionProviderDefault;
+            populateModelDropdown(visionProviderDefault, 'vision', visionModelSelect);
+            if (visionDefaults.model) {
+                visionModelSelect.value = visionDefaults.model;
+            }
+            visionProvider = visionProviderDefault;
+            visionModel = visionModelSelect.value;
+        } else if (availableProviders.length > 0) {
+            // Fall back to first available provider
+            const firstProvider = availableProviders[0];
+            visionProviderSelect.value = firstProvider;
+            populateModelDropdown(firstProvider, 'vision', visionModelSelect);
+            visionProvider = firstProvider;
+            visionModel = visionModelSelect.value;
+        }
 
-            // Update state variables
-            visionProvider = 'openai';
-            visionModel = 'gpt-4o';
-            processingProvider = 'openai';
-            processingModel = 'gpt-4o';
-            translationProvider = 'openai';
-            translationModel = 'gpt-4o';
+        // Set processing provider and model
+        const processingProviderDefault = normalizeProviderName(processingDefaults.provider);
+        if (availableProviders.includes(processingProviderDefault)) {
+            processingProviderSelect.value = processingProviderDefault;
+            populateModelDropdown(processingProviderDefault, 'processing', processingModelSelect);
+            if (processingDefaults.model) {
+                processingModelSelect.value = processingDefaults.model;
+            }
+            processingProvider = processingProviderDefault;
+            processingModel = processingModelSelect.value;
+        } else if (availableProviders.length > 0) {
+            const firstProvider = availableProviders[0];
+            processingProviderSelect.value = firstProvider;
+            populateModelDropdown(firstProvider, 'processing', processingModelSelect);
+            processingProvider = firstProvider;
+            processingModel = processingModelSelect.value;
+        }
+
+        // Set translation provider and model
+        const translationProviderDefault = normalizeProviderName(translationDefaults.provider);
+        if (availableProviders.includes(translationProviderDefault)) {
+            translationProviderSelect.value = translationProviderDefault;
+            populateModelDropdown(translationProviderDefault, 'translation', translationModelSelect);
+            if (translationDefaults.model) {
+                translationModelSelect.value = translationDefaults.model;
+            }
+            translationProvider = translationProviderDefault;
+            translationModel = translationModelSelect.value;
+        } else if (availableProviders.length > 0) {
+            const firstProvider = availableProviders[0];
+            translationProviderSelect.value = firstProvider;
+            populateModelDropdown(firstProvider, 'translation', translationModelSelect);
+            translationProvider = firstProvider;
+            translationModel = translationModelSelect.value;
+        }
+    }
+
+    // Show warning when no providers are enabled
+    function showNoProvidersWarning() {
+        const advancedSettings = document.getElementById('advancedSettings');
+
+        // Create warning element if it doesn't exist
+        let warningDiv = document.getElementById('noProvidersWarning');
+        if (!warningDiv) {
+            warningDiv = document.createElement('div');
+            warningDiv.id = 'noProvidersWarning';
+            warningDiv.className = 'row justify-content-center mb-4';
+            warningDiv.innerHTML = `
+                <div class="col-12 col-md-8">
+                    <div class="alert alert-warning" role="alert">
+                        <h6 class="alert-heading"><strong>No providers enabled!</strong></h6>
+                        <p class="mb-0">Please enable at least one provider in config.json to use this feature.</p>
+                        <p class="mb-0"><small>Available providers: OpenAI, Claude, ECB-LLM, or Ollama</small></p>
+                    </div>
+                </div>
+            `;
+            // Insert before the language selection section
+            const languageSection = document.querySelector('.row.justify-content-center.mb-4');
+            if (languageSection && advancedSettings) {
+                advancedSettings.insertAdjacentElement('afterend', warningDiv);
+            }
+        }
+        warningDiv.classList.remove('d-none');
+
+        // Disable the generate button
+        if (generateBtn) {
+            generateBtn.disabled = true;
+        }
+    }
+
+    // Hide warning when providers are available
+    function hideNoProvidersWarning() {
+        const warningDiv = document.getElementById('noProvidersWarning');
+        if (warningDiv) {
+            warningDiv.classList.add('d-none');
         }
     }
 
@@ -194,6 +289,26 @@
         if (processingModeBasic && processingModeAdvanced) {
             processingModeBasic.addEventListener('change', handleProcessingModeChange);
             processingModeAdvanced.addEventListener('change', handleProcessingModeChange);
+        }
+
+        // Toggle detailed instructions visibility
+        const showInstructionsBtn = document.getElementById('showInstructionsBtn');
+        const detailedInstructions = document.getElementById('detailedInstructions');
+
+        if (showInstructionsBtn && detailedInstructions) {
+            showInstructionsBtn.addEventListener('click', function() {
+                const isHidden = detailedInstructions.classList.contains('d-none');
+
+                if (isHidden) {
+                    detailedInstructions.classList.remove('d-none');
+                    showInstructionsBtn.setAttribute('aria-expanded', 'true');
+                    showInstructionsBtn.setAttribute('title', 'Hide detailed instructions');
+                } else {
+                    detailedInstructions.classList.add('d-none');
+                    showInstructionsBtn.setAttribute('aria-expanded', 'false');
+                    showInstructionsBtn.setAttribute('title', 'Click for detailed instructions');
+                }
+            });
         }
 
         // Toggle processing info visibility
@@ -387,7 +502,7 @@
                     </div>
                     <div class="text-center">
                         <button type="button" class="btn btn-primary btn-sm copy-btn" data-lang="${lang}" aria-label="Copy alt text for ${langName}">
-                            <svg class="icon icon-sm me-1" aria-hidden="true"><use href="/bootstrap-italia/dist/svg/sprites.svg#it-copy"></use></svg>
+                            <svg class="icon icon-sm me-1" aria-hidden="true"><use href="assets/bootstrap-italia-sprites.svg#it-copy"></use></svg>
                             <span class="copy-btn-text">Copy</span>
                         </button>
                     </div>
@@ -672,6 +787,10 @@
         }
     });
 
+    // Context textbox element
+    const contextTextbox = document.getElementById('contextTextbox');
+    const clearContextBtn = document.getElementById('clearContextBtn');
+
     function handleContextFile(file) {
         if (file.type !== 'text/plain') {
             announceToScreenReader('Invalid file type. Please select a text file.', true);
@@ -684,14 +803,16 @@
 
         reader.onload = (e) => {
             contextText = e.target.result;
-            contextFileName.textContent = file.name;
-            const preview = contextText.length > 100 ? contextText.substring(0, 100) + '...' : contextText;
-            contextFilePreview.textContent = preview;
-            contextPreviewContainer.classList.remove('d-none');
-            contextDragdrop.classList.add('d-none');
+
+            // Load content into textarea
+            if (contextTextbox) {
+                contextTextbox.value = contextText;
+                // Show clear button
+                clearContextBtn.classList.remove('d-none');
+            }
 
             // Announce successful upload
-            announceToScreenReader(`Context file ${file.name} uploaded successfully.`);
+            announceToScreenReader(`Context file ${file.name} uploaded successfully. Content loaded into text editor.`);
         };
 
         reader.readAsText(file);
@@ -701,9 +822,45 @@
         selectedContextFile = null;
         contextText = '';
         contextFileInput.value = '';
+        if (contextTextbox) {
+            contextTextbox.value = '';
+        }
+        clearContextBtn.classList.add('d-none');
         contextPreviewContainer.classList.add('d-none');
         contextDragdrop.classList.remove('d-none');
     });
+
+    // Clear context button handler
+    if (clearContextBtn) {
+        clearContextBtn.addEventListener('click', () => {
+            if (contextTextbox) {
+                contextTextbox.value = '';
+                contextText = '';
+                selectedContextFile = null;
+                contextFileInput.value = '';
+                clearContextBtn.classList.add('d-none');
+                announceToScreenReader('Context cleared.');
+            }
+        });
+    }
+
+    // Handle textarea input - show/hide clear button and update contextText
+    if (contextTextbox) {
+        contextTextbox.addEventListener('input', () => {
+            contextText = contextTextbox.value;
+            // Show clear button if there's text
+            if (contextText.trim().length > 0) {
+                clearContextBtn.classList.remove('d-none');
+            } else {
+                clearContextBtn.classList.add('d-none');
+            }
+        });
+
+        // Update contextText on blur to ensure it's always synced
+        contextTextbox.addEventListener('blur', () => {
+            contextText = contextTextbox.value;
+        });
+    }
 
     function resetForm() {
         selectedFile = null;
@@ -714,6 +871,12 @@
         selectedContextFile = null;
         contextText = '';
         contextFileInput.value = '';
+        if (contextTextbox) {
+            contextTextbox.value = '';
+        }
+        if (clearContextBtn) {
+            clearContextBtn.classList.add('d-none');
+        }
         contextPreviewContainer.classList.add('d-none');
         contextDragdrop.classList.remove('d-none');
         generateBtn.disabled = true;
@@ -994,6 +1157,9 @@
         contextFileInput.value = '';
         contextPreviewContainer.classList.add('d-none');
         contextDragdrop.classList.remove('d-none');
+        if (contextTextbox) {
+            contextTextbox.value = '';
+        }
 
         // Reset all provider and model selections to default
         visionProviderSelect.value = '';

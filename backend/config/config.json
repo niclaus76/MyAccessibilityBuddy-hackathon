@@ -120,7 +120,7 @@
   "_comment_prompt": "Prompt template configuration: processing_files (list of processing prompt files), default_processing_prompt (fallback), vision_files (list of vision prompt files), default_vision_prompt (fallback), translation_files (list of translation prompt files), default_translation_prompt (fallback). For merge_separator setting, see config.advanced.json",
   "prompt": {
     "processing_files": [
-      "processing_prompt_v3.txt"
+      "processing_prompt_v2.txt"
     ],
     "default_processing_prompt": "processing_prompt_v3.txt",
     "vision_files": [
