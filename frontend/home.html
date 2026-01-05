@@ -404,6 +404,16 @@
             <div id="resultsContainer">
                 <!-- Language-specific result cards will be inserted here dynamically -->
             </div>
+            <!-- Report Options Checkbox -->
+            <div class="form-check mb-3" id="reportOptionsContainer" style="display: none;">
+                <input class="form-check-input" type="checkbox" id="clearAfterReportCheckbox" checked>
+                <label class="form-check-label" for="clearAfterReportCheckbox">
+                    Clear all previous images after generating report (recommended)
+                </label>
+                <small class="form-text text-muted d-block mt-1">
+                    Uncheck to accumulate multiple images for a comprehensive report
+                </small>
+            </div>
             <!-- Single Save Review Button for All Languages -->
             <div class="text-center mt-3">
                 <button type="button" class="btn btn-success btn-lg" id="saveAllBtn">

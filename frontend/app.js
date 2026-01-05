@@ -51,7 +51,9 @@
     // Fetch config defaults and available providers from API
     async function loadAvailableProviders() {
         try {
-            const response = await fetch(`${API_BASE_URL}/available-providers`);
+            const response = await fetch(`${API_BASE_URL}/available-providers`, {
+                credentials: 'include'
+            });
             const data = await response.json();
 
             modelOptions = data.providers;
@@ -601,6 +603,7 @@
             try {
                 const response = await fetch(`${API_BASE_URL}/save-reviewed-alt-text`, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: {
                         'Content-Type': 'application/json'
                     },
@@ -632,9 +635,62 @@
         if (errorCount === 0) {
             saveAllSuccessMsg.textContent = `✓ Successfully saved all ${savedCount} language(s)!`;
             saveAllMessage.classList.remove('d-none');
+
+            // Generate and download report
+            try {
+                saveAllBtnText.textContent = 'Generating report...';
+
+                // Get user preference for clearing files
+                const clearAfterCheckbox = document.getElementById('clearAfterReportCheckbox');
+                const clearAfter = clearAfterCheckbox ? clearAfterCheckbox.checked : true;
+
+                const reportResponse = await fetch(`${API_BASE_URL}/generate-report?clear_after=${clearAfter}`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                if (reportResponse.ok) {
+                    // Convert response to blob
+                    const blob = await reportResponse.blob();
+
+                    // Create download link
+                    const url = window.URL.createObjectURL(blob);
+                    const timestamp = new Date().toISOString().slice(0,19).replace(/:/g,'-');
+                    const filename = `webmaster-report-${timestamp}.html`;
+
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+
+                    // Cleanup
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+
+                    // Update success message based on clear preference
+                    if (clearAfter) {
+                        saveAllSuccessMsg.textContent = `✓ Successfully saved all ${savedCount} language(s) and generated report! Previous images cleared.`;
+                        announceToScreenReader(`Report generated and download started. Previous images have been cleared. Check your downloads folder for ${filename}`);
+                    } else {
+                        saveAllSuccessMsg.textContent = `✓ Successfully saved all ${savedCount} language(s) and generated report! Images preserved for next report.`;
+                        announceToScreenReader(`Report generated and download started. Images preserved for accumulation. Check your downloads folder for ${filename}`);
+                    }
+                } else {
+                    // Report generation failed but saves succeeded
+                    console.error('Report generation failed:', await reportResponse.text());
+                    saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s) (report generation failed)`;
+                }
+            } catch (error) {
+                // Report generation error - don't block success message for saves
+                console.error('Error generating report:', error);
+                saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s) (report generation unavailable)`;
+            }
+
             setTimeout(() => {
                 saveAllMessage.classList.add('d-none');
-            }, 3000);
+            }, 5000); // Longer timeout to show report message
         } else if (savedCount > 0) {
             saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s)`;
             saveAllErrorMsg.textContent = `✗ Failed to save ${errorCount} language(s): ${errors.join(', ')}`;
@@ -644,7 +700,7 @@
             saveAllMessage.classList.remove('d-none');
         }
 
-        saveAllBtnText.textContent = 'Save All Reviews';
+        saveAllBtnText.textContent = 'Save and generate report';
         saveAllBtn.disabled = false;
     }
 
@@ -923,6 +979,22 @@
         }
     }
 
+    // Show report options (clear checkbox)
+    function showReportOptions() {
+        const reportOptionsContainer = document.getElementById('reportOptionsContainer');
+        if (reportOptionsContainer) {
+            reportOptionsContainer.style.display = 'block';
+        }
+    }
+
+    // Hide report options (clear checkbox)
+    function hideReportOptions() {
+        const reportOptionsContainer = document.getElementById('reportOptionsContainer');
+        if (reportOptionsContainer) {
+            reportOptionsContainer.style.display = 'none';
+        }
+    }
+
     // Show accessible error message
     function showErrorMessage(message) {
         const errorDiv = document.getElementById('errorMessages');
@@ -954,7 +1026,9 @@
     async function checkAuthenticationStatus() {
         console.log('[AUTH] Checking authentication status...');
         try {
-            const response = await fetch(`${API_BASE_URL}/auth/status`);
+            const response = await fetch(`${API_BASE_URL}/auth/status`, {
+                credentials: 'include'
+            });
             const data = await response.json();
             console.log('[AUTH] Status response:', data);
 
@@ -1081,6 +1155,7 @@
                 // API Call
                 const response = await fetch(`${API_BASE_URL}/generate-alt-text`, {
                     method: 'POST',
+                    credentials: 'include',
                     body: formData
                 });
 
@@ -1111,6 +1186,9 @@
             // Show result section and scroll to it
             resultSection.classList.remove('d-none');
             resultSection.scrollIntoView({ behavior: 'smooth' });
+
+            // Show report options checkbox
+            showReportOptions();
 
             // Enable Clear button after successful generation
             clearBtn.disabled = false;
@@ -1200,6 +1278,9 @@
         resultSection.classList.add('d-none');
         resultsContainer.innerHTML = '';
         languageResults = {};
+
+        // Hide report options checkbox
+        hideReportOptions();
 
         // Disable buttons
         generateBtn.disabled = true;

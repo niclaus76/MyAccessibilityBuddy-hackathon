@@ -62,6 +62,7 @@ CONFIG = {}
 DEBUG_MODE = True
 CURRENT_LOG_FILE = None  # Track current log file for this session
 LOG_START_TIME = None  # Track when the log session started
+CURRENT_SESSION_LOGS = None  # Track session-specific logs folder when available
 
 def get_cet_time():
     """Get current time in CET (Central European Time) timezone."""
@@ -119,8 +120,8 @@ def initialize_log_file(url=None):
         return None
 
     try:
-        # Get logs folder path
-        logs_folder = get_absolute_folder_path('logs')
+        # Get logs folder path (prefer session-specific if set)
+        logs_folder = CURRENT_SESSION_LOGS if CURRENT_SESSION_LOGS else get_absolute_folder_path('logs')
 
         # Create logs directory if it doesn't exist
         os.makedirs(logs_folder, exist_ok=True)
@@ -395,6 +396,314 @@ def get_absolute_folder_path(folder_name):
     debug_log(f"Resolved folder '{folder_name}': {relative_path} -> {absolute_path} (project_root: {project_root})")
     return absolute_path
 
+# ============================================================================
+# CLI Session Management Functions
+# ============================================================================
+
+def get_cli_session_folders(session_id=None, shared=False, legacy=False, required_keys=None):
+    """
+    Get CLI session-specific folder paths with backward compatibility.
+
+    Args:
+        session_id: Explicit session ID (cli-xxx format) or None for auto-detect
+        shared: Use shared folder (input/images/shared, output/alt-text/shared)
+        legacy: Use legacy flat structure (input/images, output/alt-text)
+        required_keys: Optional list of folder keys to create (e.g., ['images']); defaults to all
+
+    Returns:
+        dict: Folder paths with keys 'images', 'context', 'alt_text', 'reports', 'session_id', 'mode'
+    """
+    import uuid
+
+    # Determine mode
+    if legacy:
+        # Legacy mode: use base folders directly
+        return {
+            'images': get_absolute_folder_path('images'),
+            'context': get_absolute_folder_path('context'),
+            'alt_text': get_absolute_folder_path('alt_text'),
+            'reports': get_absolute_folder_path('reports'),
+            'logs': get_absolute_folder_path('logs'),
+            'session_id': None,
+            'mode': 'legacy'
+        }
+
+    if shared:
+        # Shared mode: use shared subfolder
+        base_images = get_absolute_folder_path('images')
+        base_output = get_absolute_folder_path('output')
+
+        folders = {
+            'images': os.path.join(base_images, 'shared'),
+            'context': os.path.join(base_images, 'shared', 'context'),
+            'alt_text': os.path.join(base_output, 'shared', 'alt-text'),
+            'reports': os.path.join(base_output, 'shared', 'reports'),
+            'logs': os.path.join(get_absolute_folder_path('logs'), 'shared'),
+            'session_id': 'shared',
+            'mode': 'shared'
+        }
+
+        # Create folders
+        for folder in folders.values():
+            if isinstance(folder, str):
+                os.makedirs(folder, exist_ok=True)
+
+        return folders
+
+    # Session mode: use session-specific folders
+    root_folder = get_absolute_folder_path('root')
+    os.makedirs(root_folder, exist_ok=True)
+
+    if session_id is None:
+        # Auto-detect or create new session
+        session_file = os.path.join(root_folder, '.cli_session')
+        if os.path.exists(session_file):
+            with open(session_file, 'r') as f:
+                session_id = f.read().strip()
+        else:
+            # Create new session
+            session_id = f"cli-{uuid.uuid4()}"
+            with open(session_file, 'w') as f:
+                f.write(session_id)
+
+    # Ensure session_id has cli- prefix
+    if not session_id.startswith('cli-') and session_id != 'shared':
+        session_id = f"cli-{session_id}"
+
+    # Get base folders
+    base_images = get_absolute_folder_path('images')
+    base_output = get_absolute_folder_path('output')
+
+    # Create session-specific paths
+    folders = {
+        'images': os.path.join(base_images, session_id),
+        'context': os.path.join(base_images, session_id, 'context'),
+        'alt_text': os.path.join(base_output, session_id, 'alt-text'),
+        'reports': os.path.join(base_output, session_id, 'reports'),
+        'logs': os.path.join(get_absolute_folder_path('logs'), session_id),
+        'session_id': session_id,
+        'mode': 'session'
+    }
+
+    # Create folders
+    # Determine which folder keys to create on disk
+    keys_to_create = [k for k in folders.keys() if k not in ['session_id', 'mode']]
+    if required_keys:
+        keys_to_create = [k for k in keys_to_create if k in required_keys]
+
+    # Create folders
+    for key in keys_to_create:
+        folder = folders[key]
+        os.makedirs(folder, exist_ok=True)
+
+    # Save current session
+    session_file = os.path.join(root_folder, '.cli_session')
+    with open(session_file, 'w') as f:
+        f.write(session_id)
+
+    return folders
+
+def list_cli_sessions():
+    """
+    List all sessions (CLI and Web).
+
+    Returns:
+        list: List of session info dicts
+    """
+    import glob
+    from datetime import datetime
+
+    sessions = []
+    base_images = get_absolute_folder_path('images')
+
+    # Find all cli- folders
+    pattern = os.path.join(base_images, 'cli-*')
+    for folder in glob.glob(pattern):
+        session_id = os.path.basename(folder)
+
+        # Get folder stats
+        stat_info = os.stat(folder)
+        created = datetime.fromtimestamp(stat_info.st_ctime)
+        modified = datetime.fromtimestamp(stat_info.st_mtime)
+
+        # Count files
+        image_count = len([f for f in os.listdir(folder)
+                          if os.path.isfile(os.path.join(folder, f))])
+
+        sessions.append({
+            'session_id': session_id,
+            'created': created.isoformat(),
+            'modified': modified.isoformat(),
+            'image_count': image_count,
+            'path': folder,
+            'type': 'cli'
+        })
+
+    # Find all web- folders
+    pattern = os.path.join(base_images, 'web-*')
+    for folder in glob.glob(pattern):
+        session_id = os.path.basename(folder)
+
+        # Get folder stats
+        stat_info = os.stat(folder)
+        created = datetime.fromtimestamp(stat_info.st_ctime)
+        modified = datetime.fromtimestamp(stat_info.st_mtime)
+
+        # Count files
+        image_count = len([f for f in os.listdir(folder)
+                          if os.path.isfile(os.path.join(folder, f))])
+
+        sessions.append({
+            'session_id': session_id,
+            'created': created.isoformat(),
+            'modified': modified.isoformat(),
+            'image_count': image_count,
+            'path': folder,
+            'type': 'web'
+        })
+
+    # Add shared if it exists
+    shared_path = os.path.join(base_images, 'shared')
+    if os.path.exists(shared_path):
+        stat_info = os.stat(shared_path)
+        image_count = len([f for f in os.listdir(shared_path)
+                          if os.path.isfile(os.path.join(shared_path, f))])
+        sessions.append({
+            'session_id': 'shared',
+            'created': datetime.fromtimestamp(stat_info.st_ctime).isoformat(),
+            'modified': datetime.fromtimestamp(stat_info.st_mtime).isoformat(),
+            'image_count': image_count,
+            'path': shared_path,
+            'type': 'shared'
+        })
+
+    sorted_sessions = sorted(sessions, key=lambda x: x['modified'], reverse=True)
+
+    # Print sessions
+    if not sorted_sessions:
+        print("No sessions found.")
+    else:
+        print(f"\n{'Session ID':<40} {'Type':<8} {'Created':<20} {'Modified':<20} {'Images':>8}")
+        print("-" * 103)
+        for session in sorted_sessions:
+            session_type = session.get('type', 'unknown')
+            print(f"{session['session_id']:<40} {session_type:<8} {session['created'][:19]:<20} {session['modified'][:19]:<20} {session['image_count']:>8}")
+        print(f"\nTotal sessions: {len(sorted_sessions)}")
+
+    return sorted_sessions
+
+def clear_cli_session(session_id, force=False):
+    """
+    Clear data for a specific CLI session.
+
+    Args:
+        session_id: Session ID to clear
+        force: Skip confirmation prompt
+
+    Returns:
+        dict: Summary of deleted items
+    """
+    import shutil
+    import sys
+
+    # Validate session exists
+    base_images = get_absolute_folder_path('images')
+    base_output = get_absolute_folder_path('output')
+
+    session_images = os.path.join(base_images, session_id)
+    session_output = os.path.join(base_output, session_id)
+
+    if not os.path.exists(session_images) and not os.path.exists(session_output):
+        raise ValueError(f"Session not found: {session_id}")
+
+    # Confirmation prompt
+    if not force:
+        if not sys.stdout.isatty():
+            print(f"Running in a non-interactive environment. Use --force to clear session '{session_id}' without confirmation.")
+            return {'cancelled': True}
+        confirm = input(f"Delete all data for session '{session_id}'? (yes/no): ")
+        if confirm.lower() != "yes":
+            print("Operation cancelled")
+            return {'cancelled': True}
+
+    # Delete session folders
+    deleted = {'images': 0, 'outputs': 0, 'folders': 0}
+
+    if os.path.exists(session_images):
+        try:
+            deleted['images'] = len([f for f in os.listdir(session_images)
+                                    if os.path.isfile(os.path.join(session_images, f))])
+            shutil.rmtree(session_images)
+            deleted['folders'] += 1
+        except Exception as e:
+            print(f"Error deleting images folder: {e}")
+
+    if os.path.exists(session_output):
+        try:
+            # Count all files recursively
+            for root, dirs, files in os.walk(session_output):
+                deleted['outputs'] += len(files)
+            shutil.rmtree(session_output)
+            deleted['folders'] += 1
+        except Exception as e:
+            print(f"Error deleting output folder: {e}")
+
+    # Clear session file if this was the current session
+    session_file = os.path.join(get_absolute_folder_path('root'), '.cli_session')
+    if os.path.exists(session_file):
+        with open(session_file, 'r') as f:
+            current_session = f.read().strip()
+        if current_session == session_id:
+            os.remove(session_file)
+
+    return deleted
+
+def clear_all_cli_sessions(force=False):
+    """
+    Clear all CLI sessions.
+
+    Args:
+        force: Skip confirmation prompt
+
+    Returns:
+        dict: Summary of deleted items
+    """
+    import shutil
+    import sys
+
+    # Get all sessions
+    sessions = list_cli_sessions()
+
+    if not sessions:
+        print("No sessions to clear")
+        return {'sessions_deleted': 0}
+
+    # Confirmation prompt
+    if not force:
+        if not sys.stdout.isatty():
+            print("Running in a non-interactive environment. Use --force to clear all sessions without confirmation.")
+            return {'cancelled': True}
+        print(f"Found {len(sessions)} session(s):")
+        for session in sessions:
+            print(f"  - {session['session_id']}: {session['image_count']} images")
+        print()
+        confirm = input("Are you sure you want to delete all images and data for all sessions? (yes/no): ")
+        if confirm.lower() != "yes":
+            print("Operation cancelled")
+            return {'cancelled': True}
+
+    # Delete all sessions
+    total_deleted = {'sessions': 0, 'images': 0, 'outputs': 0}
+
+    for session in sessions:
+        result = clear_cli_session(session['session_id'], force=True)
+        if not result.get('cancelled'):
+            total_deleted['sessions'] += 1
+            total_deleted['images'] += result.get('images', 0)
+            total_deleted['outputs'] += result.get('outputs', 0)
+
+    return total_deleted
+
 def get_enabled_image_tags():
     """
     Get list of enabled HTML tags for image extraction from config.
@@ -461,12 +770,13 @@ def get_image_url_and_attribute(element, attributes):
             return (value, attr)
     return (None, None)
 
-def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.html", page_title=None):
+def generate_html_report(alt_text_folder=None, images_folder=None, output_filename="alt-text-report.html", page_title=None):
     """
     Generate an accessible HTML report summarizing all alt-text JSON files.
 
     Args:
         alt_text_folder (str): Folder containing JSON files (uses config default if None)
+        images_folder (str): Folder containing image files (uses config default if None)
         output_filename (str): Name of the output HTML file
         page_title (str): The title of the source webpage (optional, for HTML title tag)
 
@@ -662,9 +972,13 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
 
         # Build image cards HTML
         image_cards_html = ""
+
+        # Get images folder (use parameter if provided, otherwise use config default)
+        if images_folder is None:
+            images_folder = get_absolute_folder_path('images')
+
         for idx, data in enumerate(image_data, 1):
             image_id = data.get('image_id', 'Unknown')
-            images_folder = get_absolute_folder_path('images')
             image_type = data.get('image_type', 'unknown')
             image_url = data.get('image_URL', '')
             image_context = data.get('image_context', '')
@@ -745,7 +1059,7 @@ def generate_html_report(alt_text_folder=None, output_filename="alt-text-report.
 
             image_cards_html += f"""
     <article class="image-card" role="article" aria-labelledby="image-{idx}-title">
-        <h2 id="image-{idx}-title">{idx}. {image_id}</h2>
+        <h3 id="image-{idx}-title">{idx}. {image_id}</h3>
 """
 
             # Conditionally add Image Preview field
@@ -2538,6 +2852,7 @@ def clear_folders(folders=None):
     debug_log(f"Starting {func_name}")
     
     try:
+        import shutil
         if folders is None:
             # Default to clearing the three main working folders
             folders = [
@@ -2556,39 +2871,36 @@ def clear_folders(folders=None):
             
             if os.path.exists(folder):
                 try:
-                    files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
-                    debug_log(f"Found {len(files)} files in {folder}")
-
-                    for filename in files:
+                    for entry in os.scandir(folder):
+                        name = entry.name
+                        path = entry.path
                         # Skip .gitkeep files and report_template.html
-                        if filename == '.gitkeep':
-                            debug_log(f"Skipping .gitkeep file: {os.path.join(folder, filename)}")
+                        if name == '.gitkeep' or name == 'report_template.html':
+                            debug_log(f"Skipping preserved file: {path}")
                             continue
-                        if filename == 'report_template.html':
-                            debug_log(f"Skipping report template: {os.path.join(folder, filename)}")
-                            continue
-                        # Also delete prompt_comparison files from reports folder
-                        # (these start with "prompt_comparison_" and have .html or .json extensions)
 
-                        filepath = os.path.join(folder, filename)
                         try:
-                            os.remove(filepath)
-                            deleted_count += 1
-                            debug_log(f"Deleted: {filepath}")
+                            if entry.is_dir(follow_symlinks=False):
+                                shutil.rmtree(path)
+                                deleted_count += 1
+                                debug_log(f"Deleted folder: {path}")
+                            else:
+                                os.remove(path)
+                                deleted_count += 1
+                                debug_log(f"Deleted file: {path}")
 
                             if CONFIG.get('logging', {}).get('show_information', True):
-                                log_message(f"Deleted: {filepath}", "INFORMATION")
-
+                                log_message(f"Deleted: {path}", "INFORMATION")
                         except PermissionError as e:
-                            handle_exception(func_name, e, f"permission denied for {filepath}")
+                            handle_exception(func_name, e, f"permission denied for {path}")
                         except Exception as e:
-                            handle_exception(func_name, e, f"deleting {filepath}")
+                            handle_exception(func_name, e, f"deleting {path}")
                     
                     deleted_counts[folder] = deleted_count
-                    debug_log(f"Cleared {deleted_count} files from '{folder}' folder")
+                    debug_log(f"Cleared {deleted_count} items from '{folder}' folder")
                     
                     if CONFIG.get('logging', {}).get('show_information', True):
-                        log_message(f"Cleared {deleted_count} files from '{folder}' folder")
+                        log_message(f"Cleared {deleted_count} items from '{folder}' folder")
                     
                 except OSError as e:
                     handle_exception(func_name, e, f"accessing folder '{folder}'")
@@ -2599,7 +2911,7 @@ def clear_folders(folders=None):
             else:
                 debug_log(f"Folder '{folder}' does not exist", "WARNING")
                 if CONFIG.get('logging', {}).get('show_warnings', True):
-                    log_message(f"Folder \'{folder}\' does not exist", "WARNING")
+                    log_message(f"Folder '{folder}' does not exist", "WARNING")
                 deleted_counts[folder] = 0
         
         total_deleted = sum(deleted_counts.values())
@@ -2613,6 +2925,47 @@ def clear_folders(folders=None):
     except Exception as e:
         handle_exception(func_name, e, "general error in clear_folders")
         return {}
+
+
+def clear_session_subfolders(base_folders=None):
+    """
+    Removes session subfolders (web-*, cli-*) under the given base folders.
+
+    Args:
+        base_folders (list): List of base folder paths to scan for session subfolders
+
+    Returns:
+        dict: Dictionary with base folder as key and number of deleted subfolders as value
+    """
+    func_name = "clear_session_subfolders"
+    debug_log(f"Starting {func_name}")
+
+    if base_folders is None:
+        base_folders = []
+
+    deleted = {}
+    try:
+        import shutil
+        for base in base_folders:
+            count = 0
+            if os.path.exists(base):
+                for name in os.listdir(base):
+                    if name.startswith("web-") or name.startswith("cli-"):
+                        path = os.path.join(base, name)
+                        if os.path.isdir(path):
+                            try:
+                                shutil.rmtree(path)
+                                count += 1
+                                debug_log(f"Deleted session folder: {path}")
+                            except Exception as e:
+                                handle_exception(func_name, e, f"deleting session folder {path}")
+            else:
+                debug_log(f"Base folder '{base}' does not exist", "WARNING")
+            deleted[base] = count
+        return deleted
+    except Exception as e:
+        handle_exception(func_name, e, "general error in clear_session_subfolders")
+        return deleted
 
 
 def generate_alt_text_json(image_filename, images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, language=None, url=None, image_url=None, image_tag_attribute=None, page_title=None, current_alt_text=None, languages=None):
@@ -2987,6 +3340,7 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         processing_time = round(time.time() - start_time, 2)
 
         json_data = {
+            "generated_timestamp": datetime.now().isoformat(),
             "web_site_url": url if url else "",
             "page_title": page_title if page_title else "",
             "image_id": image_filename,
@@ -3052,7 +3406,7 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         return (None, False)
 
 
-def process_all_images(images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, language=None, url=None, image_metadata=None, page_title=None, languages=None):
+def process_all_images(images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, language=None, url=None, image_metadata=None, page_title=None, languages=None, max_images=None):
     """
     Processes all images in the images folder, looks for corresponding context files,
     and generates JSON files for each image in the alt-text folder.
@@ -3067,6 +3421,7 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
         image_metadata (dict): Dictionary mapping filenames to {tag, attribute, url} metadata
         page_title (str): The title of the source webpage (for HTML report generation only)
         languages (list): List of ISO language codes for multilingual alt-text (overrides language if provided)
+        max_images (int): Optional limit on number of images to process
 
     Returns:
         dict: Results summary with counts of processed, successful, and failed images
@@ -3104,6 +3459,11 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
                           os.path.splitext(f.lower())[1] in image_extensions]
             
             debug_log(f"Found {len(image_files)} image files in {images_folder}")
+
+            # Apply max_images limit if provided
+            if max_images is not None:
+                image_files = image_files[:max_images]
+                debug_log(f"Limiting processing to first {len(image_files)} images (max_images={max_images})")
             
             if len(image_files) == 0:
                 warning_msg = f"No image files found in '{images_folder}' folder"
@@ -3279,6 +3639,16 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
             if CONFIG.get('logging', {}).get('show_information', True):
                 log_message(f"Auto-cleared {sum(clear_results.values())} files from all folders")
 
+            # Also remove session subfolders under images/output
+            session_bases = [
+                get_absolute_folder_path('images'),
+                get_absolute_folder_path('output')
+            ]
+            session_deleted = clear_session_subfolders(session_bases)
+            if CONFIG.get('logging', {}).get('show_information', True):
+                for base, count in session_deleted.items():
+                    log_message(f"Deleted {count} session folders under '{base}'", "INFORMATION")
+
         # Initialize log file AFTER clear operation (so it doesn't get deleted)
         log_file = initialize_log_file(url)
         if log_file:
@@ -3416,7 +3786,7 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
             print(f"\nStep 3/3: Generating JSON files for all images...")
 
         debug_log("Starting JSON generation step")
-        json_results = process_all_images(images_folder, context_folder, prompt_folder, alt_text_folder, None, url, image_metadata, page_title, languages)
+        json_results = process_all_images(images_folder, context_folder, prompt_folder, alt_text_folder, None, url, image_metadata, page_title, languages, max_images)
 
         workflow_results["steps"]["json_generation"] = json_results
         debug_log(f"JSON generation complete: {json_results.get('successful', 0)} successful, {json_results.get('failed', 0)} failed")
@@ -3474,9 +3844,14 @@ def main():
     # Note: For --generate-json and --process-all, url is treated as image_filename if no second arg provided
     parser.add_argument('url', nargs='?', help='URL to process (required for -d, -c, -w actions) OR image filename for -g action')
     parser.add_argument('image_filename', nargs='?', help='Image filename (required for -c action when URL is provided)')
+    parser.add_argument('-u', '--url', dest='url_option', help='URL to process (alias for positional URL argument)')
+    parser.add_argument('--image-name', dest='image_name', help='Image filename (alias for positional image_filename for --context)')
 
     # Action flags (mutually exclusive)
     action_group = parser.add_mutually_exclusive_group()
+    action_group.add_argument('--help-topic', type=str, metavar='TOPIC',
+                            help='Show detailed help (topics: workflow, download, context, languages, examples)')
+    # Note: -h/--help is provided by argparse and will appear first; keep help-topic near the top for visibility.
     action_group.add_argument('-d', '--download', action='store_true',
                             help='Download all images from URL')
     action_group.add_argument('-c', '--context', action='store_true',
@@ -3489,8 +3864,10 @@ def main():
                             help='Complete workflow (download → context → JSON)')
     action_group.add_argument('-al', '--all-languages', action='store_true',
                             help='List all supported languages')
-    action_group.add_argument('--help-topic', type=str, metavar='TOPIC',
-                            help='Show detailed help (topics: workflow, download, context, languages, examples)')
+    action_group.add_argument('--list-sessions', action='store_true',
+                            help='List all CLI sessions')
+    action_group.add_argument('--clear-session', type=str, metavar='SESSION_ID',
+                            help='Clear data for a specific session')
 
     # Common options
     parser.add_argument('--folder', default=None, help='Folder for images or context (used with -d or -c)')
@@ -3500,21 +3877,57 @@ def main():
     parser.add_argument('--alt-text-folder', default=None, help='Folder for JSON output (default: from config)')
     parser.add_argument('--language', nargs='+', default=None, help='One or more ISO language codes for alt-text (e.g. en es fr de)')
     parser.add_argument('--num-images', type=int, default=None, help='Maximum number of images to download')
-    parser.add_argument('--clear-all', action='store_true', help='Clear all folders (images, context, alt-text, reports, logs) without prompting')
+
+    # Session management options
+    parser.add_argument('--session', nargs='?', const='__SESSION_NEW__', default=None,
+                        help='Use specific CLI session ID (omit value to create a new session)')
+    parser.add_argument('--shared', action='store_true', help='Use shared folder (input/images/shared, output/shared)')
+    parser.add_argument('--legacy', action='store_true', help='Use legacy flat folder structure (backward compatible)')
+
+    # Clear operations
+    parser.add_argument('--clear-all', action='store_true', help='Clear all sessions (prompts for confirmation)')
     parser.add_argument('--clear-inputs', action='store_true', help='Clear input folders (images, context) without prompting')
     parser.add_argument('--clear-outputs', action='store_true', help='Clear output folders (alt-text, reports) without prompting')
+    parser.add_argument('--clear-reports', action='store_true', help='Clear reports folder only')
     parser.add_argument('--clear-log', action='store_true', help='Clear log files without prompting')
+    parser.add_argument('--force', action='store_true', help='Skip confirmation prompts (use with --clear-all or --clear-session)')
+
     parser.add_argument('--report', action='store_true', help='Generate accessible HTML report after processing')
 
     # Parse arguments
     args = parser.parse_args()
+
+    # Normalize URL: allow -u/--url as alias for positional URL
+    if getattr(args, 'url_option', None):
+        args.url = args.url_option
+    # Normalize image filename alias
+    if getattr(args, 'image_name', None) and not getattr(args, 'image_filename', None):
+        args.image_filename = args.image_name
+    # Normalize session: --session with no value means create new
+    SESSION_NEW_SENTINEL = "__SESSION_NEW__"
+    if getattr(args, 'session', None) == SESSION_NEW_SENTINEL:
+        args.session = SESSION_NEW_SENTINEL
+
+    # Handle session management commands FIRST (before other operations)
+    if args.list_sessions:
+        list_cli_sessions()
+        import sys
+        sys.exit(0)
+
+    if args.clear_session:
+        clear_cli_session(args.clear_session, force=args.force)
+        import sys
+        sys.exit(0)
 
     # Handle clear operations FIRST (before main actions)
     # These are modifier flags that should run before the main action
     clear_operation_performed = False
 
     if args.clear_all:
-        # Clear all folders (inputs + outputs + reports + logs) without prompting
+        # Clear all CLI sessions with confirmation (unless --force is used)
+        clear_all_cli_sessions(force=args.force)
+
+        # Clear all working folders (images, context, alt-text, reports, logs)
         folders_to_clear = [
             get_absolute_folder_path('images'),
             get_absolute_folder_path('context'),
@@ -3522,10 +3935,21 @@ def main():
             get_absolute_folder_path('reports'),
             get_absolute_folder_path('logs')
         ]
-        log_message("Clearing all folders (images, context, alt-text, reports, logs)...", "INFORMATION")
+        print("Clearing all folders (inputs, outputs, reports, logs)...")
         results = clear_folders(folders_to_clear)
         total_deleted = sum(results.values())
-        log_message(f"Cleared {total_deleted} files from all folders", "INFORMATION")
+        print(f"Cleared {total_deleted} files (report_template.html preserved)")
+
+        # Remove session-specific subfolders under input/output
+        session_bases = [
+            get_absolute_folder_path('images'),
+            get_absolute_folder_path('output')
+        ]
+        session_deleted = clear_session_subfolders(session_bases)
+        if CONFIG.get('logging', {}).get('show_information', True):
+            for base, count in session_deleted.items():
+                log_message(f"Deleted {count} session folders under '{base}'", "INFORMATION")
+
         clear_operation_performed = True
 
     elif args.clear_inputs:
@@ -3552,6 +3976,17 @@ def main():
         print(f"Cleared {total_deleted} files from output folders")
         clear_operation_performed = True
 
+    elif args.clear_reports:
+        # Clear only reports folder without prompting
+        folders_to_clear = [
+            get_absolute_folder_path('reports')
+        ]
+        print("Clearing reports folder...")
+        results = clear_folders(folders_to_clear)
+        total_deleted = sum(results.values())
+        print(f"Cleared {total_deleted} files from reports folder")
+        clear_operation_performed = True
+
     elif args.clear_log:
         # Clear log files without prompting
         folders_to_clear = [
@@ -3563,12 +3998,44 @@ def main():
         print(f"Cleared {total_deleted} log files")
         clear_operation_performed = True
 
+    # Resolve session folders based on session mode flags
+    # Only create session folders when needed to avoid unnecessary cli-/web- folders
+    session_folders = None
+    global CURRENT_SESSION_LOGS
+    CURRENT_SESSION_LOGS = None
+
+    # Explicit session modes
+    if getattr(args, 'legacy', False):
+        session_folders = get_cli_session_folders(legacy=True)
+        print("Using legacy folder structure (backward compatibility mode)")
+    elif getattr(args, 'shared', False):
+        session_folders = get_cli_session_folders(shared=True)
+        print("Using shared folder for collaboration")
+    elif getattr(args, 'session', None):
+        if args.session == "__SESSION_NEW__":
+            import uuid
+            new_session_id = f"cli-{uuid.uuid4()}"
+            session_folders = get_cli_session_folders(session_id=new_session_id)
+            print(f"Created new session: {new_session_id}")
+        else:
+            session_folders = get_cli_session_folders(session_id=args.session)
+            print(f"Using session: {args.session}")
+    # Default session creation for actions that need it (but not for download-only with explicit folder)
+    elif args.generate_json or args.process_all or args.workflow:
+        session_folders = get_cli_session_folders()
+        if session_folders['mode'] == 'session':
+            print(f"Using session: {session_folders['session_id']}")
+
+    # Track session-specific logs folder if available
+    if session_folders and session_folders.get('logs'):
+        CURRENT_SESSION_LOGS = session_folders['logs']
+
     # Handle main actions based on flags
     if args.download:
         # Download images action
         if not args.url:
             print("ERROR: --download requires a URL argument")
-            print("Usage: python3 app.py --download <URL> [OPTIONS]")
+            print("Usage: python3 app.py --download <URL|--url URL> [OPTIONS]")
             import sys
             sys.exit(1)
 
@@ -3578,7 +4045,22 @@ def main():
             debug_log(f"Log file created: {log_file}")
 
         debug_log(f"Starting download from URL: {args.url}")
-        folder = args.folder if args.folder else None
+        # Determine download folder priority
+        # If a session is explicitly requested (--session), use the session images folder
+        folder = None
+        if session_folders and getattr(args, 'session', None):
+            folder = session_folders['images']
+        elif args.folder:
+            folder = args.folder
+        elif getattr(args, 'images_folder', None):
+            folder = args.images_folder
+        elif session_folders:
+            folder = session_folders['images']
+        else:
+            # Create minimal session (images only) when no folder specified
+            session_folders = get_cli_session_folders(required_keys=['images'])
+            folder = session_folders['images']
+
         debug_log(f"Download folder: {folder if folder else 'images (default)'}")
         if args.num_images:
             print(f"Downloading images from: {args.url} (max {args.num_images})")
@@ -3600,12 +4082,12 @@ def main():
         # Extract context action
         if not args.url:
             print("ERROR: --context requires a URL argument")
-            print("Usage: python3 app.py --context <URL> <IMAGE_FILENAME> [OPTIONS]")
+            print("Usage: python3 app.py --context <URL|--url URL> <IMAGE_FILENAME> [OPTIONS]")
             import sys
             sys.exit(1)
         if not args.image_filename:
             print("ERROR: --context requires an image filename argument")
-            print("Usage: python3 app.py --context <URL> <IMAGE_FILENAME> [OPTIONS]")
+            print("Usage: python3 app.py --context <URL|--url URL> <IMAGE_FILENAME> [OPTIONS]")
             import sys
             sys.exit(1)
 
@@ -3617,7 +4099,14 @@ def main():
         debug_log(f"Starting context extraction for image: {args.image_filename}")
         debug_log(f"URL: {args.url}")
 
-        folder = args.folder if args.folder else None
+        # Choose context folder: explicit --folder > session context > default
+        if args.folder:
+            folder = args.folder
+        elif session_folders:
+            folder = session_folders.get('context')
+        else:
+            folder = None
+
         debug_log(f"Context folder: {folder if folder else 'context (default)'}")
         print(f"Extracting context for '{args.image_filename}' from: {args.url}")
         result = grab_context(args.image_filename, args.url, folder)
@@ -3957,7 +4446,15 @@ For more information, see AutoAltText.md
             sys.exit(1)
 
         # Check if image file exists
-        images_folder = args.images_folder if args.images_folder else get_absolute_folder_path('images')
+        # Use session folder if explicit session requested; otherwise allow overrides
+        if session_folders and getattr(args, 'session', None):
+            images_folder = session_folders['images']
+        elif args.images_folder:
+            images_folder = args.images_folder
+        elif session_folders:
+            images_folder = session_folders['images']
+        else:
+            images_folder = get_absolute_folder_path('images')
         image_path = os.path.join(images_folder, image_file)
         if not os.path.exists(image_path):
             print(f"ERROR: File '{image_file}' not found in folder '{images_folder}'")
@@ -3981,12 +4478,20 @@ For more information, see AutoAltText.md
                 print(f"Language: {args.language[0]}")
                 debug_log(f"Language: {args.language[0]}")
 
+        # Use session folders when explicit folders not provided
+        if session_folders and getattr(args, 'session', None):
+            context_folder = session_folders.get('context')
+            alt_text_folder = session_folders.get('alt_text')
+        else:
+            context_folder = args.context_folder if args.context_folder else (session_folders.get('context') if session_folders else None)
+            alt_text_folder = args.alt_text_folder if args.alt_text_folder else (session_folders.get('alt_text') if session_folders else None)
+
         result = generate_alt_text_json(
             image_file,
-            images_folder=args.images_folder,
-            context_folder=args.context_folder,
+            images_folder=images_folder,
+            context_folder=context_folder,
             prompt_folder=args.prompt_folder,
-            alt_text_folder=args.alt_text_folder,
+            alt_text_folder=alt_text_folder,
             language=None,  # language (single) - not used when languages is provided
             url=None,  # No URL for standalone generate-json
             languages=args.language
@@ -4003,6 +4508,13 @@ For more information, see AutoAltText.md
                 sys.exit(1)
             else:
                 debug_log("JSON generation completed successfully")
+                if args.report:
+                    print("\nGenerating HTML report...")
+                    report_path = generate_html_report(alt_text_folder, images_folder)
+                    if report_path:
+                        print(f"HTML report generated: {report_path}")
+                    else:
+                        print("WARNING: Failed to generate HTML report")
         else:
             debug_log("JSON generation failed")
 
@@ -4019,7 +4531,24 @@ For more information, see AutoAltText.md
             debug_log(f"Log file created: {log_file}")
 
         debug_log("Starting process-all for batch image processing")
-        images_folder = args.images_folder if args.images_folder else get_absolute_folder_path('images')
+
+        # Use session folders when explicit session provided; otherwise allow overrides
+        if session_folders and getattr(args, 'session', None):
+            images_folder = session_folders['images']
+        elif args.images_folder:
+            images_folder = args.images_folder
+        elif session_folders:
+            images_folder = session_folders['images']
+        else:
+            images_folder = get_absolute_folder_path('images')
+
+        if session_folders and getattr(args, 'session', None):
+            context_folder = session_folders.get('context')
+            alt_text_folder = session_folders.get('alt_text')
+        else:
+            context_folder = args.context_folder if args.context_folder else (session_folders.get('context') if session_folders else None)
+            alt_text_folder = args.alt_text_folder if args.alt_text_folder else (session_folders.get('alt_text') if session_folders else None)
+
         debug_log(f"Images folder: {images_folder}")
 
         print("Processing all images in folder...")
@@ -4032,15 +4561,16 @@ For more information, see AutoAltText.md
                 debug_log(f"Language: {args.language[0]}")
 
         results = process_all_images(
-            args.images_folder,
-            args.context_folder,
+            images_folder,
+            context_folder,
             args.prompt_folder,
-            args.alt_text_folder,
+            alt_text_folder,
             None,  # language (single) - not used when languages is provided
             args.url,
             None,  # image_metadata
             None,  # page_title
-            args.language  # languages
+            args.language,  # languages
+            args.num_images  # max_images
         )
 
         # Log results
@@ -4049,7 +4579,7 @@ For more information, see AutoAltText.md
         # Generate HTML report if requested
         if args.report and results.get('successful', 0) > 0:
             print("\nGenerating HTML report...")
-            report_path = generate_html_report(args.alt_text_folder)
+            report_path = generate_html_report(args.alt_text_folder, images_folder)
             if report_path:
                 print(f"HTML report generated: {report_path}")
             else:
@@ -4066,7 +4596,7 @@ For more information, see AutoAltText.md
         # Complete workflow action
         if not args.url:
             print("ERROR: --workflow requires a URL argument")
-            print("Usage: python3 app.py --workflow <URL> [OPTIONS]")
+            print("Usage: python3 app.py --workflow <URL|--url URL> [OPTIONS]")
             import sys
             sys.exit(1)
 
@@ -4082,12 +4612,17 @@ For more information, see AutoAltText.md
             else:
                 log_message(f"Language: {args.language[0]}", "INFORMATION")
 
+        # Prefer session folders when explicit session is provided
+        auto_images = session_folders['images'] if (session_folders and getattr(args, 'session', None)) else args.images_folder
+        auto_context = session_folders.get('context') if (session_folders and getattr(args, 'session', None)) else args.context_folder
+        auto_alt_text = session_folders.get('alt_text') if (session_folders and getattr(args, 'session', None)) else args.alt_text_folder
+
         results = AutoAltText(
             args.url,
-            args.images_folder,
-            args.context_folder,
+            auto_images,
+            auto_context,
             args.prompt_folder,
-            args.alt_text_folder,
+            auto_alt_text,
             args.clear_all,
             args.num_images,
             args.language
@@ -4097,7 +4632,7 @@ For more information, see AutoAltText.md
         if args.report and results.get('status') == 'completed':
             print("\nGenerating HTML report...")
             page_title = results.get('page_title', '')
-            report_path = generate_html_report(args.alt_text_folder, page_title=page_title)
+            report_path = generate_html_report(args.alt_text_folder, images_folder=args.images_folder, page_title=page_title)
             if report_path:
                 print(f"HTML report generated: {report_path}")
             else:

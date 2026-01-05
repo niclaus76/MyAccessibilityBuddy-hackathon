@@ -39,7 +39,8 @@ TASK_FAMILY="${TASK_FAMILY:-myaccessibilitybuddy-task}"
 FRONTEND_DIR="${FRONTEND_DIR:-/home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy/frontend}"
 
 # Options
-MODE="full"  # full, frontend, backend, ecs, verify, check-invalidation, run-tests
+MODE="full"  # full, frontend, backend, ecs, verify, check-invalidation, verify-ecs, run-tests
+DEPLOY_TARGET="remote" # remote, local
 TEST_MODE=false
 FAST_MODE=false
 FROM_VM=false
@@ -132,9 +133,9 @@ display_parallel_progress() {
         show_progress_bar "⚙️  Backend" "$backend_progress" 100
         echo ""
     elif [ "$backend_status" = "done" ]; then
-        printf "${GREEN}%-20s [COMPLETE] ✓${NC}\n" "⚙️  Backend"
+        printf "${CYAN}%-20s${NC} ${GREEN}[COMPLETE] ✔${NC}\n" "⚙️  Backend"
     else
-        printf "${RED}%-20s [FAILED] ✗${NC}\n" "⚙️  Backend"
+        printf "${CYAN}%-20s${NC} ${RED}[FAILED] ✖${NC}\n" "⚙️  Backend"
     fi
 
     # Frontend progress
@@ -142,9 +143,9 @@ display_parallel_progress() {
         show_progress_bar "🌐 Frontend" "$frontend_progress" 100
         echo ""
     elif [ "$frontend_status" = "done" ]; then
-        printf "${GREEN}%-20s [COMPLETE] ✓${NC}\n" "🌐 Frontend"
+        printf "${CYAN}%-20s${NC} ${GREEN}[COMPLETE] ✔${NC}\n" "🌐 Frontend"
     else
-        printf "${RED}%-20s [FAILED] ✗${NC}\n" "🌐 Frontend"
+        printf "${CYAN}%-20s${NC} ${RED}[FAILED] ✖${NC}\n" "🌐 Frontend"
     fi
 
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -161,15 +162,20 @@ ${BLUE}╔═══════════════════════�
 ╚════════════════════════════════════════════════════════════════╝${NC}
 
 ${GREEN}USAGE:${NC}
-    $0 [MODE] [OPTIONS]
+    $0 [TARGET] [MODE] [OPTIONS]
 
-${GREEN}MODES (choose one):${NC}
+${GREEN}DEPLOYMENT TARGETS (choose one):${NC}
+    --remote                (default) Deploy to remote AWS environment (ECR, ECS, S3)
+    --local                 Update the local development container via docker-compose
+
+${GREEN}MODES (for --remote target):${NC}
     (default)               Full deployment: Backend (ECR+ECS) + Frontend (S3+CloudFront)
     --frontend              Frontend only: S3 sync + CloudFront invalidation
     --backend               Backend only: Docker build + ECR push + ECS deploy
     --ecs                   ECS update only: Deploy existing image to service
     --from-vm               Copy from VM first, then full deployment
     --verify-assets         Verify frontend assets (favicons, manifests, CDN fixes)
+    --verify-ecs            Verify ECS deployment and check if running latest image
     --check-invalidation    Check CloudFront invalidation status
     --run-tests             Run comprehensive test suite on this script
 
@@ -184,35 +190,26 @@ ${GREEN}OPTIONS:${NC}
     -h, --help              Show this help message
 
 ${GREEN}EXAMPLES:${NC}
+    # Update local container
+    $0 --local
+
     # Verify frontend assets before deployment
-    $0 --verify-assets
+    $0 --remote --verify-assets
 
     # Check CloudFront invalidation status
-    $0 --check-invalidation
+    $0 --remote --check-invalidation
 
     # Preview frontend changes
-    $0 --frontend --test
+    $0 --remote --frontend --test
 
     # Deploy frontend only
-    $0 --frontend
+    $0 --remote --frontend
 
     # Deploy backend only (fast mode)
-    $0 --backend --fast
-
-    # Update ECS service only
-    $0 --ecs
+    $0 --remote --backend --fast
 
     # Full deployment from VM
-    $0 --from-vm
-
-    # Full deployment with specific tag
-    $0 --tag v1.2.3
-
-    # Run with detailed debug output
-    $0 --frontend --debug
-
-    # Run in quiet mode (errors only)
-    $0 --backend --quiet
+    $0 --remote --from-vm
 
 ${GREEN}DEPLOYMENT MODES EXPLAINED:${NC}
 
@@ -221,7 +218,7 @@ ${GREEN}DEPLOYMENT MODES EXPLAINED:${NC}
       • Backend: Build Docker → Push to ECR → Update ECS → Monitor
       • Frontend: Sync to S3 → Invalidate CloudFront
       ⏱️  Duration: ~8-12 minutes (backend + frontend run concurrently)
-      🚀 Up to 40% faster than sequential deployment
+      ⚡ Up to 40% faster than sequential deployment
 
     ${CYAN}Frontend (--frontend):${NC}
       1. Detect changed files
@@ -241,12 +238,12 @@ ${GREEN}DEPLOYMENT MODES EXPLAINED:${NC}
       1. Update ECS task definition
       2. Deploy to ECS service
       3. Monitor deployment
-      🚀 Duration: ~3-5 minutes
+      ⏱️  Duration: ~3-5 minutes
 
     ${CYAN}From VM (--from-vm):${NC}
       1. Copy files from VM via SCP
       2. Parallel backend + frontend deployment
-      📦 Duration: ~10-15 minutes (includes file transfer + parallel deployment)
+      ⏱️  Duration: ~10-15 minutes (includes file transfer + parallel deployment)
 
     ${CYAN}Verify Assets (--verify-assets):${NC}
       Check frontend files and configuration:
@@ -254,6 +251,14 @@ ${GREEN}DEPLOYMENT MODES EXPLAINED:${NC}
       • Manifest files (site.webmanifest, browserconfig.xml)
       • HTML meta tags and CDN configurations
       ✓ Run before deployment to catch issues early
+
+    ${CYAN}Verify ECS (--verify-ecs):${NC}
+      Verify ECS deployment status:
+      • Check service health and task status
+      • Compare current image with latest ECR image
+      • Verify load balancer target health
+      • Test health endpoint
+      ✓ Run after deployment to confirm success
 
     ${CYAN}Check Invalidation (--check-invalidation):${NC}
       Monitor CloudFront cache invalidation:
@@ -287,17 +292,14 @@ ${GREEN}CONFIGURATION:${NC}
 
 ${GREEN}COMMON WORKFLOWS:${NC}
 
-    ${YELLOW}HTML/CSS/JS changes:${NC} $0 --frontend
-
-    ${YELLOW}Backend API changes:${NC} $0 --backend
-
-    ${YELLOW}Emergency hotfix:${NC} $0 --fast
-
+    ${YELLOW}test HTML/CSS/JS changes:${NC} $0 --frontend
+    ${YELLOW}test Backend API changes:${NC} $0 --backend
+    ${YELLOW}test Emergency hotfix:${NC} $0 --fast
     ${YELLOW}New feature (backend + frontend):${NC} $0
-
-${GREEN}ADDITIONAL UTILITIES:${NC}
-    $0 --check-invalidation   - Monitor CloudFront cache status
-    $0 --verify-assets        - Validate frontend assets before deployment
+    ${YELLOW}Validate frontend assets:${NC} $0 --verify-assets
+    ${YELLOW}Verify ECS deployment:${NC} $0 --verify-ecs
+    ${YELLOW}Monitor CloudFront cache:${NC} $0 --check-invalidation
+    ${YELLOW}Run test suite:${NC} $0 --run-tests
 
 EOF
     exit 0
@@ -306,6 +308,14 @@ EOF
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --local)
+            DEPLOY_TARGET="local"
+            shift
+            ;;
+        --remote)
+            DEPLOY_TARGET="remote"
+            shift
+            ;;
         --frontend)
             MODE="frontend"
             shift
@@ -328,6 +338,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --check-invalidation)
             MODE="check-invalidation"
+            shift
+            ;;
+        --verify-ecs)
+            MODE="verify-ecs"
             shift
             ;;
         --run-tests)
@@ -418,6 +432,9 @@ case $MODE in
     check-invalidation)
         print_info "Mode: CHECK CLOUDFRONT INVALIDATION"
         ;;
+    verify-ecs)
+        print_info "Mode: VERIFY ECS DEPLOYMENT"
+        ;;
     run-tests)
         print_info "Mode: RUN TEST SUITE"
         ;;
@@ -442,6 +459,57 @@ echo ""
 
 # Start timer
 START_TIME=$(date +%s)
+
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# LOCAL DEPLOYMENT
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+deploy_local() {
+    print_header "LOCAL CONTAINER DEPLOYMENT"
+
+    print_info "Checking prerequisites..."
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker is not installed"
+        return 1
+    fi
+    if ! docker info &> /dev/null; then
+        print_error "Docker is not running"
+        return 1
+    fi
+
+    local compose_cmd=""
+    if command -v docker-compose &> /dev/null; then
+        compose_cmd="docker-compose"
+    elif docker compose version &> /dev/null; then
+        compose_cmd="docker compose"
+    else
+        print_error "docker-compose or 'docker compose' command not found."
+        return 1
+    fi
+    print_success "Prerequisites satisfied"
+
+    if [ ! -f "docker-compose.yml" ]; then
+        print_error "docker-compose.yml not found in current directory."
+        return 1
+    fi
+
+    if [ "$TEST_MODE" = true ]; then
+        print_info "Test mode: Would run '$compose_cmd up -d --build'"
+        return 0
+    fi
+
+    echo ""
+    print_info "Building and restarting local container..."
+    if $compose_cmd up -d --build; then
+        print_success "Local container updated successfully"
+        echo ""
+        print_info "MyAccessibilityBuddy is running."
+        print_info "Backend API available at: http://localhost:8000"
+        print_info "Health check: http://localhost:8000/api/health"
+    else
+        print_error "Local container update failed"
+        return 1
+    fi
+}
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # FRONTEND DEPLOYMENT
@@ -1134,6 +1202,273 @@ verify_frontend_assets() {
 }
 
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# VERIFY ECS DEPLOYMENT
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verify_ecs_deployment() {
+    print_header "ECS DEPLOYMENT VERIFICATION"
+
+    print_info "Cluster: $ECS_CLUSTER"
+    print_info "Service: $ECS_SERVICE"
+    print_info "Region:  $AWS_REGION"
+    echo ""
+
+    local all_good=true
+
+    # 1. Check ECS Service Status
+    print_info "1. Checking ECS Service Status..."
+    local service_info
+    service_info=$(aws ecs describe-services \
+        --cluster "$ECS_CLUSTER" \
+        --services "$ECS_SERVICE" \
+        --region "$AWS_REGION" \
+        --query 'services[0]' \
+        --output json 2>/dev/null)
+
+    if [ $? -ne 0 ] || [ -z "$service_info" ] || [ "$service_info" = "null" ]; then
+        print_error "Failed to retrieve service information"
+        return 1
+    fi
+
+    local running_count desired_count deployment_status
+    running_count=$(echo "$service_info" | jq -r '.runningCount // 0')
+    desired_count=$(echo "$service_info" | jq -r '.desiredCount // 0')
+    deployment_status=$(echo "$service_info" | jq -r '.deployments[0].rolloutState // "UNKNOWN"')
+
+    echo "   Running tasks: $running_count / $desired_count"
+    echo "   Deployment status: $deployment_status"
+
+    if [ "$running_count" = "$desired_count" ] && [ "$deployment_status" = "COMPLETED" ]; then
+        print_success "Service is healthy and deployment is complete"
+    else
+        print_warning "Service deployment may still be in progress"
+        all_good=false
+    fi
+    echo ""
+
+    # 2. Get Current Task Definition and Image
+    print_info "2. Checking Current Task Definition..."
+    local task_def_arn current_image
+    task_def_arn=$(echo "$service_info" | jq -r '.taskDefinition')
+
+    if [ -z "$task_def_arn" ] || [ "$task_def_arn" = "null" ]; then
+        print_error "Could not retrieve task definition ARN"
+        return 1
+    fi
+
+    local task_def
+    task_def=$(aws ecs describe-task-definition \
+        --task-definition "$task_def_arn" \
+        --region "$AWS_REGION" \
+        --query 'taskDefinition' \
+        --output json 2>/dev/null)
+
+    current_image=$(echo "$task_def" | jq -r '.containerDefinitions[0].image')
+    echo "   Current ECS image: $current_image"
+    print_success "Task definition retrieved"
+    echo ""
+
+    # 3. Get Latest ECR Image
+    print_info "3. Checking Latest ECR Image..."
+    local account_id latest_image_info latest_image_tag latest_image_digest latest_image_pushed
+    account_id=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
+
+    if [ -z "$account_id" ]; then
+        print_warning "Could not retrieve AWS account ID"
+    else
+        print_debug "Account ID: $account_id"
+    fi
+
+    latest_image_info=$(aws ecr describe-images \
+        --repository-name "$ECR_REPO" \
+        --region "$AWS_REGION" \
+        --query 'sort_by(imageDetails,& imagePushedAt)[-1]' \
+        --output json 2>/dev/null)
+
+    if [ $? -eq 0 ] && [ -n "$latest_image_info" ] && [ "$latest_image_info" != "null" ]; then
+        latest_image_tag=$(echo "$latest_image_info" | jq -r '.imageTags[0] // "untagged"')
+        latest_image_digest=$(echo "$latest_image_info" | jq -r '.imageDigest')
+        latest_image_pushed=$(echo "$latest_image_info" | jq -r '.imagePushedAt')
+
+        local latest_image="$ECR_REGISTRY/$ECR_REPO:$latest_image_tag"
+        echo "   Latest ECR image: $latest_image"
+        echo "   Digest: ${latest_image_digest:0:20}..."
+        echo "   Pushed: $(date -d "$latest_image_pushed" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$latest_image_pushed")"
+        print_success "Latest ECR image retrieved"
+    else
+        print_warning "Could not retrieve latest ECR image information"
+        latest_image=""
+        all_good=false
+    fi
+    echo ""
+
+    # 4. Compare Images
+    print_info "4. Comparing Images..."
+    if [ -n "$latest_image" ]; then
+        # Extract current image digest if it's using @sha256
+        local current_image_digest
+        if [[ "$current_image" == *"@sha256:"* ]]; then
+            current_image_digest=$(echo "$current_image" | grep -o 'sha256:[a-f0-9]*')
+            echo "   ECS using digest:  $current_image_digest"
+            echo "   Latest digest:     $latest_image_digest"
+
+            if [ "$current_image_digest" = "$latest_image_digest" ]; then
+                print_success "ECS is running the LATEST image (digest match)!"
+            else
+                print_warning "Image digest mismatch - ECS may be running an older version"
+                all_good=false
+            fi
+        else
+            # Compare by tag
+            if [ "$current_image" = "$latest_image" ]; then
+                print_success "ECS is running the LATEST image (tag match)!"
+            else
+                print_warning "Image mismatch detected:"
+                echo "   ECS image:    $current_image"
+                echo "   Latest image: $latest_image"
+                all_good=false
+            fi
+        fi
+    fi
+    echo ""
+
+    # 5. Get Running Tasks Details
+    print_info "5. Checking Running Tasks..."
+    local task_arns
+    task_arns=$(aws ecs list-tasks \
+        --cluster "$ECS_CLUSTER" \
+        --service-name "$ECS_SERVICE" \
+        --region "$AWS_REGION" \
+        --query 'taskArns' \
+        --output json 2>/dev/null)
+
+    local task_count
+    task_count=$(echo "$task_arns" | jq 'length // 0')
+    echo "   Number of running tasks: $task_count"
+
+    if [ "$task_count" -gt 0 ]; then
+        local tasks
+        tasks=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks $(echo "$task_arns" | jq -r '.[]') \
+            --region "$AWS_REGION" \
+            --query 'tasks' \
+            --output json 2>/dev/null)
+
+        if [ $? -eq 0 ]; then
+            echo ""
+            echo "$tasks" | jq -r '.[] |
+                "   Task: " + (.taskArn | split("/")[-1]) + "\n" +
+                "   Status: " + .lastStatus + "\n" +
+                "   Health: " + (.healthStatus // "N/A") + "\n" +
+                "   Started: " + (.startedAt // "N/A") + "\n"'
+            print_success "Task details retrieved"
+        fi
+    else
+        print_warning "No tasks currently running"
+        all_good=false
+    fi
+    echo ""
+
+    # 6. Get Load Balancer Target Health
+    print_info "6. Checking Load Balancer Target Health..."
+    local target_group_arn
+    target_group_arn=$(echo "$service_info" | jq -r '.loadBalancers[0].targetGroupArn // empty')
+
+    if [ -n "$target_group_arn" ]; then
+        local target_health
+        target_health=$(aws elbv2 describe-target-health \
+            --target-group-arn "$target_group_arn" \
+            --region "$AWS_REGION" \
+            --query 'TargetHealthDescriptions' \
+            --output json 2>/dev/null)
+
+        if [ $? -eq 0 ] && [ -n "$target_health" ]; then
+            echo ""
+            echo "$target_health" | jq -r '.[] |
+                "   Target: " + .Target.Id + "\n" +
+                "   Health: " + .TargetHealth.State + "\n" +
+                "   Reason: " + (.TargetHealth.Reason // "N/A") + "\n"'
+
+            local healthy_count total_count
+            healthy_count=$(echo "$target_health" | jq '[.[] | select(.TargetHealth.State == "healthy")] | length')
+            total_count=$(echo "$target_health" | jq 'length')
+
+            if [ "$healthy_count" = "$total_count" ] && [ "$total_count" -gt 0 ]; then
+                print_success "All targets are healthy ($healthy_count/$total_count)"
+            else
+                print_warning "Some targets are not healthy ($healthy_count/$total_count)"
+                all_good=false
+            fi
+        fi
+    else
+        print_info "No load balancer configured for this service"
+    fi
+    echo ""
+
+    # 7. Check Recent Service Events
+    print_info "7. Recent Service Events (last 5)..."
+    echo "$service_info" | jq -r '.events[:5] | .[] | "   [" + .createdAt + "] " + .message'
+    echo ""
+
+    # 8. Test Service Endpoint (if available)
+    print_info "8. Testing Service Endpoint..."
+    local task_arn
+    task_arn=$(echo "$task_arns" | jq -r '.[0] // empty')
+
+    if [ -n "$task_arn" ]; then
+        local task_details public_ip
+        task_details=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$task_arn" \
+            --region "$AWS_REGION" \
+            --output json 2>/dev/null)
+
+        public_ip=$(echo "$task_details" | jq -r '.tasks[0].attachments[0].details[] | select(.name=="publicIPv4Address") | .value // empty')
+
+        if [ -n "$public_ip" ] && [ "$public_ip" != "null" ]; then
+            echo "   Public IP: $public_ip"
+            echo "   Testing: http://$public_ip:8000/api/health"
+
+            if curl -f -s --max-time 5 "http://$public_ip:8000/api/health" > /dev/null 2>&1; then
+                print_success "Health check endpoint is responding!"
+            else
+                print_warning "Health check endpoint not responding (service may still be starting)"
+                all_good=false
+            fi
+        else
+            print_info "No public IP available for health check"
+        fi
+    fi
+    echo ""
+
+    # Summary
+    print_header "VERIFICATION SUMMARY"
+    echo ""
+
+    if [ "$all_good" = true ]; then
+        print_success "✅ ECS deployment is up-to-date and healthy!"
+        echo ""
+        echo "Your service is:"
+        echo "  ✓ Running the latest image"
+        echo "  ✓ All tasks are healthy"
+        echo "  ✓ Deployment is complete"
+        echo "  ✓ Load balancer targets are healthy"
+        echo ""
+        return 0
+    else
+        print_warning "⚠️  ECS deployment verification found some issues"
+        echo ""
+        echo "Review the details above to identify any problems."
+        echo "Common issues:"
+        echo "  • Deployment still in progress (wait a few minutes)"
+        echo "  • Image mismatch (may need to redeploy)"
+        echo "  • Health checks failing (check application logs)"
+        echo ""
+        return 1
+    fi
+}
+
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # CHECK CLOUDFRONT INVALIDATION
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 check_cloudfront_invalidation() {
@@ -1422,7 +1757,7 @@ copy_from_vm() {
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Confirmation (skip in test mode and utility modes)
-if [ "$TEST_MODE" = false ] && [ "$MODE" != "verify" ] && [ "$MODE" != "check-invalidation" ] && [ "$MODE" != "run-tests" ]; then
+if [ "$TEST_MODE" = false ] && [ "$MODE" != "verify" ] && [ "$MODE" != "check-invalidation" ] && [ "$MODE" != "verify-ecs" ] && [ "$MODE" != "run-tests" ]; then
     echo -n "Continue with deployment? (y/n): "
     read -r response
     if [[ ! "$response" =~ ^[Yy]$ ]]; then
@@ -1446,6 +1781,11 @@ case $MODE in
 
     check-invalidation)
         check_cloudfront_invalidation
+        exit $?
+        ;;
+
+    verify-ecs)
+        verify_ecs_deployment
         exit $?
         ;;
 
@@ -1494,7 +1834,7 @@ case $MODE in
                     echo "60" > "$BACKEND_PROGRESS_FILE"  # Build complete
                     deploy_ecs
                 }
-                local exit_code=$?
+                exit_code=$?
                 echo "100" > "$BACKEND_PROGRESS_FILE"  # Complete
                 echo $exit_code > "$BACKEND_STATUS_FILE"
             } > "$BACKEND_LOG" 2>&1
@@ -1506,7 +1846,7 @@ case $MODE in
             {
                 echo "10" > "$FRONTEND_PROGRESS_FILE"  # Starting
                 deploy_frontend
-                local exit_code=$?
+                exit_code=$?
                 echo "100" > "$FRONTEND_PROGRESS_FILE"  # Complete
                 echo $exit_code > "$FRONTEND_STATUS_FILE"
             } > "$FRONTEND_LOG" 2>&1
@@ -1659,4 +1999,4 @@ else
 fi
 
 echo ""
-print_success "Done! 🚀"
+print_success "Done!"

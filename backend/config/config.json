@@ -5,8 +5,8 @@
   "debug_mode": true,
   "_comment_logging": "Control console output by log level: DEBUG (technical details), INFORMATION (informational messages), WARNING (warnings/potential issues), ERROR (errors/failures)",
   "logging": {
-    "show_debug": false,
-    "show_information": false,
+    "show_debug": true,
+    "show_information": true,
     "show_warnings": true,
     "show_errors": true
   },

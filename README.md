@@ -14,14 +14,15 @@ MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant conte
 - 🔬 **[For AI Engineers](#for-ai-engineers-batch-prompt-comparison-tool)**: Compare and optimize prompt templates with batch testing tools
 
 ### Core Capabilities
+- 🧠 **Context aware**: Uses page context to refine descriptions
+- 📍 **GEO boost**: Handles geo-tagged or location-specific cues
+- 🔒 **Privacy**: Use local AI models trough Ollama 
+- 🤖 **AI providers**: OpenAI GPT-4o/5.1/5.2, Claude Sonnet-4/Opus-4, ECB-LLM, or Ollama (local)
+- ♿ **WCAG 2.2 compliant**: Follows accessibility standards
 - 🖼️ **Multi-format support**: JPG, PNG, GIF, WEBP, SVG, BMP, TIFF
 - 🌍 **24 EU languages**: Multilingual alt-text generation
 - 🔄 **Multiple interfaces**: CLI, Web UI, REST API
-- 🤖 **AI providers**: OpenAI GPT-4o/5.1/5.2, Claude Sonnet-4/Opus-4, ECB-LLM, or Ollama (local)
-- 📊 **Batch processing**: Process multiple images at once
-- 📈 **HTML reports**: Accessible reports with detailed analysis
-- 🌐 **Web scraping**: Extract images and context from websites
-- ♿ **WCAG 2.2 compliant**: Follows accessibility standards
+
 
 ## Quick Start with Docker 🐳
 
@@ -62,21 +63,38 @@ Open http://localhost:8080/home.html
 2. Select language(s)
 3. Click "Generate Alt Text"
 
-# For accessibility complaince tests, using CLI (Docker)
-docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -g test/input/images/1.png --language en
+# To clean all temporary files 
+docker exec myaccessibilitybuddy python3 backend/app.py --clear-all --force
 
-# or using context file for better results
-docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -g test/input/images/1.png -c test/input/context/1.txt --language en
+Open browser DevTools (F12)
+Go to Storage tab → Cookies
+Delete the web_session_id cookie
+Refresh the page
 
-# or for Multiple languages
-docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -g test/input/images/1.png --language en es de
+# To clean a spcific session
+To see all available sessions:
+docker exec myaccessibilitybuddy python3 backend/app.py --list-session
+
+# For accessibility compliance tests, using CLI (Docker)
+1) Download images from a URL into a folder
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -d --url https://ecb.europa.eu --images-folder /app/input/images --num-images 2 --clear-all --force
+
+2) Extract context for a specific image from a URL
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -c --url https://ecb.europa.eu --image-name ECB_Eurosystem_OneLineLogo_Mobile_EN.svg --clear-all --force
+
+3) Generate a JSON description starting from an image and its context
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py --legacy -g 1.png --images-folder /app/test/input/images --context-folder /app/test/input/context --language en --report --clear-all --force
+
+4) Process all images in a folder using the context stored in another folder
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py --legacy -p --images-folder /app/test/input/images --num-images 2 --context-folder /app/test/input/context --language en --report --clear-all --force
+
+5) Full workflow: download images and context from a given URL and generates the report
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -w --url https://ecb.europa.eu --num-images 2 --language en --report --clear-all --force 
 
 # For AI engineers: Batch Prompt Comparison Tool
 # Run with default config (compares prompts v0-v4 on test images)
 docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
 ```
-
-
 
 #### Configuration
 
@@ -116,20 +134,7 @@ docker compose exec myaccessibilitybuddy python3 /app/backend/app.py --url https
 
 #### Configuration
 
-Edit `backend/config/config.advanced.json` for scraping settings:
-
-```json
-{
-  "download": {
-    "timeout": 30,
-    "delay_between_requests": 3
-  },
-  "image_extraction": {
-    "tags": {"img": true, "picture": true},
-    "css_background_images": true
-  }
-}
-```
+Edit `backend/config/config.advanced.json` for advanced settings.
 
 #### Example Output
 

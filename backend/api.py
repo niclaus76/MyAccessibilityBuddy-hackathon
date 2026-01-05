@@ -4,7 +4,7 @@ FastAPI application for AutoAltText.
 Provides REST API endpoints for alt-text generation.
 """
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from pydantic import BaseModel
@@ -110,6 +110,23 @@ app.add_middleware(
 async def startup_event():
     """Load configuration when API starts."""
     load_config()
+    # Schedule session cleanup task
+    import asyncio
+    asyncio.create_task(periodic_session_cleanup())
+
+async def periodic_session_cleanup():
+    """
+    Periodically clean up old sessions.
+    Runs every hour and removes sessions older than 24 hours.
+    """
+    import asyncio
+    while True:
+        try:
+            cleanup_old_sessions(max_age_hours=24)
+        except Exception as e:
+            print(f"Error during session cleanup: {e}")
+        # Wait 1 hour before next cleanup
+        await asyncio.sleep(3600)
 
 
 # In-memory session storage for U2A credentials
@@ -119,6 +136,187 @@ USER_SESSIONS = {}
 # OAuth2 state storage (for CSRF protection)
 # Maps state string -> session_id
 OAUTH_STATES = {}
+
+# Session data storage for web app uploads
+# Maps session_id -> {"created": timestamp, "last_accessed": timestamp}
+WEB_APP_SESSIONS = {}
+
+def get_or_create_session_id(request: Request) -> str:
+    """
+    Get existing session ID from cookie or create a new one.
+    Session IDs are prefixed with 'web-' to distinguish from CLI sessions.
+
+    Sessions persist across container restarts by checking folder existence on disk.
+
+    Args:
+        request: FastAPI Request object
+
+    Returns:
+        str: Session ID with 'web-' prefix
+    """
+    session_id = request.cookies.get("web_session_id")
+
+    # Check if session exists (either in memory or on disk)
+    if session_id:
+        # Validate session exists on disk
+        base_images = get_absolute_folder_path('images')
+        session_image_folder = os.path.join(base_images, session_id)
+
+        if os.path.exists(session_image_folder):
+            # Session exists on disk, restore to memory if needed
+            if session_id not in WEB_APP_SESSIONS:
+                WEB_APP_SESSIONS[session_id] = {
+                    "created": datetime.now(),
+                    "last_accessed": datetime.now(),
+                    "type": "web"
+                }
+            else:
+                # Update last accessed time
+                WEB_APP_SESSIONS[session_id]["last_accessed"] = datetime.now()
+
+            return session_id
+
+    # No valid session found, create new one
+    session_id = f"web-{uuid.uuid4()}"
+    WEB_APP_SESSIONS[session_id] = {
+        "created": datetime.now(),
+        "last_accessed": datetime.now(),
+        "type": "web"
+    }
+
+    return session_id
+
+def get_session_type(session_id: str) -> str:
+    """
+    Determine session type from session ID prefix.
+
+    Args:
+        session_id: Session ID (e.g., 'web-abc123' or 'cli-def456')
+
+    Returns:
+        str: Session type ('web', 'cli', or 'unknown')
+    """
+    if session_id.startswith('web-'):
+        return 'web'
+    elif session_id.startswith('cli-'):
+        return 'cli'
+    else:
+        return 'unknown'
+
+def get_session_folders(session_id: str) -> dict:
+    """
+    Get session-specific folder paths for images and alt-text output.
+    Supports both web- and cli- prefixed session IDs.
+
+    Args:
+        session_id: Session ID with prefix (e.g., 'web-abc123')
+
+    Returns:
+        dict: Dictionary with 'images', 'alt_text' folder paths, and 'type'
+    """
+    # Get base folders from config
+    base_images_folder = get_absolute_folder_path('images')
+    base_output_folder = get_absolute_folder_path('output/alt-text')
+
+    # Create session-specific subfolders (session_id already has prefix)
+    session_images_folder = os.path.join(base_images_folder, session_id)
+    session_output_folder = os.path.join(base_output_folder, session_id)
+
+    # Ensure folders exist
+    os.makedirs(session_images_folder, exist_ok=True)
+    os.makedirs(session_output_folder, exist_ok=True)
+
+    return {
+        "images": session_images_folder,
+        "alt_text": session_output_folder,
+        "type": get_session_type(session_id),
+        "session_id": session_id
+    }
+
+def cleanup_old_sessions(max_age_hours: int = 24, session_type: str = None):
+    """
+    Clean up session folders older than max_age_hours.
+    Supports filtering by session type (web, cli) via prefix.
+
+    Args:
+        max_age_hours: Maximum age in hours before session is cleaned up
+        session_type: Filter by session type ('web', 'cli', or None for all)
+    """
+    import shutil
+
+    cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
+    sessions_to_remove = []
+
+    for session_id, session_data in WEB_APP_SESSIONS.items():
+        # Filter by session type if specified
+        if session_type and not session_id.startswith(f"{session_type}_"):
+            continue
+
+        if session_data["last_accessed"] < cutoff_time:
+            sessions_to_remove.append(session_id)
+
+    # Remove old sessions
+    removed_count = 0
+    for session_id in sessions_to_remove:
+        try:
+            # Remove session folders
+            folders = get_session_folders(session_id)
+            for key, folder in folders.items():
+                if key in ['images', 'alt_text'] and os.path.exists(folder):
+                    shutil.rmtree(folder)
+                    removed_count += 1
+
+            # Remove from session storage
+            del WEB_APP_SESSIONS[session_id]
+        except Exception as e:
+            print(f"Error cleaning up session {session_id}: {e}")
+
+    if removed_count > 0:
+        session_filter = f"{session_type} " if session_type else ""
+        print(f"Cleaned up {removed_count} old {session_filter}session folder(s)")
+
+def count_sessions_by_type() -> dict:
+    """
+    Count active sessions by type.
+
+    Returns:
+        dict: Session counts by type {'web': count, 'cli': count, 'total': count}
+    """
+    counts = {'web': 0, 'cli': 0, 'unknown': 0}
+
+    for session_id in WEB_APP_SESSIONS.keys():
+        session_type = get_session_type(session_id)
+        counts[session_type] = counts.get(session_type, 0) + 1
+
+    counts['total'] = sum(counts.values())
+    return counts
+
+def list_active_sessions(session_type: str = None) -> list:
+    """
+    List active sessions, optionally filtered by type.
+
+    Args:
+        session_type: Filter by type ('web', 'cli', or None for all)
+
+    Returns:
+        list: List of session info dicts
+    """
+    sessions = []
+
+    for session_id, session_data in WEB_APP_SESSIONS.items():
+        # Filter by type if specified
+        if session_type and not session_id.startswith(f"{session_type}_"):
+            continue
+
+        sessions.append({
+            'session_id': session_id,
+            'type': get_session_type(session_id),
+            'created': session_data['created'].isoformat(),
+            'last_accessed': session_data['last_accessed'].isoformat(),
+            'age_hours': (datetime.now() - session_data['created']).total_seconds() / 3600
+        })
+
+    return sorted(sessions, key=lambda x: x['last_accessed'], reverse=True)
 
 # Response models
 class AltTextResponse(BaseModel):
@@ -507,9 +705,10 @@ async def get_available_providers():
     }
 
 
-@app.post("/api/generate-alt-text", response_model=AltTextResponse)
+@app.post("/api/generate-alt-text")
 async def generate_alt_text(
     request: Request,
+    response: Response,
     image: UploadFile = File(..., description="Image file to analyze"),
     language: str = Form("en", description="Language code (en, it, de, fr, etc.)"),
     context: Optional[str] = Form(None, description="Optional context about the image"),
@@ -593,6 +792,18 @@ async def generate_alt_text(
         if 'translation' not in CONFIG['steps']:
             CONFIG['steps']['translation'] = {}
         CONFIG['steps']['translation']['model'] = translation_model
+
+    # Get or create session ID
+    session_id = get_or_create_session_id(request)
+
+    # Set session cookie in response
+    response.set_cookie(
+        key="web_session_id",
+        value=session_id,
+        max_age=86400,  # 24 hours
+        httponly=True,
+        samesite="lax"
+    )
 
     # Create temporary directories for processing
     tmp_dir = tempfile.mkdtemp(prefix='myaccessibilitybuddy_')
@@ -685,17 +896,27 @@ async def generate_alt_text(
         # Get image_id from result
         image_id = result.get('image_id', image_filename)
 
-        # Copy JSON to permanent output/alt-text directory
-        permanent_output_dir = get_absolute_folder_path('output/alt-text')
-        os.makedirs(permanent_output_dir, exist_ok=True)
+        # Get session-specific folders
+        session_folders = get_session_folders(session_id)
+
+        # Copy JSON to session-specific output folder
+        permanent_output_dir = session_folders['alt_text']
 
         # Generate permanent filename based on image_id and language
         image_name_without_ext = os.path.splitext(image_id)[0]
         permanent_json_filename = f"{image_name_without_ext}_{language}.json"
         permanent_json_path = os.path.join(permanent_output_dir, permanent_json_filename)
 
-        # Copy the JSON file to permanent location
+        # Copy the JSON file to session folder
         shutil.copy2(json_path, permanent_json_path)
+
+        # Copy the image to session-specific images folder for report generation
+        permanent_images_dir = session_folders['images']
+        permanent_image_path = os.path.join(permanent_images_dir, image_id)
+
+        # Always copy to ensure we have the latest version
+        # (different images may have the same filename)
+        shutil.copy2(tmp_image_path, permanent_image_path)
 
         return AltTextResponse(
             success=True,
@@ -733,11 +954,12 @@ async def generate_alt_text(
 
 
 @app.post("/api/save-reviewed-alt-text", response_model=SaveReviewedAltTextResponse)
-async def save_reviewed_alt_text(request: SaveReviewedAltTextRequest):
+async def save_reviewed_alt_text(fastapi_request: Request, request: SaveReviewedAltTextRequest):
     """
     Save human-reviewed alt text to the JSON file.
 
     Args:
+        fastapi_request: FastAPI Request object
         request: SaveReviewedAltTextRequest containing image_id, reviewed_alt_text, and language
 
     Returns:
@@ -749,8 +971,36 @@ async def save_reviewed_alt_text(request: SaveReviewedAltTextRequest):
     import json
 
     try:
-        # Get the permanent output directory
-        permanent_output_dir = get_absolute_folder_path('output/alt-text')
+        # Get session ID from cookie
+        session_id = fastapi_request.cookies.get("web_session_id")
+
+        if not session_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No active session found. Please upload images first."
+            )
+
+        # Validate session exists (check folder instead of in-memory dict for persistence)
+        base_images = get_absolute_folder_path('images')
+        session_image_folder = os.path.join(base_images, session_id)
+        if not os.path.exists(session_image_folder):
+            raise HTTPException(
+                status_code=400,
+                detail="Session not found or expired. Please upload images first."
+            )
+
+        # Restore session to in-memory dict if missing (after container restart)
+        if session_id not in WEB_APP_SESSIONS:
+            from datetime import datetime
+            WEB_APP_SESSIONS[session_id] = {
+                "created": datetime.now(),
+                "last_accessed": datetime.now(),
+                "type": "web"
+            }
+
+        # Get session-specific folders
+        session_folders = get_session_folders(session_id)
+        permanent_output_dir = session_folders['alt_text']
 
         # Generate filename based on image_id and language
         image_name_without_ext = os.path.splitext(request.image_id)[0]
@@ -800,11 +1050,15 @@ async def save_reviewed_alt_text(request: SaveReviewedAltTextRequest):
             json_data['human_reviewed_alt_text'] = request.reviewed_alt_text
             json_data['human_reviewed_alt_text_length'] = reviewed_length
 
+        # Add reviewed timestamp
+        from datetime import datetime
+        json_data['reviewed_timestamp'] = datetime.now().isoformat()
+
         # Reorganize JSON field order
         # Move human_reviewed fields right after proposed_alt_text and move ai_model after language
         ordered_data = {}
         for key in json_data.keys():
-            if key not in ['human_reviewed_alt_text', 'human_reviewed_alt_text_length', 'ai_model']:
+            if key not in ['human_reviewed_alt_text', 'human_reviewed_alt_text_length', 'reviewed_timestamp', 'ai_model']:
                 ordered_data[key] = json_data[key]
                 # Insert human_reviewed fields after proposed_alt_text_length
                 if key == 'proposed_alt_text_length':
@@ -812,6 +1066,8 @@ async def save_reviewed_alt_text(request: SaveReviewedAltTextRequest):
                         ordered_data['human_reviewed_alt_text'] = json_data['human_reviewed_alt_text']
                     if 'human_reviewed_alt_text_length' in json_data:
                         ordered_data['human_reviewed_alt_text_length'] = json_data['human_reviewed_alt_text_length']
+                    if 'reviewed_timestamp' in json_data:
+                        ordered_data['reviewed_timestamp'] = json_data['reviewed_timestamp']
                 # Insert ai_model after language
                 elif key == 'language':
                     if 'ai_model' in json_data:
@@ -836,6 +1092,136 @@ async def save_reviewed_alt_text(request: SaveReviewedAltTextRequest):
             message="Failed to save reviewed alt text",
             json_file_path=None,
             error=str(e)
+        )
+
+
+@app.post("/api/generate-report")
+async def generate_report_endpoint(request: Request, clear_after: bool = True):
+    """
+    Generate HTML report for webmaster tool.
+
+    Args:
+        request: FastAPI Request object
+        clear_after: If True, clears session data after generating report
+
+    Returns:
+        FileResponse: HTML report file for download
+
+    Raises:
+        HTTPException: If report generation fails or no images to report
+    """
+    from app import generate_html_report, CONFIG
+    from datetime import datetime
+    from fastapi.responses import FileResponse
+    import os
+
+    try:
+        # Get session ID from cookie
+        session_id = request.cookies.get("web_session_id")
+
+        if not session_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No active session found. Please upload images first."
+            )
+
+        # Validate session exists (check folder instead of in-memory dict for persistence)
+        base_images = get_absolute_folder_path('images')
+        session_image_folder = os.path.join(base_images, session_id)
+        if not os.path.exists(session_image_folder):
+            raise HTTPException(
+                status_code=400,
+                detail="Session not found or expired. Please upload images first."
+            )
+
+        # Restore session to in-memory dict if missing (after container restart)
+        if session_id not in WEB_APP_SESSIONS:
+            from datetime import datetime
+            WEB_APP_SESSIONS[session_id] = {
+                "created": datetime.now(),
+                "last_accessed": datetime.now(),
+                "type": "web"
+            }
+
+        # Get session-specific folders
+        session_folders = get_session_folders(session_id)
+
+        # Generate timestamp for filename
+        timestamp = datetime.now().strftime('%Y-%m-%d-%H%M%S')
+        output_filename = f"webmaster-report-{timestamp}.html"
+
+        # Use session-specific alt-text folder
+        alt_text_folder = session_folders['alt_text']
+
+        # Temporarily override config for web app reports
+        # Disable tag/attribute display (not relevant for web uploads)
+        original_config = CONFIG.get('html_report_display', {}).copy()
+        if 'html_report_display' not in CONFIG:
+            CONFIG['html_report_display'] = {}
+
+        CONFIG['html_report_display']['display_html_tags_used'] = False
+        CONFIG['html_report_display']['display_html_attributes_used'] = False
+        CONFIG['html_report_display']['display_current_alt_text'] = False
+        CONFIG['html_report_display']['display_image_tag_attribute'] = False
+
+        try:
+            # Generate report with session-specific images folder
+            report_path = generate_html_report(
+                alt_text_folder=alt_text_folder,
+                images_folder=session_folders['images'],
+                output_filename=output_filename
+            )
+
+            if not report_path:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Report generation failed - no images found or internal error"
+                )
+
+            # Check if file exists
+            if not os.path.exists(report_path):
+                raise HTTPException(
+                    status_code=500,
+                    detail="Report file was not created"
+                )
+
+            # Clear session data if requested (AFTER successful report generation)
+            if clear_after:
+                import shutil
+                # Clear both JSON files and images from session folders
+                try:
+                    if os.path.exists(session_folders['alt_text']):
+                        shutil.rmtree(session_folders['alt_text'])
+                    if os.path.exists(session_folders['images']):
+                        shutil.rmtree(session_folders['images'])
+                    # Remove session from tracking
+                    if session_id in WEB_APP_SESSIONS:
+                        del WEB_APP_SESSIONS[session_id]
+                    print(f"Cleared session {session_id} data")
+                except Exception as e:
+                    # Log but don't fail - clearing is optional cleanup
+                    print(f"Warning: Could not clear session data: {e}")
+
+            # Return file for download
+            return FileResponse(
+                path=report_path,
+                media_type='text/html',
+                filename=os.path.basename(report_path),
+                headers={
+                    "Content-Disposition": f'attachment; filename="{os.path.basename(report_path)}"'
+                }
+            )
+
+        finally:
+            # Restore original config
+            CONFIG['html_report_display'] = original_config
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating report: {str(e)}"
         )
 
 

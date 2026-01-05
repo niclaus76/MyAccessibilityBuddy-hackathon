@@ -36,6 +36,15 @@ AutoAltText/
 │   ├── alt-text/               # Generated JSON files
 │   └── reports/                # HTML accessibility reports
 ├── prompt/                     # LLM prompt templates
+│   ├── vision/                 # Vision model prompts
+│   ├── processing/             # Processing model prompts
+│   ├── translation/            # Translation prompts
+│   └── development/            # Development prompt templates
+├── development/                # Active development workspace
+│   ├── backlog/                # Development backlog and specifications
+│   ├── done/                   # Completed development items
+│   └── under testing/          # Items currently being tested
+├── docs/                       # Documentation files
 ├── logs/                       # Debug logs (when debug_mode: true)
 ├── test/                       # Test images and context files
 ├── tools/
