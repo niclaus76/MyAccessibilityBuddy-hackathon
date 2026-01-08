@@ -4,7 +4,7 @@
 
 **AI-powered WCAG 2.2 compliant alternative text generator for web images**
 
-MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant content by automatically generating high-quality alternative text and accessibility-ready descriptions, supporting more inclusive digital communication for everyone.
+MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant content by automatically generating high-quality alternative text supporting more inclusive digital communication for everyone.
 
 ## Features
 
@@ -17,7 +17,7 @@ MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant conte
 - 🧠 **Context aware**: Uses page context to refine descriptions
 - 📍 **GEO boost**: Handles geo-tagged or location-specific cues
 - 🔒 **Privacy**: Use local AI models trough Ollama 
-- 🤖 **AI providers**: OpenAI GPT-4o/5.1/5.2, Claude Sonnet-4/Opus-4, ECB-LLM, or Ollama (local)
+- 🤖 **AI providers**: OpenAI GPT-4o/5.1/5.2, Claude Sonnet-4/Opus-4, You enterprise LLM (like the ECB-LLM), or Ollama running on local machines
 - ♿ **WCAG 2.2 compliant**: Follows accessibility standards
 - 🖼️ **Multi-format support**: JPG, PNG, GIF, WEBP, SVG, BMP, TIFF
 - 🌍 **24 EU languages**: Multilingual alt-text generation
@@ -34,19 +34,17 @@ cp backend/.env.example backend/.env
 # 2. Start with Docker
 docker compose up -d
 
-# 3. Open in browser
+# 3. check the status (myaccessibilitybuddy should be up and running)
+docker compose ps
+
+# 4. Open in browser
 # Web UI: http://localhost:8080/home.html
 # API Docs: http://localhost:8000/api/docs
 ```
-
-See [docs/DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md) for a 3-minute guide.
-
 ## Documentation
-
 - **[docs/DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md)** - Get started in 3 minutes with Docker
 - **[docs/DOCKER.md](docs/DOCKER.md)** - Complete Docker deployment guide
 - **[docs/CLAUDE.md](docs/CLAUDE.md)** - Developer guide and architecture
-- **[docs/MyAccessibilityBuddy.md](docs/MyAccessibilityBuddy.md)** - Quick start examples
 
 ## Use cases
 
@@ -127,7 +125,8 @@ Analyze entire websites by scraping images and generating comprehensive accessib
 
 ```bash
 # Using CLI (Docker)
-docker compose exec myaccessibilitybuddy python3 /app/backend/app.py --url https://example.com --language en --generate-report
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -w --url https://ecb.europa.eu --num-images 2 --language en --report --clear-all --force
+
 
 # Output appears in output/reports/
 ```

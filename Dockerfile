@@ -47,6 +47,9 @@ RUN mkdir -p /app/input/images \
     /app/output/reports \
     /app/logs
 
+# Copy static assets needed at runtime (e.g., report template)
+COPY output/reports/report_template.html /app/output/reports/report_template.html
+
 # Make entrypoint script executable
 RUN chmod +x /app/docker-entrypoint.sh
 

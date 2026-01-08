@@ -130,12 +130,12 @@ display_parallel_progress() {
 
     # Backend progress
     if [ "$backend_status" = "running" ]; then
-        show_progress_bar "⚙️  Backend" "$backend_progress" 100
+        show_progress_bar "⚙️  Backend  " "$backend_progress" 100
         echo ""
     elif [ "$backend_status" = "done" ]; then
-        printf "${CYAN}%-20s${NC} ${GREEN}[COMPLETE] ✔${NC}\n" "⚙️  Backend"
+        printf "${CYAN}%-20s${NC} ${GREEN}[COMPLETE] ✔${NC}\n" "⚙️  Backend  "
     else
-        printf "${CYAN}%-20s${NC} ${RED}[FAILED] ✖${NC}\n" "⚙️  Backend"
+        printf "${CYAN}%-20s${NC} ${RED}[FAILED] ✖${NC}\n" "⚙️  Backend  "
     fi
 
     # Frontend progress
