@@ -65,11 +65,11 @@
                 <div class="alert alert-info">
                     <p class="mb-3"><strong>How to Use</strong></p>
                     <ol style="font-size: 0.9rem; padding-left: 1.5rem;">
-                        <li><strong>Select Processing Mode:</strong> Choose "Basic" for default settings or "Advanced" to customize providers and models</li>
+                        <li><strong>Advanced processing mode:</strong> Leave off to use the default basic settings, or turn it on to customize providers and models</li>
                         <li><strong>Upload Image:</strong> Drag and drop or select an image file (JPG, PNG, GIF, WEBP, BMP, SVG, TIFF)</li>
                         <li><strong>Add Context (Optional):</strong> Upload a text file or type context information to help improve alt text accuracy</li>
                         <li><strong>Select Languages:</strong> Choose one or more languages for your alt text (hold Ctrl/Cmd for multiple)</li>
-                        <li><strong>Choose Translation Mode:</strong> "Fast" translates once (recommended), "Accurate" generates fresh for each language</li>
+                        <li><strong>Advanced translation mode:</strong> Leave off for fast translation (recommended); turn on for accurate per-language generation</li>
                         <li><strong>Generate:</strong> Click "Generate" and wait for processing</li>
                         <li><strong>Review & Edit:</strong> Review generated text, make edits if needed, and save</li>
                     </ol>
@@ -85,18 +85,16 @@
     <!-- Processing Mode Selection -->
     <div class="row justify-content-center mb-3">
         <div class="col-12 col-md-8">
-            <fieldset>
-                <legend class="h6 mb-3">Processing Mode</legend>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="processingMode" id="processingModeBasic" value="basic" checked>
-                    <label class="form-check-label" for="processingModeBasic">
-                        Basic
-                    </label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="processingMode" id="processingModeAdvanced" value="advanced">
-                    <label class="form-check-label" for="processingModeAdvanced">
-                        Advanced
+            <fieldset class="mb-0">
+                <div class="form-check form-switch d-flex align-items-center justify-content-between">
+                    <input class="form-check-input order-2 ms-3" type="checkbox" role="switch" id="processingModeToggle" aria-checked="false">
+                    <label class="form-check-label h6 mb-0 d-flex align-items-center order-1" for="processingModeToggle">
+                        <span class="me-2">Advanced processing mode</span>
+                        <button type="button" class="btn btn-link p-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Turn on to customize providers and models" aria-label="Learn about advanced processing mode">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"></path>
+                            </svg>
+                        </button>
                     </label>
                 </div>
             </fieldset>
@@ -182,16 +180,18 @@
     <!-- Language Selection -->
     <div class="row justify-content-center mb-4">
         <div class="col-12 col-md-8">
-            <label for="languageSelect" class="form-label h6 mb-2">
+            <label for="languageSelect" class="form-label h6 mb-2 d-flex align-items-center">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="me-1" style="vertical-align: text-bottom;" aria-hidden="true">
                     <path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>
                 </svg>
-                Languages (Select one or more)
+                <span class="me-2">Languages (Select one or more)</span>
+                <button type="button" class="btn btn-link p-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Keyboard navigation: Use Up/Down arrow keys to navigate. Hold Ctrl (Windows/Linux) or Cmd (Mac) and press Space to select/deselect multiple languages. Shift+Click or Shift+Arrow keys for range selection." aria-label="Keyboard navigation help">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"></path>
+                    </svg>
+                </button>
             </label>
-            <div id="languageSelectInstructions" class="alert alert-info small mb-2" role="status">
-                <strong>Keyboard navigation:</strong> Use Up/Down arrow keys to navigate. Hold Ctrl (Windows/Linux) or Cmd (Mac) and press Space to select/deselect multiple languages. Shift+Click or Shift+Arrow keys for range selection.
-            </div>
-            <select class="form-select" id="languageSelect" name="language" multiple size="6" required aria-required="true" aria-describedby="languageSelectInstructions">
+            <select class="form-select" id="languageSelect" name="language" multiple size="6" required aria-required="true">
                 <option value="bg">Български (Bulgarian)</option>
                 <option value="cs">Čeština (Czech)</option>
                 <option value="da">Dansk (Danish)</option>
@@ -224,17 +224,16 @@
     <div class="row justify-content-center mb-4">
         <div class="col-12 col-md-8">
             <fieldset>
-                <legend class="h6 mb-2">Translation Mode</legend>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="translationMode" id="translationModeFast" value="fast" checked>
-                    <label class="form-check-label" for="translationModeFast">
-                        Fast
-                    </label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="translationMode" id="translationModeAccurate" value="accurate">
-                    <label class="form-check-label" for="translationModeAccurate">
-                        Accurate
+                <legend class="visually-hidden">Translation Mode</legend>
+                <div class="form-check form-switch d-flex align-items-center justify-content-between">
+                    <input class="form-check-input order-2 ms-3" type="checkbox" role="switch" id="translationModeToggle" aria-checked="false">
+                    <label class="form-check-label h6 mb-0 d-flex align-items-center order-1" for="translationModeToggle">
+                        <span class="me-2">Advanced translation mode</span>
+                        <button type="button" class="btn btn-link p-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Turn on to generate fresh alt text for each language" aria-label="Learn about advanced translation mode">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"></path>
+                            </svg>
+                        </button>
                     </label>
                 </div>
             </fieldset>
@@ -251,7 +250,7 @@
                         <div class="col-12 col-md-6 mb-4 mb-md-0">
                             <h2 class="h5 card-title mb-3" id="uploadTitle">
                                 Upload an image
-                                <button type="button" class="btn btn-link p-1" data-bs-toggle="collapse" data-bs-target="#imageFormatsInfo" aria-expanded="false" aria-controls="imageFormatsInfo" aria-label="Show detailed information about supported image formats" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
+                                <button type="button" class="btn btn-link p-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Supported formats: JPG, PNG, GIF, WEBP, BMP, SVG, and TIFF" aria-label="Supported image formats" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
                                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
                                     </svg>
@@ -303,19 +302,15 @@
                         <div class="col-12 col-md-6">
                             <h2 class="h5 card-title mb-3" id="contextLabel">
                                 Upload a context file
-                                <button type="button" class="btn btn-link p-1" data-bs-toggle="collapse" data-bs-target="#contextFileInfo" aria-expanded="false" aria-controls="contextFileInfo" aria-label="Show detailed information about supported context file format" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
+                                <button type="button" class="btn btn-link p-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Supported format: TXT file" aria-label="Supported context file format" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #17324d;" aria-hidden="true">
                                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
                                     </svg>
                                 </button>
                             </h2>
 
-                            <!-- Collapsible Context File Information -->
-                            <div class="collapse mb-3" id="contextFileInfo">
-                                <div class="alert alert-info mb-3">
-                                    <p class="mb-0"><strong>Supported format:</strong> TXT file</p>
-                                </div>
-                            </div>
+                            <!-- Hidden placeholder for backward compatibility -->
+                            <div id="contextFileInfo" class="visually-hidden" aria-hidden="true"></div>
 
                             <!-- Upload Area with Drag & Drop -->
                             <div class="upload-area border-2 border-dashed rounded p-3 text-center mb-3" id="contextDragdrop" style="border-color: #17324d; background-color: #f5f5f5; transition: all 0.3s;">
@@ -383,6 +378,9 @@
                     <div class="row mt-3">
                         <div class="col-12">
                             <button type="button" class="btn btn-primary btn-lg w-100" id="generateBtn" disabled aria-describedby="generationStatus">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="me-2" aria-hidden="true">
+                                    <path d="M3 12l18-9-9 18-2-7-7-2z"/>
+                                </svg>
                                 <span id="btnText">Generate</span>
                                 <span class="spinner-border spinner-border-sm ms-2 d-none" id="btnSpinner" role="status" aria-label="Processing">
                                     <span class="visually-hidden">Processing...</span>

@@ -257,18 +257,35 @@
 
     // Processing mode toggle
     function handleProcessingModeChange() {
-        const basicMode = document.getElementById('processingModeBasic');
+        const processingModeToggle = document.getElementById('processingModeToggle');
         const advancedSettings = document.getElementById('advancedSettings');
 
-        if (basicMode.checked) {
-            processingMode = 'basic';
-            advancedSettings.classList.add('d-none');
-            console.log('[MODE] Switched to Basic mode (two_step_processing: false)');
-        } else {
-            processingMode = 'advanced';
-            advancedSettings.classList.remove('d-none');
-            console.log('[MODE] Switched to Advanced mode (two_step_processing: true)');
+        const isAdvanced = Boolean(processingModeToggle && processingModeToggle.checked);
+
+        processingMode = isAdvanced ? 'advanced' : 'basic';
+
+        if (processingModeToggle) {
+            processingModeToggle.setAttribute('aria-checked', isAdvanced ? 'true' : 'false');
         }
+
+        if (advancedSettings) {
+            advancedSettings.classList.toggle('d-none', !isAdvanced);
+        }
+
+        console.log(`[MODE] Switched to ${isAdvanced ? 'Advanced mode (two_step_processing: true)' : 'Basic mode (two_step_processing: false)'}`);
+    }
+
+    // Translation mode toggle
+    function handleTranslationModeChange() {
+        const isAdvancedTranslation = Boolean(translationModeToggle && translationModeToggle.checked);
+
+        translationMode = isAdvancedTranslation ? 'accurate' : 'fast';
+
+        if (translationModeToggle) {
+            translationModeToggle.setAttribute('aria-checked', isAdvancedTranslation ? 'true' : 'false');
+        }
+
+        console.log(`[TRANSLATION] Mode set to: ${translationMode}`);
     }
 
     // Initialize Bootstrap tooltips
@@ -284,13 +301,36 @@
         // Check authentication status on page load
         checkAuthenticationStatus();
 
-        // Set up processing mode listeners
-        const processingModeBasic = document.getElementById('processingModeBasic');
-        const processingModeAdvanced = document.getElementById('processingModeAdvanced');
+        // Set up processing mode listener
+        const processingModeToggle = document.getElementById('processingModeToggle');
 
-        if (processingModeBasic && processingModeAdvanced) {
-            processingModeBasic.addEventListener('change', handleProcessingModeChange);
-            processingModeAdvanced.addEventListener('change', handleProcessingModeChange);
+        if (processingModeToggle) {
+            processingModeToggle.addEventListener('change', handleProcessingModeChange);
+            processingModeToggle.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    processingModeToggle.checked = !processingModeToggle.checked;
+                    handleProcessingModeChange();
+                }
+            });
+
+            // Initialize state to ensure ARIA attributes and visibility are in sync
+            handleProcessingModeChange();
+        }
+
+        // Set up translation mode listener
+        if (translationModeToggle) {
+            translationModeToggle.addEventListener('change', handleTranslationModeChange);
+            translationModeToggle.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    translationModeToggle.checked = !translationModeToggle.checked;
+                    handleTranslationModeChange();
+                }
+            });
+
+            // Initialize state to ensure ARIA attributes are in sync
+            handleTranslationModeChange();
         }
 
         // Toggle detailed instructions visibility
@@ -351,6 +391,7 @@
     const visionModelSelect = document.getElementById('visionModelSelect');
     const processingModelSelect = document.getElementById('processingModelSelect');
     const translationModelSelect = document.getElementById('translationModelSelect');
+    const translationModeToggle = document.getElementById('translationModeToggle');
     const langSelect = document.getElementById('languageSelect');
     const fileInput = document.getElementById('fileInput');
     const uploadArea = document.getElementById('uploadDragdrop');
@@ -443,21 +484,6 @@
     langSelect.addEventListener('change', (e) => {
         selectedLanguages = Array.from(e.target.selectedOptions).map(opt => opt.value);
         console.log('[LANGUAGE] Selected languages:', selectedLanguages);
-    });
-
-    // Translation mode selection
-    document.getElementById('translationModeFast').addEventListener('change', (e) => {
-        if (e.target.checked) {
-            translationMode = 'fast';
-            console.log('[TRANSLATION] Mode set to: fast');
-        }
-    });
-
-    document.getElementById('translationModeAccurate').addEventListener('change', (e) => {
-        if (e.target.checked) {
-            translationMode = 'accurate';
-            console.log('[TRANSLATION] Mode set to: accurate');
-        }
     });
 
     // Character count and visual feedback for a specific textarea
@@ -1305,8 +1331,10 @@
         selectedLanguages = ['en'];
 
         // Reset translation mode
-        document.getElementById('translationModeFast').checked = true;
-        translationMode = 'fast';
+        if (translationModeToggle) {
+            translationModeToggle.checked = false;
+        }
+        handleTranslationModeChange();
 
         // Hide result section and clear results
         resultSection.classList.add('d-none');
