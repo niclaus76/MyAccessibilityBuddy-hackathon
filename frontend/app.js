@@ -387,11 +387,16 @@
         const models = modelOptions[provider];
 
         // Populate model dropdown with options for this provider and step type
-        modelSelect.innerHTML = '<option value="">Please select</option>';
+        modelSelect.innerHTML = '';
         if (models && models[stepType]) {
             models[stepType].forEach(model => {
                 modelSelect.innerHTML += `<option value="${model}">${model}</option>`;
             });
+
+            // Auto-select the first model
+            if (models[stepType].length > 0) {
+                modelSelect.value = models[stepType][0];
+            }
         }
     }
 
@@ -399,6 +404,8 @@
     visionProviderSelect.addEventListener('change', (e) => {
         visionProvider = e.target.value;
         populateModelDropdown(visionProvider, 'vision', visionModelSelect);
+        // Auto-update the model variable with the first selected model
+        visionModel = visionModelSelect.value;
     });
 
     // Vision model selection
@@ -410,6 +417,8 @@
     processingProviderSelect.addEventListener('change', (e) => {
         processingProvider = e.target.value;
         populateModelDropdown(processingProvider, 'processing', processingModelSelect);
+        // Auto-update the model variable with the first selected model
+        processingModel = processingModelSelect.value;
     });
 
     // Processing model selection
@@ -421,6 +430,8 @@
     translationProviderSelect.addEventListener('change', (e) => {
         translationProvider = e.target.value;
         populateModelDropdown(translationProvider, 'translation', translationModelSelect);
+        // Auto-update the model variable with the first selected model
+        translationModel = translationModelSelect.value;
     });
 
     // Translation model selection
@@ -483,15 +494,17 @@
         const langName = languageNames[lang] || lang;
         const altTextDisplay = altText === "" ? '(Empty alt text for decorative image)' : altText;
 
+        // Build descriptive label with processing and translation mode context
+        const labelText = `Generated alternative text for ${langName}, using processing mode '${processingMode}' and translation mode '${translationMode}'`;
+
         const card = document.createElement('div');
         card.className = 'card shadow-sm mb-3';
         card.setAttribute('data-language', lang);
 
         card.innerHTML = `
             <div class="card-body">
-                <h6 class="card-title mb-3">${langName}</h6>
                 <div class="callout success">
-                    <label for="resultText_${lang}" class="form-label">Generated alternative text for ${langName}</label>
+                    <label for="resultText_${lang}" class="form-label">${labelText}</label>
                     <textarea id="resultText_${lang}" class="form-control mb-2" rows="4"
                         placeholder="Generated alt text will appear here..."
                         aria-describedby="charCount_${lang}">${altTextDisplay}</textarea>
@@ -726,14 +739,6 @@
         }
     });
 
-    // Upload area keyboard accessibility
-    uploadArea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            fileInput.click();
-        }
-    });
-
     // File input change
     fileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
@@ -784,6 +789,9 @@
             generateBtn.disabled = false;
             generateBtn.focus();
 
+            // Update Remove button with file name for accessibility
+            removeImage.setAttribute('aria-label', `Remove ${file.name}`);
+
             // Clear any previous errors
             clearErrorMessages();
 
@@ -805,14 +813,6 @@
 
     contextDragdrop.addEventListener('click', () => {
         contextFileInput.click();
-    });
-
-    // Context drag-drop keyboard accessibility
-    contextDragdrop.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            contextFileInput.click();
-        }
     });
 
     contextDragdrop.addEventListener('dragover', (e) => {
@@ -868,6 +868,9 @@
                 clearContextBtn.classList.remove('d-none');
             }
 
+            // Update Remove button with file name for accessibility
+            removeContext.setAttribute('aria-label', `Remove ${file.name}`);
+
             // Announce successful upload
             announceToScreenReader(`Context file ${file.name} uploaded successfully. Content loaded into text editor.`);
         };
@@ -883,6 +886,10 @@
             contextTextbox.value = '';
         }
         clearContextBtn.classList.add('d-none');
+
+        // Clear aria-label from Remove context button
+        removeContext.removeAttribute('aria-label');
+
         contextPreviewContainer.classList.add('d-none');
         contextDragdrop.classList.remove('d-none');
         contextDragdrop.focus();
@@ -926,6 +933,10 @@
         previewContainer.classList.add('d-none');
         previewImage.src = '';
         uploadArea.classList.remove('d-none');
+
+        // Clear aria-label from Remove button
+        removeImage.removeAttribute('aria-label');
+
         selectedContextFile = null;
         contextText = '';
         contextFileInput.value = '';
@@ -935,6 +946,10 @@
         if (clearContextBtn) {
             clearContextBtn.classList.add('d-none');
         }
+
+        // Clear aria-label from Remove context button
+        removeContext.removeAttribute('aria-label');
+
         contextPreviewContainer.classList.add('d-none');
         contextDragdrop.classList.remove('d-none');
         generateBtn.disabled = true;
@@ -1216,7 +1231,7 @@
                 generationStatus.textContent = 'Generation failed. Please see error message.';
             }
         } finally {
-            btnText.textContent = 'Generate Alt Text';
+            btnText.textContent = 'Generate';
             btnSpinner.classList.add('d-none');
             generateBtn.disabled = false;
         }
@@ -1224,8 +1239,27 @@
 
     // Copy and Save buttons are now handled dynamically in createLanguageResultCard()
 
-    // Clear all - reset form to initial state
-    clearBtn.addEventListener('click', () => {
+    // Clear all - reset form to initial state and clear session data
+    clearBtn.addEventListener('click', async () => {
+        try {
+            // Call API to clear session data on server
+            const response = await fetch(`${API_BASE_URL}/clear-session`, {
+                method: 'POST',
+                credentials: 'include'
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                console.log(`[CLEAR] Session cleared: ${data.files_deleted} files, ${data.folders_deleted} folders deleted`);
+            } else {
+                console.warn(`[CLEAR] Session clear warning: ${data.message}`);
+            }
+        } catch (error) {
+            console.error('[CLEAR] Error clearing session:', error);
+            // Continue with frontend reset even if API call fails
+        }
+
         // Reset image upload
         selectedFile = null;
         fileInput.value = '';
@@ -1289,4 +1323,7 @@
         // Scroll back to top
         window.scrollTo({ top: 0, behavior: 'smooth' });
         uploadArea.focus();
+
+        // Announce to screen reader
+        announceToScreenReader('All data cleared. Session reset.');
     });

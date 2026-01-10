@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import tempfile
 import os
+import copy
 from pathlib import Path
 from datetime import datetime, timedelta
 import uuid
@@ -97,9 +98,32 @@ app = FastAPI(
 app.add_middleware(ProxyHeadersMiddleware)
 
 # Configure CORS to allow frontend access
+# When allow_credentials=True, must specify exact origins (not "*")
+
+# Build allowed origins list dynamically based on environment
+allowed_origins = [
+    "http://localhost:8080",      # Local frontend development
+    "http://localhost:8000",      # Direct backend access
+    "http://127.0.0.1:8080",      # Alternative localhost
+    "http://127.0.0.1:8000",      # Alternative localhost
+]
+
+# Add production/AWS origins from environment variable if set
+# Set ALLOWED_ORIGINS="https://your-cloudfront-domain.cloudfront.net,https://your-alb-domain.amazonaws.com"
+additional_origins = os.environ.get("ALLOWED_ORIGINS", "")
+if additional_origins:
+    # Split by comma and strip whitespace
+    for origin in additional_origins.split(","):
+        origin = origin.strip()
+        if origin and origin not in allowed_origins:
+            allowed_origins.append(origin)
+            print(f"Added CORS origin from environment: {origin}")
+
+print(f"CORS allowed origins: {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins https://<cloudfront-domain>
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -745,8 +769,8 @@ async def generate_alt_text(
     from app import generate_alt_text_json, CONFIG
     import shutil
 
-    # Store original CONFIG.steps values to restore later
-    original_steps = CONFIG.get('steps', {}).copy()
+    # Store original CONFIG.steps values to restore later (use deep copy to avoid mutation)
+    original_steps = copy.deepcopy(CONFIG.get('steps', {}))
 
     # Apply per-step overrides if specified
     if not 'steps' in CONFIG:
@@ -1095,6 +1119,96 @@ async def save_reviewed_alt_text(fastapi_request: Request, request: SaveReviewed
         )
 
 
+@app.post("/api/clear-session")
+async def clear_session(request: Request, response: Response):
+    """
+    Clear all data for the current user session.
+
+    This endpoint:
+    - Deletes all images in the session folder
+    - Deletes all generated JSON files
+    - Deletes all reports
+    - Removes the session from memory
+    - Clears the session cookie
+
+    Args:
+        request: FastAPI Request object
+        response: FastAPI Response object
+
+    Returns:
+        dict: Success message with details of what was cleared
+    """
+    import shutil
+
+    try:
+        # Get current session ID
+        session_id = request.cookies.get("web_session_id")
+
+        if not session_id:
+            return {
+                "success": True,
+                "message": "No active session to clear",
+                "files_deleted": 0,
+                "folders_deleted": 0
+            }
+
+        # Get session folders
+        session_folders = get_session_folders(session_id)
+
+        files_deleted = 0
+        folders_deleted = 0
+
+        # Delete session folders
+        for key, folder in session_folders.items():
+            if key in ['images', 'alt_text'] and os.path.exists(folder):
+                try:
+                    # Count files before deletion
+                    if os.path.isdir(folder):
+                        file_count = len([f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))])
+                        files_deleted += file_count
+
+                    # Remove the entire folder
+                    shutil.rmtree(folder)
+                    folders_deleted += 1
+                    print(f"Cleared session folder: {folder}")
+                except Exception as e:
+                    print(f"Error deleting folder {folder}: {e}")
+
+        # Delete report folder if it exists
+        base_output_folder = get_absolute_folder_path('output')
+        report_folder = os.path.join(base_output_folder, 'reports', session_id)
+        if os.path.exists(report_folder):
+            try:
+                shutil.rmtree(report_folder)
+                folders_deleted += 1
+                print(f"Cleared report folder: {report_folder}")
+            except Exception as e:
+                print(f"Error deleting report folder: {e}")
+
+        # Remove from session storage
+        if session_id in WEB_APP_SESSIONS:
+            del WEB_APP_SESSIONS[session_id]
+
+        # Clear the session cookie
+        response.delete_cookie(key="web_session_id")
+
+        return {
+            "success": True,
+            "message": f"Session {session_id} cleared successfully",
+            "files_deleted": files_deleted,
+            "folders_deleted": folders_deleted,
+            "session_id": session_id
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error clearing session: {str(e)}",
+            "files_deleted": 0,
+            "folders_deleted": 0
+        }
+
+
 @app.post("/api/generate-report")
 async def generate_report_endpoint(request: Request, clear_after: bool = True):
     """
@@ -1155,7 +1269,7 @@ async def generate_report_endpoint(request: Request, clear_after: bool = True):
 
         # Temporarily override config for web app reports
         # Disable tag/attribute display (not relevant for web uploads)
-        original_config = CONFIG.get('html_report_display', {}).copy()
+        original_config = copy.deepcopy(CONFIG.get('html_report_display', {}))
         if 'html_report_display' not in CONFIG:
             CONFIG['html_report_display'] = {}
 

@@ -15,9 +15,9 @@ MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant conte
 
 ### Core Capabilities
 - 🧠 **Context aware**: Uses page context to refine descriptions
-- 📍 **GEO boost**: Handles geo-tagged or location-specific cues
+- 📍 **GEO boost**: Generates AI friendly descriptions (Generative Engine Optimization - GEO)
 - 🔒 **Privacy**: Use local AI models trough Ollama 
-- 🤖 **AI providers**: OpenAI GPT-4o/5.1/5.2, Claude Sonnet-4/Opus-4, You enterprise LLM (like the ECB-LLM), or Ollama running on local machines
+- 🤖 **AI providers**: OpenAI GPT-4o/5.1/5.2, Claude Sonnet-4/Opus-4, You enterprise LLM (like the ECB-LLM), or Ollama running on local machine with your favorite model like Phi, LLava etc.
 - ♿ **WCAG 2.2 compliant**: Follows accessibility standards
 - 🖼️ **Multi-format support**: JPG, PNG, GIF, WEBP, SVG, BMP, TIFF
 - 🌍 **24 EU languages**: Multilingual alt-text generation
@@ -41,6 +41,21 @@ docker compose ps
 # Web UI: http://localhost:8080/home.html
 # API Docs: http://localhost:8000/api/docs
 ```
+
+### AWS/Production Deployment
+
+For AWS or production environments, configure CORS by setting the `ALLOWED_ORIGINS` environment variable:
+
+```bash
+# In backend/.env
+ALLOWED_ORIGINS=https://your-cloudfront-domain.cloudfront.net,https://your-alb-domain.amazonaws.com
+
+# Or set as Docker environment variable in docker-compose.yml:
+environment:
+  - ALLOWED_ORIGINS=https://your-cloudfront-domain.cloudfront.net
+```
+
+The application automatically handles CORS for localhost development. Additional origins can be specified as comma-separated values.
 ## Documentation
 - **[docs/DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md)** - Get started in 3 minutes with Docker
 - **[docs/DOCKER.md](docs/DOCKER.md)** - Complete Docker deployment guide

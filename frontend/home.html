@@ -63,14 +63,14 @@
         <div class="row justify-content-center mt-3 d-none" id="detailedInstructions">
             <div class="col-12 col-md-8">
                 <div class="alert alert-info">
-                    <h2 class="alert-heading"><strong>How to Use</strong></h2>
+                    <p class="mb-3"><strong>How to Use</strong></p>
                     <ol style="font-size: 0.9rem; padding-left: 1.5rem;">
                         <li><strong>Select Processing Mode:</strong> Choose "Basic" for default settings or "Advanced" to customize providers and models</li>
                         <li><strong>Upload Image:</strong> Drag and drop or select an image file (JPG, PNG, GIF, WEBP, BMP, SVG, TIFF)</li>
                         <li><strong>Add Context (Optional):</strong> Upload a text file or type context information to help improve alt text accuracy</li>
                         <li><strong>Select Languages:</strong> Choose one or more languages for your alt text (hold Ctrl/Cmd for multiple)</li>
                         <li><strong>Choose Translation Mode:</strong> "Fast" translates once (recommended), "Accurate" generates fresh for each language</li>
-                        <li><strong>Generate:</strong> Click "Generate Alt Text" and wait for processing</li>
+                        <li><strong>Generate:</strong> Click "Generate" and wait for processing</li>
                         <li><strong>Review & Edit:</strong> Review generated text, make edits if needed, and save</li>
                     </ol>
                 </div>
@@ -105,74 +105,75 @@
 
     <!-- Advanced Settings Container (hidden by default) -->
     <div id="advancedSettings" class="d-none">
-        <div class="row justify-content-center mb-3">
-            <div class="col-12 col-md-8">
-                <h2 class="h4">Advanced Settings</h2>
-            </div>
-        </div>
     <!-- Vision Step -->
     <div class="row justify-content-center mb-3">
         <div class="col-12 col-md-8">
-            <h3 class="mb-2">Step 1: Vision (Image Analysis)</h3>
-            <div class="row">
-                <div class="col-md-6 mb-2">
-                    <label for="visionProviderSelect" class="form-label">Provider</label>
-                    <select class="form-select" id="visionProviderSelect" name="vision_provider" required aria-required="true">
-                        <option value="">Please select</option>
-                        <!-- Options loaded dynamically based on installed libraries -->
-                    </select>
+            <fieldset>
+                <legend class="h6 mb-3">Step 1: Image Analysis</legend>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="visionProviderSelect" class="form-label">Provider</label>
+                        <select class="form-select" id="visionProviderSelect" name="vision_provider" required aria-required="true">
+                            <option value="">Please select</option>
+                            <!-- Options loaded dynamically based on installed libraries -->
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label for="visionModelSelect" class="form-label">Model</label>
+                        <select class="form-select" id="visionModelSelect" name="vision_model" required aria-required="true" disabled>
+                            <option value="">Please select provider first</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="col-md-6 mb-2">
-                    <label for="visionModelSelect" class="form-label">Model</label>
-                    <select class="form-select" id="visionModelSelect" name="vision_model" required aria-required="true" disabled>
-                        <option value="">Please select provider first</option>
-                    </select>
-                </div>
-            </div>
+            </fieldset>
         </div>
     </div>
 
     <!-- Processing Step -->
     <div class="row justify-content-center mb-3">
         <div class="col-12 col-md-8">
-            <h3 class="mb-2">Step 2: Processing (Alt-Text Generation)</h3>
-            <div class="row">
-                <div class="col-md-6 mb-2">
-                    <label for="processingProviderSelect" class="form-label">Provider</label>
-                    <select class="form-select" id="processingProviderSelect" name="processing_provider" required aria-required="true">
-                        <option value="">Please select</option>
-                        <!-- Options loaded dynamically based on installed libraries -->
-                    </select>
+            <fieldset>
+                <legend class="h6 mb-3">Step 2: Alternative text generation</legend>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="processingProviderSelect" class="form-label">Provider</label>
+                        <select class="form-select" id="processingProviderSelect" name="processing_provider" required aria-required="true">
+                            <option value="">Please select</option>
+                            <!-- Options loaded dynamically based on installed libraries -->
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label for="processingModelSelect" class="form-label">Model</label>
+                        <select class="form-select" id="processingModelSelect" name="processing_model" required aria-required="true" disabled>
+                            <option value="">Please select provider first</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="col-md-6 mb-2">
-                    <label for="processingModelSelect" class="form-label">Model</label>
-                    <select class="form-select" id="processingModelSelect" name="processing_model" required aria-required="true" disabled>
-                        <option value="">Please select provider first</option>
-                    </select>
-                </div>
-            </div>
+            </fieldset>
         </div>
     </div>
 
     <!-- Translation Step -->
-    <div class="row justify-content-center mb-4">
+    <div class="row justify-content-center mb-3">
         <div class="col-12 col-md-8">
-            <h3 class="mb-2">Step 3: Translation (Multilingual)</h3>
-            <div class="row">
-                <div class="col-md-6 mb-2">
-                    <label for="translationProviderSelect" class="form-label">Provider</label>
-                    <select class="form-select" id="translationProviderSelect" name="translation_provider" required aria-required="true">
-                        <option value="">Please select</option>
-                        <!-- Options loaded dynamically based on installed libraries -->
-                    </select>
+            <fieldset>
+                <legend class="h6 mb-3">Step 3: Translation</legend>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="translationProviderSelect" class="form-label">Provider</label>
+                        <select class="form-select" id="translationProviderSelect" name="translation_provider" required aria-required="true">
+                            <option value="">Please select</option>
+                            <!-- Options loaded dynamically based on installed libraries -->
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label for="translationModelSelect" class="form-label">Model</label>
+                        <select class="form-select" id="translationModelSelect" name="translation_model" required aria-required="true" disabled>
+                            <option value="">Please select provider first</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="col-md-6 mb-2">
-                    <label for="translationModelSelect" class="form-label">Model</label>
-                    <select class="form-select" id="translationModelSelect" name="translation_model" required aria-required="true" disabled>
-                        <option value="">Please select provider first</option>
-                    </select>
-                </div>
-            </div>
+            </fieldset>
         </div>
     </div>
     </div>
@@ -186,11 +187,11 @@
                     <path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>
                 </svg>
                 Languages (Select one or more)
-                <span id="languageSelectInstructions" class="visually-hidden">
-                    Use arrow keys to navigate, Space to select or deselect. Multiple selections allowed.
-                </span>
             </label>
-            <select class="form-select" id="languageSelect" name="language" multiple size="3" required aria-required="true" aria-describedby="languageSelectInstructions languageSelectHint">
+            <div id="languageSelectInstructions" class="alert alert-info small mb-2" role="status">
+                <strong>Keyboard navigation:</strong> Use Up/Down arrow keys to navigate. Hold Ctrl (Windows/Linux) or Cmd (Mac) and press Space to select/deselect multiple languages. Shift+Click or Shift+Arrow keys for range selection.
+            </div>
+            <select class="form-select" id="languageSelect" name="language" multiple size="6" required aria-required="true" aria-describedby="languageSelectInstructions">
                 <option value="bg">Български (Bulgarian)</option>
                 <option value="cs">Čeština (Czech)</option>
                 <option value="da">Dansk (Danish)</option>
@@ -216,7 +217,6 @@
                 <option value="sl">Slovenščina (Slovenian)</option>
                 <option value="sv">Svenska (Swedish)</option>
             </select>
-            <small class="text-muted" id="languageSelectHint">Hold Ctrl (Windows/Linux) or Cmd (Mac) to select multiple languages</small>
         </div>
     </div>
 
@@ -251,15 +251,22 @@
                         <div class="col-12 col-md-6 mb-4 mb-md-0">
                             <h2 class="h5 card-title mb-3" id="uploadTitle">
                                 Upload an image
-                                <button type="button" class="btn btn-link p-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Supported formats: JPG, JPEG, PNG, GIF, WEBP, BMP, SVG, TIFF" aria-label="Information about supported image formats" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
+                                <button type="button" class="btn btn-link p-1" data-bs-toggle="collapse" data-bs-target="#imageFormatsInfo" aria-expanded="false" aria-controls="imageFormatsInfo" aria-label="Show detailed information about supported image formats" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
                                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
                                     </svg>
                                 </button>
                             </h2>
 
+                            <!-- Collapsible Image Formats Information -->
+                            <div class="collapse mb-3" id="imageFormatsInfo">
+                                <div class="alert alert-info mb-3">
+                                    <p class="mb-0"><strong>Supported formats:</strong> JPG, JPEG, PNG, GIF, WEBP, BMP, SVG, TIFF</p>
+                                </div>
+                            </div>
+
                             <!-- Upload Area with Drag & Drop -->
-                            <div class="upload-area border-2 border-dashed rounded p-3 text-center mb-3" id="uploadDragdrop" role="button" tabindex="0" aria-label="Upload image - drag and drop or press Enter to browse for files" style="border-color: #0066cc; background-color: #f0f6fc; cursor: pointer; transition: all 0.3s;">
+                            <div class="upload-area border-2 border-dashed rounded p-3 text-center mb-3" id="uploadDragdrop" style="border-color: #0066cc; background-color: #f0f6fc; transition: all 0.3s;">
                                 <div class="upload-icon mb-2" aria-hidden="true">
                                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: #0066cc;" aria-hidden="true">
                                         <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="currentColor"/>
@@ -269,7 +276,7 @@
                                     <p class="mb-2" id="uploadText" aria-hidden="true">
                                         <strong>Drag image here</strong> or
                                     </p>
-                                    <button type="button" class="btn btn-primary btn-sm mb-2" id="browseBtn" aria-label="Browse for image file">
+                                    <button type="button" class="btn btn-primary btn-sm mb-2" id="browseBtn" aria-label="Browse for image file" data-focus-mouse="false">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="me-1" aria-hidden="true">
                                             <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
                                         </svg>
@@ -295,16 +302,23 @@
                         <!-- Context Upload Column -->
                         <div class="col-12 col-md-6">
                             <h2 class="h5 card-title mb-3" id="contextLabel">
-                                Upload a context File
-                                <button type="button" class="btn btn-link p-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Supported format: TXT file" aria-label="Information about supported context file format" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color: #17324d;" aria-hidden="true">
+                                Upload a context file
+                                <button type="button" class="btn btn-link p-1" data-bs-toggle="collapse" data-bs-target="#contextFileInfo" aria-expanded="false" aria-controls="contextFileInfo" aria-label="Show detailed information about supported context file format" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #17324d;" aria-hidden="true">
                                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
                                     </svg>
                                 </button>
                             </h2>
 
+                            <!-- Collapsible Context File Information -->
+                            <div class="collapse mb-3" id="contextFileInfo">
+                                <div class="alert alert-info mb-3">
+                                    <p class="mb-0"><strong>Supported format:</strong> TXT file</p>
+                                </div>
+                            </div>
+
                             <!-- Upload Area with Drag & Drop -->
-                            <div class="upload-area border-2 border-dashed rounded p-3 text-center mb-3" id="contextDragdrop" role="button" tabindex="0" aria-label="Upload context file - drag and drop text file or press Enter to browse" style="border-color: #17324d; background-color: #f5f5f5; cursor: pointer; transition: all 0.3s;">
+                            <div class="upload-area border-2 border-dashed rounded p-3 text-center mb-3" id="contextDragdrop" style="border-color: #17324d; background-color: #f5f5f5; transition: all 0.3s;">
                                 <div class="upload-icon mb-2" aria-hidden="true">
                                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: #17324d;" aria-hidden="true">
                                         <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" fill="currentColor"/>
@@ -315,7 +329,7 @@
                                     <p class="mb-2" id="contextUploadText" aria-hidden="true">
                                         <strong>Drag context here</strong> or
                                     </p>
-                                    <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="contextBrowseBtn" aria-label="Browse for context text file">
+                                    <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="contextBrowseBtn" aria-label="Browse for context text file" data-focus-mouse="false">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="me-1" aria-hidden="true">
                                             <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
                                         </svg>
@@ -369,7 +383,7 @@
                     <div class="row mt-3">
                         <div class="col-12">
                             <button type="button" class="btn btn-primary btn-lg w-100" id="generateBtn" disabled aria-describedby="generationStatus">
-                                <span id="btnText">Generate Alt Text</span>
+                                <span id="btnText">Generate</span>
                                 <span class="spinner-border spinner-border-sm ms-2 d-none" id="btnSpinner" role="status" aria-label="Processing">
                                     <span class="visually-hidden">Processing...</span>
                                 </span>
@@ -388,7 +402,7 @@
                                     <line x1="10" y1="11" x2="10" y2="17"></line>
                                     <line x1="14" y1="11" x2="14" y2="17"></line>
                                 </svg>
-                                <span>Clear All</span>
+                                <span>Clear</span>
                             </button>
                         </div>
                     </div>
@@ -400,7 +414,7 @@
     <!-- Results Section (Multiple Languages) -->
     <div class="row justify-content-center d-none" id="resultSection" aria-live="polite" aria-atomic="true">
         <div class="col-12 col-md-8">
-            <h2 class="mb-3">Generated Alt Text</h2>
+            <h2 class="mb-3">Generate</h2>
             <div id="resultsContainer">
                 <!-- Language-specific result cards will be inserted here dynamically -->
             </div>
