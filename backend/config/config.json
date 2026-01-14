@@ -86,7 +86,7 @@
     }
   },
   "ollama": {
-    "enabled": false,
+    "enabled": true,
     "_comment_enabled": "Set to true to enable Ollama provider (requires ollama package and running Ollama server). Set to false to disable and prevent warning messages.",
     "base_url": "http://host.docker.internal:11434",
     "_comment_available_models_vision": "Ollama vision models: qwen3-vl (Alibaba Qwen3-VL multimodal model, recommended), granite3.2-vision (IBM Granite 3.2 with vision), llama3.2-vision (Meta Llama 3.2 with vision), llava (LLaVA multimodal model), moondream (lightweight vision model)",

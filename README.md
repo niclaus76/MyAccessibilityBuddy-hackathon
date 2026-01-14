@@ -26,6 +26,10 @@ MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant conte
 ## Quick Start with Docker 🐳
 
 ```bash
+# 0. Clone the repo
+git clone https://github.com/niclaus76/Innovate-For-Inclusion---MyAccessibilityBuddy.git
+cd Innovate-For-Inclusion---MyAccessibilityBuddy
+
 # 1. Setup credentials
 cp backend/.env.example backend/.env
 # Edit backend/.env and add your LLM keys
