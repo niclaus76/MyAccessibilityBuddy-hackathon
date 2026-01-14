@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="description" content="Prompt Optimization Tool - Compare and optimize AI prompts for WCAG 2.2 compliant alternative text">
+    <title>Prompt Optimization Tool - My Accessibility Buddy</title>
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.8.2/dist/css/bootstrap-italia.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body { background: #f8fafc; color: #17324d; }
+        .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1030; }
+        .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1050; overflow-y: auto; font-size: 0.7rem; }
+        .nav-menu .btn { font-size: 0.7rem; padding: 0.5rem 0.75rem; }
+        .nav-menu .fw-bold { font-size: 0.75rem; }
+        .nav-menu.active { transform: translateX(0); }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1040; pointer-events: none; }
+        .overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+        .skip-link { position:absolute; left:-999px; top:auto; width:1px; height:1px; overflow:hidden; } .skip-link:focus { position:fixed; top:0; left:0; width:auto; height:auto; padding:0.5rem 1rem; background:#0066cc; color:#fff; z-index:1060; }
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <!-- Burger Menu Button -->
+    <button class="btn btn-outline-primary nav-fab" id="menuToggle" aria-expanded="false" aria-controls="primaryNav" aria-label="Open navigation menu">
+        <span aria-hidden="true">☰</span>
+    </button>
+
+    <!-- Overlay -->
+    <div class="overlay" id="navOverlay" aria-hidden="true"></div>
+
+    <!-- Navigation Menu -->
+    <nav class="nav-menu" id="primaryNav" aria-label="Main navigation" role="dialog" aria-modal="false">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-bold text-primary">Navigation</span>
+            <button class="btn btn-link p-0" id="menuClose" aria-label="Close navigation">✕</button>
+        </div>
+        <a class="btn btn-outline-primary w-100" href="home.html">Home</a>
+        <a class="btn btn-outline-primary w-100" href="webmaster.html">Webmaster Tool</a>
+        <a class="btn btn-outline-primary w-100" href="accessibility-compliance.html">Accessibility Compliance</a>
+        <a class="btn btn-primary w-100" aria-current="page" href="prompt-optimization.html">Prompt Optimization</a>
+        <a class="btn btn-outline-primary w-100" href="remediation.html">Remediation Tool</a>
+        <a class="btn btn-outline-primary w-100" href="admin.html">Administration Tool</a>
+
+    </nav>
+
+    <!-- Header -->
+    <header class="py-5 text-center">
+        <div class="container">
+            <img src="assets/Buddy-Logo_no_text.png" alt="My Accessibility Buddy logo" width="96" height="96" class="mb-3">
+            <h1 class="fw-bold" style="font-size: 2rem;">Prompt Optimization Tool</h1>
+            <p class="lead mb-1">Compare and Optimize AI Prompts</p>
+            <p class="text-muted mb-0">Systematically test prompt variants for generating WCAG 2.2-compliant alternative text</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="main-content" class="pb-5">
+        <div class="container">
+
+            <!-- Error Messages -->
+            <div id="errorMessages" role="alert"></div>
+
+            <!-- Section A: Prompt Selection -->
+            <div class="row justify-content-center mb-3">
+                <div class="col-12 col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-body p-4">
+                            <h2 class="h5 mb-3">Select Prompts to Compare</h2>
+                            <div class="mb-3">
+                                <label for="promptSelect" class="form-label">Choose Prompt Variants</label>
+                                <select class="form-select" id="promptSelect" multiple size="6" aria-describedby="promptHelp" required>
+                                    <option value="">Loading prompts...</option>
+                                </select>
+                                <small id="promptHelp" class="form-text text-muted">
+                                    Select 2-10 prompt variants to compare. Hold Ctrl (Windows) or Cmd (Mac) to select multiple.
+                                </small>
+                                <div class="mt-2">
+                                    <span id="promptCount" class="badge bg-primary">0 of 10 prompts selected</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section B: Test Image Selection -->
+            <div class="row justify-content-center mb-3">
+                <div class="col-12 col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-body p-4">
+                            <h2 class="h5 mb-3">Test Images</h2>
+                            <div class="mb-3">
+                                <label for="folderInput" class="form-label">Select Test Images Folder</label>
+                                <input type="file" class="form-control" id="folderInput" webkitdirectory mozdirectory directory multiple aria-describedby="imageHelp" />
+                                <small id="imageHelp" class="form-text text-muted">
+                                    Choose a folder (e.g., /test/input/images) to load one or more test images. Subfolders are supported.
+                                </small>
+                                <div class="mt-2">
+                                    <span id="imageCount" class="badge bg-info text-dark" style="display: none;">0 images selected</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="contextFolderInput" class="form-label">
+                                    Context Files Folder <span class="text-muted">(optional)</span>
+                                </label>
+                                <input type="file" class="form-control" id="contextFolderInput" webkitdirectory mozdirectory directory multiple aria-describedby="contextHelp" />
+                                <small id="contextHelp" class="form-text text-muted">
+                                    Context files are matched automatically by filename (e.g., 1.png → 1.txt). Leave empty if you don't have context.
+                                </small>
+                            </div>
+                            <select id="imageSelect" class="d-none"></select>
+                            <small id="contextStatus" class="form-text text-muted d-none"></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section C: Language Selection -->
+            <div class="row justify-content-center mb-3">
+                <div class="col-12 col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-body p-4">
+                            <h2 class="h5 mb-3">Languages</h2>
+                            <div class="mb-3">
+                                <label for="languageSelect" class="form-label">Select Languages</label>
+                                <select class="form-select" id="languageSelect" multiple size="3" aria-describedby="languageHelp">
+                                    <option value="en" selected>English</option>
+                                    <option value="bg">Bulgarian</option>
+                                    <option value="hr">Croatian</option>
+                                    <option value="cs">Czech</option>
+                                    <option value="da">Danish</option>
+                                    <option value="nl">Dutch</option>
+                                    <option value="et">Estonian</option>
+                                    <option value="fi">Finnish</option>
+                                    <option value="fr">French</option>
+                                    <option value="de">German</option>
+                                    <option value="el">Greek</option>
+                                    <option value="hu">Hungarian</option>
+                                    <option value="ga">Irish</option>
+                                    <option value="it">Italian</option>
+                                    <option value="lv">Latvian</option>
+                                    <option value="lt">Lithuanian</option>
+                                    <option value="mt">Maltese</option>
+                                    <option value="pl">Polish</option>
+                                    <option value="pt">Portuguese</option>
+                                    <option value="ro">Romanian</option>
+                                    <option value="sk">Slovak</option>
+                                    <option value="sl">Slovenian</option>
+                                    <option value="es">Spanish</option>
+                                    <option value="sv">Swedish</option>
+                                </select>
+                                <small id="languageHelp" class="form-text text-muted">
+                                    Select one or more languages (hold Ctrl/Cmd for multiple)
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="row justify-content-center mb-4">
+                <div class="col-12 col-md-8">
+                    <button type="button" class="btn btn-primary btn-lg w-100 mb-2" id="generateBtn" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="me-2" aria-hidden="true">
+                            <path d="M3 12l18-9-9 18-2-7-7-2z"/>
+                        </svg>
+                        <span id="btnText">Generate</span>
+                        <span id="btnSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="btn btn-light border border-danger text-danger btn-lg w-100 mb-2" id="stopComparisonBtn" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="me-2" aria-hidden="true">
+                            <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                        </svg>
+                        <span>Stop</span>
+                    </button>
+                    <button type="button" class="btn btn-danger btn-lg w-100" id="clearBtn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-1">
+                            <path d="M3 6h18"></path>
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                        <span>Clear</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progressContainer" class="row justify-content-center mb-4" style="display: none;">
+                <div class="col-12 col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-body p-4">
+                            <h3 class="h6 mb-3">Processing</h3>
+                            <div class="mb-2">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span id="progressStatus">Initializing...</span>
+                                    <span id="progressPercent">0%</span>
+                                </div>
+                                <div class="progress" style="height: 20px;">
+                                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="row justify-content-center" style="display: none;">
+                <div class="col-12 col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-body p-4">
+                            <h3 class="h5 mb-3">Comparison Complete</h3>
+                            <div id="resultsSummary"></div>
+                            <div class="mt-4 d-flex gap-2 justify-content-center">
+                                <button type="button" class="btn btn-primary" id="viewReportBtn">
+                                    View HTML Report
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="downloadReportBtn">
+                                    Download Report
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer id="footer" class="bg-light border-top py-4 mt-4 text-center">
+        <div class="container">
+            <p class="mb-1 fw-bold">For testing purposes only</p>
+            <p class="mb-0" style="font-size: 0.9rem;">Use with non-confidential images. Avoid uploading personal or sensitive data. AI suggestions require human review before use.</p>
+        </div>
+    </footer>
+
+    <!-- Screen Reader Announcements -->
+    <div id="screenReaderAnnouncements" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.8.2/dist/js/bootstrap-italia.bundle.min.js"></script>
+    <script src="prompt-optimization.js"></script>
+
+    <!-- Burger Menu Script -->
+    <script>
+        (function() {
+            const toggleBtn = document.getElementById('menuToggle');
+            const closeBtn = document.getElementById('menuClose');
+            const nav = document.getElementById('primaryNav');
+            const overlay = document.getElementById('navOverlay');
+            let lastFocusedElement = null;
+
+            function setMenu(open) {
+                nav.classList.toggle('active', open);
+                overlay.classList.toggle('active', open);
+                toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                nav.setAttribute('aria-modal', open ? 'true' : 'false');
+
+                if (open) {
+                    lastFocusedElement = document.activeElement;
+                    setTimeout(() => {
+                        const firstFocusable = nav.querySelector('button, a');
+                        if (firstFocusable) firstFocusable.focus();
+                    }, 100);
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    if (lastFocusedElement) {
+                        lastFocusedElement.focus();
+                    } else {
+                        toggleBtn.focus();
+                    }
+                    document.body.style.overflow = '';
+                }
+            }
+
+            nav.addEventListener('keydown', (e) => {
+                if (!nav.classList.contains('active')) return;
+
+                if (e.key === 'Tab') {
+                    const focusableElements = nav.querySelectorAll('button, a');
+                    const firstFocusable = focusableElements[0];
+                    const lastFocusable = focusableElements[focusableElements.length - 1];
+
+                    if (e.shiftKey) {
+                        if (document.activeElement === firstFocusable) {
+                            e.preventDefault();
+                            lastFocusable.focus();
+                        }
+                    } else {
+                        if (document.activeElement === lastFocusable) {
+                            e.preventDefault();
+                            firstFocusable.focus();
+                        }
+                    }
+                }
+            });
+
+            toggleBtn.addEventListener('click', () => setMenu(!nav.classList.contains('active')));
+            closeBtn.addEventListener('click', () => setMenu(false));
+            overlay.addEventListener('click', () => setMenu(false));
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && nav.classList.contains('active')) {
+                    setMenu(false);
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

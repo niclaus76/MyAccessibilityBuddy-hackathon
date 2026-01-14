@@ -7,11 +7,13 @@
     color: white;
     padding: 8px 16px;
     text-decoration: none;
-    z-index: 100;
+    z-index: 1060;
     font-weight: bold;
 }
 .skip-link:focus {
+    position: fixed;
     top: 0;
+    left: 0;
     outline: 3px solid #ffdd00;
     outline-offset: 2px;
 }
@@ -23,4 +25,34 @@ textarea:focus-visible,
 [tabindex]:focus-visible {
     outline: 3px solid #0066cc;
     outline-offset: 2px;
+}
+
+/* Stop button styling - dark grey background with white text and icon */
+#stopAnalysisBtn {
+    background-color: #4a4a4a !important;
+    border-color: #4a4a4a !important;
+    color: white !important;
+}
+
+#stopAnalysisBtn svg {
+    fill: white;
+}
+
+#stopAnalysisBtn:hover:not(:disabled) {
+    background-color: #333333 !important;
+    border-color: #333333 !important;
+    color: white !important;
+}
+
+#stopAnalysisBtn:active:not(:disabled),
+#stopAnalysisBtn:focus:not(:disabled) {
+    background-color: #2a2a2a !important;
+    border-color: #2a2a2a !important;
+    color: white !important;
+}
+
+#stopAnalysisBtn:disabled {
+    background-color: #6a6a6a !important;
+    border-color: #6a6a6a !important;
+    opacity: 0.6;
 }

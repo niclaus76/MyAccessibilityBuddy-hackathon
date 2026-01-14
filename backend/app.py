@@ -46,6 +46,52 @@ except ImportError:
     OLLAMA_AVAILABLE = False
     # Note: Warning message will be conditionally added based on config.ollama.enabled setting
 
+# Import Google GenAI (Gemini) client if available (prefer new google.genai, fallback to deprecated google.generativeai)
+genai = None
+try:
+    import importlib
+    import warnings
+
+    try:
+        genai = importlib.import_module("google.genai")
+    except ImportError:
+        genai = importlib.import_module("google.generativeai")
+        # Silence deprecation warning when falling back
+        warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    genai = None
+    # Note: Warning message will be conditionally added based on config if enabled
+
+# Helper to configure Gemini client across library versions
+def configure_gemini(api_key):
+    """
+    Configure the Gemini client, supporting both google.genai and google.generativeai.
+
+    Some environments have a legacy module without `configure`; this helper falls back
+    to google.generativeai when needed.
+    """
+    global genai, GEMINI_AVAILABLE
+    if not GEMINI_AVAILABLE:
+        debug_log("Google Gemini client not installed. Install google-genai or google-generativeai.", "ERROR")
+        return False
+
+    try:
+        if hasattr(genai, "configure"):
+            genai.configure(api_key=api_key)
+            return True
+
+        # Fallback: try legacy google.generativeai
+        import importlib
+        legacy_genai = importlib.import_module("google.generativeai")
+        legacy_genai.configure(api_key=api_key)
+        genai = legacy_genai
+        return True
+    except Exception as e:
+        debug_log(f"Failed to configure Gemini client: {e}", "ERROR")
+        return False
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
@@ -94,6 +140,11 @@ def load_config(config_file=None):
         if ollama_enabled and not OLLAMA_AVAILABLE:
             STARTUP_MESSAGES.append(("WARNING", "ollama not installed. Ollama provider will not be available."))
             STARTUP_MESSAGES.append(("INFORMATION", "To use Ollama, install with: pip install ollama"))
+
+        gemini_enabled = CONFIG.get('gemini', {}).get('enabled', True)  # Default True
+        if gemini_enabled and not GEMINI_AVAILABLE:
+            STARTUP_MESSAGES.append(("WARNING", "google-generativeai not installed. Gemini provider will not be available."))
+            STARTUP_MESSAGES.append(("INFORMATION", "To use Gemini, install with: pip install google-generativeai"))
 
         # Output deferred startup messages now that logging is initialized
         for level, message in STARTUP_MESSAGES:
@@ -327,6 +378,18 @@ def get_step_config(step_name):
         ollama_config = CONFIG.get('ollama', {})
         base_url = ollama_config.get('base_url', 'http://localhost:11434')
         credentials = {'base_url': base_url}
+
+    elif provider == 'Gemini':
+        if not GEMINI_AVAILABLE:
+            debug_log("Google Generative AI not installed. Install with: pip install google-generativeai", "ERROR")
+            return None, None, None
+
+        api_key = os.environ.get('GEMINI_API_KEY')
+        if not api_key:
+            debug_log("GEMINI_API_KEY not found in environment variables", "ERROR")
+            return None, None, None
+        # Defer configuration to helper for compatibility
+        credentials = {'api_key': api_key}
 
     else:
         debug_log(f"Unknown provider: {provider}", "ERROR")
@@ -1050,19 +1113,40 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
                 'display_image_analysis_overview': True
             })
 
-            # Handle both single language (string) and multilingual (array of tuples) formats
-            if isinstance(proposed_alt_text_raw, list):
-                # Multilingual format: array of tuples [("EN", "text"), ("IT", "text")]
+            # Normalize alt-text entries to a list of (lang, text) tuples
+            def normalize_alt_items(raw, default_lang):
+                items = []
+                if isinstance(raw, list):
+                    for entry in raw:
+                        lang_code = None
+                        text_val = None
+                        if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                            lang_code, text_val = entry[0], entry[1]
+                        elif isinstance(entry, dict):
+                            lang_code = entry.get('language') or entry.get('lang') or entry.get('code')
+                            text_val = entry.get('text') or entry.get('value')
+                        elif isinstance(entry, str):
+                            parts = entry.split(':', 1)
+                            if len(parts) == 2 and len(parts[0].strip()) <= 5:
+                                lang_code, text_val = parts[0], parts[1]
+                        if lang_code is None:
+                            lang_code = default_lang
+                        if text_val is None:
+                            text_val = ""
+                        items.append((str(lang_code).upper(), str(text_val)))
+                else:
+                    items.append((str(default_lang).upper(), str(raw)))
+                return items
+
+            lang_field = data.get('language', 'en')
+            if isinstance(lang_field, list):
+                default_lang = lang_field[0] if lang_field else 'en'
                 is_multilingual = True
-                proposed_alt_text_items = proposed_alt_text_raw
             else:
-                # Single language format: string
-                is_multilingual = False
-                lang = data.get('language', 'en')
-                # Handle case where language is a list (shouldn't happen but defensive)
-                if isinstance(lang, list):
-                    lang = lang[0] if lang else 'en'
-                proposed_alt_text_items = [(lang.upper(), proposed_alt_text_raw)]
+                default_lang = lang_field
+                is_multilingual = isinstance(proposed_alt_text_raw, list)
+
+            proposed_alt_text_items = normalize_alt_items(proposed_alt_text_raw, default_lang or 'EN')
             tag_attr_raw = data.get('image_tag_attribute', {})
             
             # Defensive check: ensure tag_attr is a dictionary
@@ -1245,24 +1329,37 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         html_content = html_content.replace('{IMAGE_ANALYSIS_OVERVIEW_HTML}', image_analysis_overview_html)
         html_content = html_content.replace('{IMAGE_CARDS_HTML}', image_cards_html)
 
-        # Generate filename based on page title if available
-        # Use report_page_title (from JSON) if available, otherwise use page_title (function parameter)
-        title_for_filename = report_page_title or page_title
+        # Generate filename based on source URL and date
+        # Format: <date>-analysis-report-<url>.html
+        from datetime import datetime
+
+        # Get current date in YYYYMMDD format
+        date_str = datetime.now().strftime('%Y%m%d')
 
         # Check if user provided custom filename (not the default)
         is_default_filename = output_filename in ["alt-text-report.html", "MyAccessibilityBuddy-AltTextReport.html"]
 
-        if title_for_filename and not is_default_filename:
+        if source_url and is_default_filename:
+            # Extract domain/path from URL for filename
+            from urllib.parse import urlparse
+            try:
+                parsed_url = urlparse(source_url)
+                # Use domain + path, clean for filename
+                url_part = parsed_url.netloc + parsed_url.path
+                # Remove invalid filename characters
+                clean_url = "".join(c if c.isalnum() or c in ('-', '_', '.') else '_' for c in url_part)
+                # Remove leading/trailing underscores and limit length
+                clean_url = clean_url.strip('_')[:80]
+                final_filename = f"{date_str}-analysis-report-{clean_url}.html"
+            except Exception:
+                # Fallback if URL parsing fails
+                final_filename = f"{date_str}-analysis-report.html"
+        elif not is_default_filename:
             # User provided custom filename, use it
             final_filename = output_filename
-        elif title_for_filename:
-            # Clean page title for filename (remove invalid characters)
-            clean_title = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in title_for_filename)
-            clean_title = clean_title.replace(' ', '-')[:50]  # Limit length
-            final_filename = f"MyAccessibilityBuddy-AltTextReport-{clean_title}.html"
         else:
-            # Use default filename without page title
-            final_filename = "MyAccessibilityBuddy-AltTextReport.html"
+            # No source URL available, use date only
+            final_filename = f"{date_str}-analysis-report.html"
 
         # Write HTML file to reports folder (already resolved/created above)
         output_path = os.path.join(reports_folder, final_filename)
@@ -1633,6 +1730,13 @@ def translate_alt_text(alt_text, source_language, target_language):
             import ollama
             base_url = credentials.get('base_url', 'http://localhost:11434')
             client = ollama.Client(host=base_url)
+        elif provider == 'Gemini':
+            if not configure_gemini(credentials['api_key']):
+                return None
+            # Get model from config
+            gemini_config = CONFIG.get('gemini', {})
+            model_name = gemini_config.get('translation_model', gemini_config.get('model', 'gemini-2.0-flash-exp'))
+            client = genai.GenerativeModel(model_name)
         else:
             debug_log(f"Unsupported provider: {provider}", "ERROR")
             return None
@@ -1717,6 +1821,11 @@ def translate_alt_text(alt_text, source_language, target_language):
                 ]
             )
             translated_text = response['message']['content']
+        elif provider == 'Gemini':
+            # Gemini API structure
+            combined_prompt = f"{translation_system_prompt}\n\n{translation_prompt}"
+            response = client.generate_content(combined_prompt)
+            translated_text = response.text
         else:
             # OpenAI and ECB-LLM use the standard OpenAI API
             # Only add temperature for models that support it (gpt-5.1 doesn't support custom temperature)
@@ -1796,6 +1905,15 @@ def translate_text(text, source_language, target_language, text_type="reasoning"
             import ollama
             base_url = credentials.get('base_url', 'http://localhost:11434')
             client = ollama.Client(host=base_url)
+        elif provider == 'Gemini':
+            if not GEMINI_AVAILABLE or genai is None:
+                debug_log("Google GenAI client not installed. Install google-genai (or google-generativeai for fallback).", "ERROR")
+                return None
+            genai.configure(api_key=credentials['api_key'])
+            # Get model from config
+            gemini_config = CONFIG.get('gemini', {})
+            model_name = gemini_config.get('translation_model', gemini_config.get('model', 'gemini-2.0-flash-exp'))
+            client = genai.GenerativeModel(model_name)
         else:
             debug_log(f"Unsupported provider: {provider}", "ERROR")
             return None
@@ -1855,6 +1973,10 @@ Provide ONLY the translated text in {target_lang_name}, nothing else. Do not inc
                 messages=[{"role": "user", "content": translation_prompt}]
             )
             translated_text = response['message']['content'].strip()
+        elif provider == 'Gemini':
+            # Gemini API structure
+            response = client.generate_content(translation_prompt)
+            translated_text = response.text.strip()
         else:
             # OpenAI and ECB-LLM use OpenAI-compatible API
             api_params = {
@@ -2068,6 +2190,35 @@ def analyze_image_with_ai(image_path, combined_prompt, credentials, language=Non
                 max_completion_tokens=1000
             )
             image_description = vision_response.choices[0].message.content
+
+        elif vision_provider == 'Gemini':
+            # Gemini initialization
+            if not configure_gemini(vision_creds['api_key']):
+                return None
+            vision_client = genai.GenerativeModel(vision_model)
+            debug_log("Gemini client initialized")
+
+            # Read image file
+            import PIL.Image
+            try:
+                image = PIL.Image.open(image_path)
+
+                # Generate description using Gemini's vision capabilities
+                response = vision_client.generate_content([vision_prompt, image])
+                image_description = response.text
+                debug_log(f"Gemini vision analysis complete")
+            except Exception as gemini_error:
+                debug_log(f"Gemini API error: {str(gemini_error)}", "ERROR")
+                error_msg = str(gemini_error).lower()
+                if 'api_key' in error_msg or 'authentication' in error_msg or 'invalid' in error_msg:
+                    raise ValueError("Gemini API authentication failed. Check GEMINI_API_KEY environment variable.")
+                elif 'quota' in error_msg or 'resource_exhausted' in error_msg:
+                    raise ValueError("Gemini API quota exceeded. Please check your billing and usage limits.")
+                elif 'rate_limit' in error_msg or 'too many requests' in error_msg:
+                    raise ValueError("Gemini API rate limit exceeded. Please try again later.")
+                else:
+                    raise ValueError(f"Gemini API error: {str(gemini_error)}")
+
         else:
             debug_log(f"Unsupported provider for vision step: {vision_provider}", "ERROR")
             return None
@@ -2124,6 +2275,14 @@ Based on this image description, generate the required JSON output:
                 max_completion_tokens=1000
             )
             response_text = processing_response.choices[0].message.content
+
+        elif processing_provider == 'Gemini':
+            if not configure_gemini(processing_creds['api_key']):
+                return None
+            processing_client = genai.GenerativeModel(processing_model)
+            processing_response = processing_client.generate_content(processing_prompt)
+            response_text = processing_response.text
+
         else:
             debug_log(f"Unsupported provider for processing step: {processing_provider}", "ERROR")
             return None
@@ -2161,7 +2320,7 @@ Based on this image description, generate the required JSON output:
             result = {
                 "image_type": "informative",
                 "image_description": image_description,
-                "reasoning": f"Generated via {provider} two-step processing",
+                "reasoning": f"Generated via {processing_provider} two-step processing",
                 "alt_text": image_description[:125]  # Truncate to WCAG limit
             }
 
@@ -3011,7 +3170,7 @@ def clear_session_subfolders(base_folders=None):
         return deleted
 
 
-def generate_alt_text_json(image_filename, images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, language=None, url=None, image_url=None, image_tag_attribute=None, page_title=None, current_alt_text=None, languages=None):
+def generate_alt_text_json(image_filename, images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, language=None, url=None, image_url=None, image_tag_attribute=None, page_title=None, current_alt_text=None, languages=None, use_geo_boost=False):
     """
     Generates a JSON file with alt-text for an image using its context and a prompt template.
 
@@ -3144,9 +3303,42 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         }
 
         def create_prompt_for_language(lang_code):
-            """Create combined prompt with language placeholder replaced."""
+            """Create combined prompt with language placeholder replaced and GEO instructions injected if needed."""
             lang_name = language_map.get(lang_code, lang_code)
             lang_prompt = prompt_template.replace('{LANGUAGE}', lang_name)
+
+            # Inject GEO instructions if use_geo_boost is True
+            if use_geo_boost:
+                geo_who_you_are = "\n* You are an accessibility and Generative Engine Optimization (GEO) optimization expert."
+                geo_boost_content = """
+#### GEO OPTIMIZATION CONSTRAINTS:
+When GEO boost is enabled, apply these additional constraints to alt-text generation:
+- Write alt text as if it may be extracted and reused by AI systems
+- Ensure alt text is semantically complete when read in isolation
+- Place the primary subject in the first 5–7 words
+- Prefer noun-first, entity-explicit phrasing
+- Avoid pronouns, deixis, or page-dependent references
+- Allow limited redundancy if it improves standalone clarity
+- Use all the 125 characters to maximize information density
+"""
+                # Inject WHO YOU ARE enhancement after first occurrence of "WHO YOU ARE:"
+                if "WHO YOU ARE:" in lang_prompt:
+                    # Find the end of the first line after "WHO YOU ARE:"
+                    parts = lang_prompt.split("WHO YOU ARE:", 1)
+                    if len(parts) == 2:
+                        # Find the end of the WHO YOU ARE paragraph (next empty line or next section)
+                        who_you_are_parts = parts[1].split('\n\n', 1)
+                        lang_prompt = parts[0] + "WHO YOU ARE:" + who_you_are_parts[0] + geo_who_you_are + '\n\n' + (who_you_are_parts[1] if len(who_you_are_parts) > 1 else '')
+
+                # Inject GEO boost content - replace {GEO_BOOST} placeholder or insert before LOGOS section
+                if "{GEO_BOOST}" in lang_prompt:
+                    lang_prompt = lang_prompt.replace("{GEO_BOOST}", geo_boost_content)
+                elif "### FOR INFORMATIVE IMAGES:" in lang_prompt:
+                    lang_prompt = lang_prompt.replace("#### 2.1 LOGOS:", geo_boost_content + "\n#### 2.1 LOGOS:")
+            else:
+                # When GEO boost is disabled, remove the placeholder
+                if "{GEO_BOOST}" in lang_prompt:
+                    lang_prompt = lang_prompt.replace("{GEO_BOOST}", "")
 
             if context_text and lang_prompt:
                 return f"{lang_prompt}\n\nContext about the image:\n{context_text}\n\nImage filename: {image_filename}"
@@ -3360,10 +3552,27 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         # Create final JSON structure according to specifications
         # Calculate characters field based on alt_text type
         if isinstance(alt_text, list):
-            # Multilingual mode: array of tuples
-            # Create list of [language, character_count] for each language
-            characters = [[lang_code.upper(), len(text)] for lang_code, text in alt_text] if image_type != "decorative" and image_type != "generation_error" else []
-            proposed_alt_text = alt_text if image_type != "decorative" and image_type != "generation_error" else []
+            # Multilingual mode: normalize entries to (lang, text) tuples to avoid unpack errors
+            normalized_alt_text = []
+            for entry in alt_text:
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                    normalized_alt_text.append((str(entry[0]), str(entry[1])))
+                elif isinstance(entry, dict):
+                    lang_key = entry.get('language') or entry.get('lang') or next(iter(entry.keys()), None)
+                    text_val = entry.get('text')
+                    if lang_key and text_val:
+                        normalized_alt_text.append((str(lang_key), str(text_val)))
+                elif isinstance(entry, str):
+                    parts = entry.split(':', 1)
+                    if len(parts) == 2 and len(parts[0].strip()) <= 5:
+                        normalized_alt_text.append((parts[0].strip(), parts[1].strip()))
+
+            if image_type != "decorative" and image_type != "generation_error":
+                characters = [[lang_code.upper(), len(text)] for lang_code, text in normalized_alt_text] if normalized_alt_text else []
+                proposed_alt_text = normalized_alt_text if normalized_alt_text else []
+            else:
+                characters = []
+                proposed_alt_text = []
         else:
             # Single language mode: string
             characters = len(alt_text) if alt_text and image_type != "decorative" and image_type != "generation_error" else 0
@@ -3449,7 +3658,7 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         return (None, False)
 
 
-def process_all_images(images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, language=None, url=None, image_metadata=None, page_title=None, languages=None, max_images=None):
+def process_all_images(images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, language=None, url=None, image_metadata=None, page_title=None, languages=None, max_images=None, use_geo_boost=False):
     """
     Processes all images in the images folder, looks for corresponding context files,
     and generates JSON files for each image in the alt-text folder.
@@ -3465,6 +3674,7 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
         page_title (str): The title of the source webpage (for HTML report generation only)
         languages (list): List of ISO language codes for multilingual alt-text (overrides language if provided)
         max_images (int): Optional limit on number of images to process
+        use_geo_boost (bool): Enable GEO (Generative Engine Optimization) boost for AI-friendly alt-text
 
     Returns:
         dict: Results summary with counts of processed, successful, and failed images
@@ -3565,7 +3775,8 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
                     image_tag_attribute,
                     page_title,
                     current_alt_text,
-                    languages
+                    languages,
+                    use_geo_boost
                 )
 
                 # Unpack tuple result (json_path, success)
@@ -3624,7 +3835,7 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
         return {"processed": 0, "successful": 0, "failed": 0, "error": str(e)}
 
 
-def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, clear_all=False, max_images=None, languages=None):
+def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, clear_all=False, max_images=None, languages=None, use_geo_boost=False):
     """
     Complete AutoAltText workflow: downloads images, extracts context, and generates JSON files.
 
@@ -3637,6 +3848,7 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
         clear_all (bool): If True, automatically clear all folders (including reports) without prompting
         max_images (int): Maximum number of images to download and process (None for all)
         languages (list): List of ISO language codes for multilingual alt-text (e.g., ['en', 'it', 'es'])
+        use_geo_boost (bool): Enable GEO (Generative Engine Optimization) boost for AI-friendly alt-text
 
     Returns:
         dict: Complete workflow results with all operation summaries
@@ -3831,7 +4043,7 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
             print(f"\nStep 3/3: Generating JSON files for all images...")
 
         debug_log("Starting JSON generation step")
-        json_results = process_all_images(images_folder, context_folder, prompt_folder, alt_text_folder, None, url, image_metadata, page_title, languages, max_images)
+        json_results = process_all_images(images_folder, context_folder, prompt_folder, alt_text_folder, None, url, image_metadata, page_title, languages, max_images, use_geo_boost)
 
         workflow_results["steps"]["json_generation"] = json_results
         debug_log(f"JSON generation complete: {json_results.get('successful', 0)} successful, {json_results.get('failed', 0)} failed")
@@ -3922,6 +4134,16 @@ def main():
     parser.add_argument('--alt-text-folder', default=None, help='Folder for JSON output (default: from config)')
     parser.add_argument('--language', nargs='+', default=None, help='One or more ISO language codes for alt-text (e.g. en es fr de)')
     parser.add_argument('--num-images', type=int, default=None, help='Maximum number of images to download')
+    parser.add_argument('--geo', action='store_true', help='Enable GEO (Generative Engine Optimization) boost for AI-friendly alt-text')
+    parser.add_argument('--geo-boost', action='store_true', help='Alias for --geo to enable GEO (Generative Engine Optimization) boost')
+    parser.add_argument('--vision-provider', help='Override vision provider (OpenAI, Claude, ECB-LLM, Ollama, Gemini)')
+    parser.add_argument('--vision-model', help='Override vision model name')
+    parser.add_argument('--processing-provider', help='Override processing provider (OpenAI, Claude, ECB-LLM, Ollama, Gemini)')
+    parser.add_argument('--processing-model', help='Override processing model name')
+    parser.add_argument('--translation-provider', help='Override translation provider (OpenAI, Claude, ECB-LLM, Ollama, Gemini)')
+    parser.add_argument('--translation-model', help='Override translation model name')
+    parser.add_argument('--advanced-translation', action='store_true', help='Generate fresh alt-text per language (sets translation_mode=accurate)')
+    parser.add_argument('--translation-mode', choices=['fast', 'accurate'], help='Set translation mode for multilingual generation')
 
     # Session management options
     parser.add_argument('--session', nargs='?', const='__SESSION_NEW__', default=None,
@@ -4048,6 +4270,46 @@ def main():
     session_folders = None
     global CURRENT_SESSION_LOGS
     CURRENT_SESSION_LOGS = None
+
+    # Normalize provider names from CLI (match internal casing)
+    def normalize_provider_name(provider_name):
+        provider_map = {
+            'openai': 'OpenAI',
+            'claude': 'Claude',
+            'ecb-llm': 'ECB-LLM',
+            'ollama': 'Ollama',
+            'gemini': 'Gemini'
+        }
+        if not provider_name:
+            return None
+        return provider_map.get(provider_name, provider_name)
+
+    # Apply step-specific overrides from CLI flags
+    def apply_step_override(step, provider_value, model_value):
+        if not provider_value and not model_value:
+            return
+        if 'steps' not in CONFIG:
+            CONFIG['steps'] = {}
+        if step not in CONFIG['steps']:
+            CONFIG['steps'][step] = {}
+        if provider_value:
+            CONFIG['steps'][step]['provider'] = normalize_provider_name(provider_value)
+        if model_value:
+            CONFIG['steps'][step]['model'] = model_value
+
+    apply_step_override('vision', getattr(args, 'vision_provider', None), getattr(args, 'vision_model', None))
+    apply_step_override('processing', getattr(args, 'processing_provider', None), getattr(args, 'processing_model', None))
+    apply_step_override('translation', getattr(args, 'translation_provider', None), getattr(args, 'translation_model', None))
+
+    # Override translation mode when requested
+    if getattr(args, 'translation_mode', None):
+        CONFIG['translation_mode'] = args.translation_mode
+    elif getattr(args, 'advanced_translation', False):
+        CONFIG['translation_mode'] = 'accurate'
+
+    # Support --geo-boost as alias for --geo
+    if getattr(args, 'geo_boost', False):
+        args.geo = True
 
     # Explicit session modes
     if getattr(args, 'legacy', False):
@@ -4498,7 +4760,8 @@ For more information, see AutoAltText.md
             alt_text_folder=alt_text_folder,
             language=None,  # language (single) - not used when languages is provided
             url=None,  # No URL for standalone generate-json
-            languages=args.language
+            languages=args.language,
+            use_geo_boost=args.geo
         )
 
         # Check result and exit with error code if generation failed
@@ -4562,7 +4825,8 @@ For more information, see AutoAltText.md
             None,  # image_metadata
             None,  # page_title
             args.language,  # languages
-            args.num_images  # max_images
+            args.num_images,  # max_images
+            args.geo  # use_geo_boost
         )
 
         # Log results
@@ -4617,7 +4881,8 @@ For more information, see AutoAltText.md
             alt_text_folder=auto_alt_text,
             clear_all=args.clear_all,
             max_images=args.num_images,
-            languages=args.language
+            languages=args.language,
+            use_geo_boost=args.geo
         )
 
         # Generate HTML report if requested

@@ -7,10 +7,26 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE_DEFAULT="$SCRIPT_DIR/deploy.log"
+
 # Source configuration file if it exists
-if [ -f "$(dirname "$0")/deploy.conf" ]; then
+if [ -f "$SCRIPT_DIR/deploy.conf" ]; then
     # shellcheck source=deploy.conf
-    source "$(dirname "$0")/deploy.conf"
+    source "$SCRIPT_DIR/deploy.conf"
+fi
+
+# Logging defaults (can be overridden in deploy.conf)
+LOG_FILE="${LOG_FILE:-$LOG_FILE_DEFAULT}"
+debug_mode=${debug_mode:-true}
+LOGGING_SHOW_DEBUG=${LOGGING_SHOW_DEBUG:-${logging_show_debug:-true}}
+LOGGING_SHOW_INFORMATION=${LOGGING_SHOW_INFORMATION:-${logging_show_information:-true}}
+LOGGING_SHOW_WARNINGS=${LOGGING_SHOW_WARNINGS:-${logging_show_warnings:-true}}
+LOGGING_SHOW_ERRORS=${LOGGING_SHOW_ERRORS:-${logging_show_errors:-true}}
+
+# Initialize log file when debug logging is enabled
+if [ "$debug_mode" = true ]; then
+    : > "$LOG_FILE"
 fi
 
 # Color codes
@@ -47,31 +63,90 @@ FROM_VM=false
 SKIP_INVALIDATION=false
 MONITOR_DEPLOYMENT=true
 RUN_TESTS=false
-VERBOSITY=1  # 0=errors only, 1=normal (info+warnings+errors), 2=debug (all messages)
+VERBOSITY_LEVEL=1  # 0=errors only, 1=normal (info+warnings+errors), 2=debug (all messages)
+
+# Set verbosity based on config
+if [ "$LOGGING_SHOW_DEBUG" = true ]; then
+    VERBOSITY_LEVEL=2
+elif [ "$LOGGING_SHOW_INFORMATION" = true ]; then
+    VERBOSITY_LEVEL=1
+else
+    VERBOSITY_LEVEL=0
+fi
 
 # Functions
-print_info() {
-    if [ "$VERBOSITY" -ge 1 ]; then
-        echo -e "${BLUE}ℹ ${NC}$1"
+log_message() {
+    local type="$1"
+    local message="$2"
+    local color=""
+    local show_on_console=false
+
+    case "$type" in
+        INFO)
+            color="$BLUE"
+            if [ "$LOGGING_SHOW_INFORMATION" = true ]; then show_on_console=true; fi
+            ;;
+        SUCCESS)
+            color="$GREEN"
+            if [ "$LOGGING_SHOW_INFORMATION" = true ]; then show_on_console=true; fi
+            ;;
+        ERROR)
+            color="$RED"
+            if [ "$LOGGING_SHOW_ERRORS" = true ]; then show_on_console=true; fi
+            ;;
+        WARNING)
+            color="$YELLOW"
+            if [ "$LOGGING_SHOW_WARNINGS" = true ]; then show_on_console=true; fi
+            ;;
+        DEBUG)
+            color="$CYAN"
+            if [ "$LOGGING_SHOW_DEBUG" = true ]; then show_on_console=true; fi
+            ;;
+        *)
+            color="$NC"
+            show_on_console=true
+            ;;
+    esac
+
+    # Log to file if debug_mode is true
+    if [ "$debug_mode" = true ]; then
+        echo "$(date +"%Y-%m-%d %H:%M:%S") [$type] $message" >> "$LOG_FILE"
+    fi
+
+    # Log to console
+    if [ "$show_on_console" = true ]; then
+        if [ "$type" = "DEBUG" ]; then
+            if [ "$VERBOSITY_LEVEL" -ge 2 ]; then
+                echo -e "${color}🔍 [DEBUG] ${NC}$message"
+            fi
+        elif [ "$type" = "INFO" ]; then
+             if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+                echo -e "${color}ℹ ${NC}$message"
+            fi
+        elif [ "$type" = "SUCCESS" ]; then
+            echo -e "${color}✅ ${NC}$message"
+        elif [ "$type" = "ERROR" ]; then
+            echo -e "${color}❌ ${NC}$message"
+        elif [ "$type" = "WARNING" ]; then
+            if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+                echo -e "${color}⚠️  ${NC}$message"
+            fi
+        else
+            echo -e "${color}$message${NC}"
+        fi
     fi
 }
-print_success() { echo -e "${GREEN}✅ ${NC}$1"; }
-print_error() { echo -e "${RED}❌ ${NC}$1"; }
-print_warning() {
-    if [ "$VERBOSITY" -ge 1 ]; then
-        echo -e "${YELLOW}⚠️  ${NC}$1"
-    fi
-}
+
+print_info() { log_message "INFO" "$1"; }
+print_success() { log_message "SUCCESS" "$1"; }
+print_error() { log_message "ERROR" "$1"; }
+print_warning() { log_message "WARNING" "$1"; }
 print_file() {
-    if [ "$VERBOSITY" -ge 1 ]; then
+    if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
         echo -e "${CYAN}  → ${NC}$1"
     fi
 }
-print_debug() {
-    if [ "$VERBOSITY" -ge 2 ]; then
-        echo -e "${CYAN}🔍 [DEBUG] ${NC}$1"
-    fi
-}
+print_debug() { log_message "DEBUG" "$1"; }
 
 print_header() {
     echo ""
@@ -109,7 +184,8 @@ show_progress_bar() {
     done
     bar+="]"
 
-    printf "\r${CYAN}%-20s${NC} %s %3d%%" "$label" "$bar" "$percentage"
+    # Use fixed width padding accounting for emoji visual width
+    printf "\r${CYAN}%s${NC} %s %3d%%" "$label" "$bar" "$percentage"
 }
 
 # Progress display for parallel deployments
@@ -126,29 +202,29 @@ display_parallel_progress() {
     fi
     export PROGRESS_DISPLAYED=1
 
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     # Backend progress
     if [ "$backend_status" = "running" ]; then
         show_progress_bar "⚙️  Backend  " "$backend_progress" 100
         echo ""
     elif [ "$backend_status" = "done" ]; then
-        printf "${CYAN}%-20s${NC} ${GREEN}[COMPLETE] ✔${NC}\n" "⚙️  Backend  "
+        printf "${CYAN}%s${NC} ${GREEN}[COMPLETE] ✔${NC}\n" "⚙️  Backend  "
     else
-        printf "${CYAN}%-20s${NC} ${RED}[FAILED] ✖${NC}\n" "⚙️  Backend  "
+        printf "${CYAN}%s${NC} ${RED}[FAILED] ✖${NC}\n" "⚙️  Backend  "
     fi
 
     # Frontend progress
     if [ "$frontend_status" = "running" ]; then
-        show_progress_bar "🌐 Frontend" "$frontend_progress" 100
+        show_progress_bar "🌐 Frontend " "$frontend_progress" 100
         echo ""
     elif [ "$frontend_status" = "done" ]; then
-        printf "${CYAN}%-20s${NC} ${GREEN}[COMPLETE] ✔${NC}\n" "🌐 Frontend"
+        printf "${CYAN}%s${NC} ${GREEN}[COMPLETE] ✔${NC}\n" "🌐 Frontend "
     else
-        printf "${CYAN}%-20s${NC} ${RED}[FAILED] ✖${NC}\n" "🌐 Frontend"
+        printf "${CYAN}%s${NC} ${RED}[FAILED] ✖${NC}\n" "🌐 Frontend "
     fi
 
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
 # Show help
@@ -369,11 +445,11 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -d|--debug)
-            VERBOSITY=2
+            VERBOSITY_LEVEL=2
             shift
             ;;
         -q|--quiet)
-            VERBOSITY=0
+            VERBOSITY_LEVEL=0
             shift
             ;;
         -h|--help)
@@ -405,7 +481,7 @@ if [ "$TEST_MODE" = true ]; then
 fi
 
 # Show verbosity level
-case $VERBOSITY in
+case $VERBOSITY_LEVEL in
     0)
         print_warning "QUIET MODE - Errors only"
         echo ""

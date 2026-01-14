@@ -37,8 +37,10 @@ from app import (
     load_config,
     get_absolute_folder_path,
     get_llm_credentials,
+    log_message,
     ECB_LLM_AVAILABLE,
-    OLLAMA_AVAILABLE
+    OLLAMA_AVAILABLE,
+    GEMINI_AVAILABLE
 )
 
 # Custom middleware to handle CloudFront/ALB proxy headers
@@ -226,6 +228,76 @@ def get_session_type(session_id: str) -> str:
         return 'cli'
     else:
         return 'unknown'
+
+def clear_session_data(session_id: str) -> dict:
+    """
+    Clear session-specific data from images, context, alt-text, and reports folders.
+
+    Supports both web- and cli- prefixed session IDs.
+
+    Returns:
+        dict with success, message, files_deleted, folders_deleted, session_id, and cleared details
+    """
+    import shutil
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    cleared = {}
+    files_deleted = 0
+    folders_deleted = 0
+
+    try:
+        base_images = get_absolute_folder_path('images')
+        base_context = get_absolute_folder_path('context')
+        base_alt_text = get_absolute_folder_path('alt_text')
+        base_reports = get_absolute_folder_path('reports')
+        base_logs = get_absolute_folder_path('logs')
+
+        targets = {
+            "images": os.path.join(base_images, session_id),
+            "context": os.path.join(base_context, session_id),
+            "alt_text": os.path.join(base_alt_text, session_id),
+            "reports": os.path.join(base_reports, session_id),
+            "logs": os.path.join(base_logs, session_id)
+        }
+
+        for key, path in targets.items():
+            if os.path.exists(path):
+                try:
+                    # Count files before deletion
+                    if os.path.isdir(path):
+                        for root, dirs, files in os.walk(path):
+                            files_deleted += len(files)
+
+                    # Remove the entire folder
+                    shutil.rmtree(path)
+                    folders_deleted += 1
+                    cleared[key] = True
+                    log_message(f"Cleared {key} folder for session {session_id}", "INFORMATION")
+                except Exception as e:
+                    log_message(f"Failed to clear {key} for session {session_id}: {e}", "WARNING")
+                    cleared[key] = False
+            else:
+                cleared[key] = False
+
+        # Remove from in-memory tracking for web sessions
+        if session_id in WEB_APP_SESSIONS:
+            WEB_APP_SESSIONS.pop(session_id, None)
+
+        return {
+            "success": True,
+            "message": f"Session {session_id} cleared successfully",
+            "files_deleted": files_deleted,
+            "folders_deleted": folders_deleted,
+            "session_id": session_id,
+            "cleared": cleared
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_message(f"Clear session error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
 
 def get_session_folders(session_id: str) -> dict:
     """
@@ -714,6 +786,10 @@ async def get_available_providers():
     if OLLAMA_AVAILABLE and CONFIG.get('ollama', {}).get('enabled', False):
         available_providers['ollama'] = CONFIG.get('ollama', {}).get('available_models', {})
 
+    # Check Gemini - only include if the library is installed AND enabled
+    if GEMINI_AVAILABLE and CONFIG.get('gemini', {}).get('enabled', False):
+        available_providers['gemini'] = CONFIG.get('gemini', {}).get('available_models', {})
+
     # Get current config defaults from steps
     current_config = CONFIG.get('steps', {
         'vision': {'provider': 'OpenAI', 'model': 'gpt-4o'},
@@ -725,6 +801,7 @@ async def get_available_providers():
         'providers': available_providers,
         'ecb_llm_available': ECB_LLM_AVAILABLE and CONFIG.get('ecb_llm', {}).get('enabled', False),
         'ollama_available': OLLAMA_AVAILABLE and CONFIG.get('ollama', {}).get('enabled', False),
+        'gemini_available': GEMINI_AVAILABLE and CONFIG.get('gemini', {}).get('enabled', False),
         'config_defaults': current_config
     }
 
@@ -741,7 +818,8 @@ async def generate_alt_text(
     processing_provider: Optional[str] = Form(None, description="Processing provider (openai, claude, ecb-llm, ollama)"),
     processing_model: Optional[str] = Form(None, description="Processing model (e.g., gpt-4o-mini, phi3)"),
     translation_provider: Optional[str] = Form(None, description="Translation provider (openai, claude, ecb-llm, ollama)"),
-    translation_model: Optional[str] = Form(None, description="Translation model (e.g., gpt-4o-mini, phi3)")
+    translation_model: Optional[str] = Form(None, description="Translation model (e.g., gpt-4o-mini, phi3)"),
+    use_geo_boost: bool = Form(False, description="Enable GEO (Generative Engine Optimization) boost for alt-text")
 ):
     """
     Generate WCAG 2.2 compliant alt-text for an image with per-step provider/model override support.
@@ -783,7 +861,8 @@ async def generate_alt_text(
             'openai': 'OpenAI',
             'claude': 'Claude',
             'ecb-llm': 'ECB-LLM',
-            'ollama': 'Ollama'
+            'ollama': 'Ollama',
+            'gemini': 'Gemini'
         }
         return provider_map.get(provider_name.lower(), provider_name)
 
@@ -871,7 +950,8 @@ async def generate_alt_text(
             images_folder=tmp_images_dir,
             context_folder=tmp_context_dir,
             alt_text_folder=tmp_output_dir,
-            languages=[language]
+            languages=[language],
+            use_geo_boost=use_geo_boost
         )
 
         if not success or not json_path:
@@ -879,6 +959,28 @@ async def generate_alt_text(
             error_detail = "Failed to generate alt-text"
             if vision_provider == 'claude' or vision_provider == 'Claude':
                 error_detail += ". Check that ANTHROPIC_API_KEY is set correctly."
+
+            # Try to read the JSON file to get specific error information
+            if json_path and os.path.exists(json_path):
+                try:
+                    import json
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        error_result = json.load(f)
+
+                    # Check if it's a generation error with reasoning that might indicate quota issues
+                    if error_result.get('image_type') == 'generation_error':
+                        reasoning = error_result.get('reasoning', '')
+
+                        # Detect quota or rate limit errors
+                        if 'quota' in reasoning.lower() or 'insufficient_quota' in reasoning.lower():
+                            error_detail = f"API Quota Exceeded: Your {vision_provider} API has run out of credits. Please add credits to your account or switch to a different provider."
+                        elif 'rate limit' in reasoning.lower() or 'rate_limit' in reasoning.lower():
+                            error_detail = f"API Rate Limit: Your {vision_provider} API rate limit has been exceeded. Please wait a moment and try again, or switch to a different provider."
+                        elif reasoning:
+                            error_detail = f"Generation Error: {reasoning}"
+                except Exception:
+                    pass  # If we can't read the error details, use the generic message
+
             raise HTTPException(
                 status_code=500,
                 detail=error_detail
@@ -893,24 +995,40 @@ async def generate_alt_text(
         proposed_alt_text = result.get('proposed_alt_text', '')
 
         # Handle both single language (string) and multilingual (list of tuples) formats
+        def extract_lang_value(entries, target_lang):
+            """Helper to safely extract values from multilingual structures."""
+            if not isinstance(entries, list):
+                return ""
+            target = str(target_lang).upper()
+            fallback = ""
+            for entry in entries:
+                lang_code = None
+                text_val = None
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                    lang_code, text_val = entry[0], entry[1]
+                elif isinstance(entry, dict):
+                    lang_code = entry.get('language') or entry.get('lang') or entry.get('code')
+                    text_val = entry.get('text') or entry.get('value')
+                elif isinstance(entry, str):
+                    parts = entry.split(':', 1)
+                    if len(parts) == 2:
+                        lang_code, text_val = parts[0], parts[1]
+                if lang_code and text_val:
+                    if str(lang_code).upper() == target:
+                        return str(text_val)
+                    if not fallback:
+                        fallback = str(text_val)
+            return fallback
+
         if isinstance(proposed_alt_text, list):
-            # Multilingual: find the requested language
-            alt_text_str = next(
-                (text for lang_code, text in proposed_alt_text if lang_code.upper() == language.upper()),
-                proposed_alt_text[0][1] if proposed_alt_text else ''
-            )
+            alt_text_str = extract_lang_value(proposed_alt_text, language)
         else:
-            # Single language
             alt_text_str = proposed_alt_text
 
         # Extract reasoning (handle multilingual format)
         reasoning_value = result.get('reasoning', '')
         if isinstance(reasoning_value, list) and reasoning_value:
-            # Multilingual: find the requested language
-            reasoning_str = next(
-                (text for lang_code, text in reasoning_value if lang_code.upper() == language.upper()),
-                reasoning_value[0][1] if reasoning_value else ''
-            )
+            reasoning_str = extract_lang_value(reasoning_value, language)
         else:
             reasoning_str = reasoning_value
 
@@ -957,6 +1075,17 @@ async def generate_alt_text(
     except HTTPException:
         raise
     except Exception as e:
+        # Check if this is a known API error
+        error_message = str(e)
+
+        # Detect quota errors from API exceptions
+        if 'quota' in error_message.lower() or 'insufficient_quota' in error_message.lower():
+            error_message = f"API Quota Exceeded: Your API provider has run out of credits. Please add credits to your account or switch to a different provider in Advanced Processing Mode."
+        elif 'rate limit' in error_message.lower() or 'rate_limit' in error_message.lower():
+            error_message = f"API Rate Limit Exceeded: Too many requests. Please wait a moment and try again, or switch to a different provider."
+        elif 'authentication' in error_message.lower() or 'api key' in error_message.lower() or 'unauthorized' in error_message.lower():
+            error_message = f"API Authentication Error: {error_message}. Please verify your API keys are configured correctly."
+
         return AltTextResponse(
             success=False,
             alt_text="",
@@ -964,7 +1093,7 @@ async def generate_alt_text(
             reasoning=None,
             character_count=0,
             language=language,
-            error=str(e)
+            error=error_message
         )
     finally:
         # Restore original CONFIG.steps settings
@@ -1117,96 +1246,6 @@ async def save_reviewed_alt_text(fastapi_request: Request, request: SaveReviewed
             json_file_path=None,
             error=str(e)
         )
-
-
-@app.post("/api/clear-session")
-async def clear_session(request: Request, response: Response):
-    """
-    Clear all data for the current user session.
-
-    This endpoint:
-    - Deletes all images in the session folder
-    - Deletes all generated JSON files
-    - Deletes all reports
-    - Removes the session from memory
-    - Clears the session cookie
-
-    Args:
-        request: FastAPI Request object
-        response: FastAPI Response object
-
-    Returns:
-        dict: Success message with details of what was cleared
-    """
-    import shutil
-
-    try:
-        # Get current session ID
-        session_id = request.cookies.get("web_session_id")
-
-        if not session_id:
-            return {
-                "success": True,
-                "message": "No active session to clear",
-                "files_deleted": 0,
-                "folders_deleted": 0
-            }
-
-        # Get session folders
-        session_folders = get_session_folders(session_id)
-
-        files_deleted = 0
-        folders_deleted = 0
-
-        # Delete session folders
-        for key, folder in session_folders.items():
-            if key in ['images', 'alt_text'] and os.path.exists(folder):
-                try:
-                    # Count files before deletion
-                    if os.path.isdir(folder):
-                        file_count = len([f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))])
-                        files_deleted += file_count
-
-                    # Remove the entire folder
-                    shutil.rmtree(folder)
-                    folders_deleted += 1
-                    print(f"Cleared session folder: {folder}")
-                except Exception as e:
-                    print(f"Error deleting folder {folder}: {e}")
-
-        # Delete report folder if it exists
-        base_output_folder = get_absolute_folder_path('output')
-        report_folder = os.path.join(base_output_folder, 'reports', session_id)
-        if os.path.exists(report_folder):
-            try:
-                shutil.rmtree(report_folder)
-                folders_deleted += 1
-                print(f"Cleared report folder: {report_folder}")
-            except Exception as e:
-                print(f"Error deleting report folder: {e}")
-
-        # Remove from session storage
-        if session_id in WEB_APP_SESSIONS:
-            del WEB_APP_SESSIONS[session_id]
-
-        # Clear the session cookie
-        response.delete_cookie(key="web_session_id")
-
-        return {
-            "success": True,
-            "message": f"Session {session_id} cleared successfully",
-            "files_deleted": files_deleted,
-            "folders_deleted": folders_deleted,
-            "session_id": session_id
-        }
-
-    except Exception as e:
-        return {
-            "success": False,
-            "message": f"Error clearing session: {str(e)}",
-            "files_deleted": 0,
-            "folders_deleted": 0
-        }
 
 
 @app.post("/api/generate-report")
@@ -1393,6 +1432,924 @@ async def test_env_check():
         "client_secret_u2a_masked": mask_value(client_secret),
         "dotenv_loaded": "dotenv" in str(type(load_dotenv)) if 'load_dotenv' in dir() else False,
         "warning": "This endpoint exposes partial credential info - disable in production!"
+    }
+
+
+@app.post("/api/check-url")
+async def check_url(request: Request):
+    """
+    Check if a URL is reachable.
+
+    Request body:
+    {
+        "url": "https://example.com"
+    }
+
+    Returns:
+    {
+        "reachable": true/false,
+        "status_code": 200,
+        "error": "error message if not reachable"
+    }
+    """
+    try:
+        import requests
+        from requests.exceptions import RequestException, Timeout, ConnectionError
+
+        data = await request.json()
+        url = data.get('url')
+
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+
+        # Validate URL format
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            if not parsed.scheme or not parsed.netloc:
+                raise ValueError("Invalid URL format")
+        except Exception:
+            return {
+                "reachable": False,
+                "error": "Invalid URL format"
+            }
+
+        # Try to reach the URL with a HEAD request first (faster)
+        try:
+            response = requests.head(url, timeout=10, allow_redirects=True)
+            if response.status_code < 400:
+                log_message(f"URL reachable: {url} (status: {response.status_code})", "INFORMATION")
+                return {
+                    "reachable": True,
+                    "status_code": response.status_code
+                }
+            else:
+                # If HEAD fails, try GET (some servers don't support HEAD)
+                response = requests.get(url, timeout=10, allow_redirects=True, stream=True)
+                response.close()  # Close immediately, we just want to check reachability
+
+                if response.status_code < 400:
+                    log_message(f"URL reachable: {url} (status: {response.status_code})", "INFORMATION")
+                    return {
+                        "reachable": True,
+                        "status_code": response.status_code
+                    }
+                else:
+                    log_message(f"URL not reachable: {url} (status: {response.status_code})", "WARNING")
+                    return {
+                        "reachable": False,
+                        "status_code": response.status_code,
+                        "error": f"HTTP {response.status_code}"
+                    }
+        except Timeout:
+            log_message(f"URL timeout: {url}", "WARNING")
+            return {
+                "reachable": False,
+                "error": "Connection timeout - the server took too long to respond"
+            }
+        except ConnectionError:
+            log_message(f"URL connection error: {url}", "WARNING")
+            return {
+                "reachable": False,
+                "error": "Connection failed - unable to reach the server"
+            }
+        except RequestException as e:
+            log_message(f"URL request error: {url} - {str(e)}", "WARNING")
+            return {
+                "reachable": False,
+                "error": str(e)
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_message(f"Check URL error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/clear-session")
+async def clear_session(request: Request):
+    """
+    Clear session data (images, context, alt-text, reports) for a specific session.
+
+    If session_id is not provided in the request body, the web_session_id cookie is used.
+    Supports both web- and cli- sessions.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    session_id = body.get("session_id") if isinstance(body, dict) else None
+
+    if not session_id:
+        session_id = request.cookies.get("web_session_id")
+
+    if not session_id:
+        return {
+            "success": True,
+            "message": "No active session to clear",
+            "files_deleted": 0,
+            "folders_deleted": 0
+        }
+
+    result = clear_session_data(session_id)
+    log_message(f"Cleared session data for {session_id}", "INFORMATION")
+    return result
+
+@app.post("/api/analyze-page")
+async def analyze_page(request: Request):
+    """
+    Analyze a web page for accessibility compliance.
+
+    This endpoint executes: app.py -w --url <URL> --num-images <N> --language <langs> --report
+    with optional advanced options for provider/model selection.
+
+    Request body:
+    {
+        "url": "https://example.com/page",
+        "languages": ["en", "it"],  # optional, defaults to ["en"]
+        "num_images": 10,  # optional, if omitted processes all images
+        "vision_provider": "openai",  # optional
+        "vision_model": "gpt-4-vision-preview",  # optional
+        "processing_provider": "openai",  # optional
+        "processing_model": "gpt-4",  # optional
+        "translation_provider": "openai",  # optional
+        "translation_model": "gpt-4",  # optional
+        "advanced_translation": true,  # optional, defaults to false
+        "geo_boost": true  # optional, defaults to false
+    }
+
+    Returns:
+    {
+        "success": true,
+        "url": "https://example.com/page",
+        "report_path": "output/reports/web-xxx/report.html",
+        "summary": {
+            "total_images": 15,
+            "missing_alt": 5,
+            "has_alt": 10
+        }
+    }
+    """
+    try:
+        data = await request.json()
+        url = data.get('url')
+        languages = data.get('languages', ['en'])
+        num_images = data.get('num_images')  # Can be None for all images
+        session_id_override = data.get('session')
+
+        # Advanced options
+        vision_provider = data.get('vision_provider')
+        vision_model = data.get('vision_model')
+        processing_provider = data.get('processing_provider')
+        processing_model = data.get('processing_model')
+        translation_provider = data.get('translation_provider')
+        translation_model = data.get('translation_model')
+        advanced_translation = data.get('advanced_translation', False)
+        geo_boost = data.get('geo_boost', False)
+
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+
+        # Validate URL
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            if not parsed.scheme or not parsed.netloc:
+                raise ValueError("Invalid URL format")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid URL: {str(e)}")
+
+        # Build command line arguments
+        cmd_args = ['-w', '--url', url, '--report']
+
+        # Add languages
+        if languages and isinstance(languages, list):
+            for lang in languages:
+                cmd_args.extend(['--language', lang])
+
+        # Add num_images if specified
+        if num_images is not None:
+            try:
+                num_images_int = int(num_images)
+                if num_images_int < 1:
+                    raise ValueError("num_images must be at least 1")
+                cmd_args.extend(['--num-images', str(num_images_int)])
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid num_images: {str(e)}")
+
+        # Add explicit session if provided (keeps CLI/web runs in a known session)
+        if session_id_override:
+            cmd_args.extend(['--session', session_id_override])
+
+        # Add advanced options
+        if vision_provider:
+            cmd_args.extend(['--vision-provider', vision_provider])
+        if vision_model:
+            cmd_args.extend(['--vision-model', vision_model])
+        if processing_provider:
+            cmd_args.extend(['--processing-provider', processing_provider])
+        if processing_model:
+            cmd_args.extend(['--processing-model', processing_model])
+        if translation_provider:
+            cmd_args.extend(['--translation-provider', translation_provider])
+        if translation_model:
+            cmd_args.extend(['--translation-model', translation_model])
+        if advanced_translation:
+            cmd_args.append('--advanced-translation')
+        if geo_boost:
+            cmd_args.append('--geo-boost')
+
+        # Execute the CLI command
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        # Get the app.py path
+        app_py_path = Path(__file__).parent / 'app.py'
+
+        # Run the command
+        cmd = [sys.executable, str(app_py_path)] + cmd_args
+
+        log_message(f"Executing: {' '.join(cmd)}", "INFORMATION")
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or "Unknown error"
+            log_message(f"CLI execution failed: {error_msg}", "ERROR")
+            raise HTTPException(status_code=500, detail=f"Analysis failed: {error_msg}")
+
+        # Parse output to find session info, report path, and summary stats
+        output = result.stdout
+        report_path = None
+        session_id = None
+        alt_text_folder = None
+
+        import re
+        import json
+
+        # Look for report path, session ID, and output folder hints in CLI output
+        for line in output.split('\n'):
+            lower_line = line.lower()
+
+            if not report_path and 'report' in lower_line and '.html' in lower_line:
+                # Try to match the full path including session folder
+                match = re.search(r'(output/reports/[^/\s]+/[^\s]+\.html)', line)
+                if not match:
+                    # Fallback to simpler pattern
+                    match = re.search(r'([^\s]*output/reports[^\s]*\.html)', line)
+                if match:
+                    report_path = match.group(1).strip()
+
+            if not session_id:
+                session_match = re.search(r'Using session:\s*([^\s]+)', line)
+                if session_match:
+                    session_id = session_match.group(1).strip()
+
+            if not alt_text_folder and 'output folder' in lower_line:
+                folder_match = re.search(r'Output folder:\s*([^\s]+)', line, flags=re.IGNORECASE)
+                if folder_match:
+                    alt_text_folder = folder_match.group(1).strip()
+
+        # Derive alt-text folder from session when not explicitly printed
+        base_alt_text = Path(get_absolute_folder_path('alt_text'))
+        if not alt_text_folder and session_id:
+            candidate = base_alt_text / session_id
+            if candidate.exists():
+                alt_text_folder = str(candidate)
+
+        # Fallback to the most recent session folder if nothing was detected
+        if not alt_text_folder:
+            session_folders = [p for p in base_alt_text.glob('cli-*') if p.is_dir()]
+            session_folders = sorted(session_folders, key=lambda p: p.stat().st_mtime, reverse=True)
+            if session_folders:
+                alt_text_folder = str(session_folders[0])
+
+        total_images = 0
+        missing_alt = 0
+        has_alt = 0
+
+        # If we have an alt-text folder, count JSON files and missing alt text values
+        if alt_text_folder:
+            alt_text_path = Path(alt_text_folder)
+            json_files = list(alt_text_path.glob('*.json'))
+            total_images = len(json_files)
+
+            for json_file in json_files:
+                try:
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    current_alt = (data.get('current_alt_text') or '').strip()
+                    if current_alt:
+                        has_alt += 1
+                    else:
+                        missing_alt += 1
+                except Exception:
+                    # Skip unreadable files but continue counting others
+                    continue
+
+        # If no JSON files were found, try to recover counts from CLI output
+        if total_images == 0:
+            for line in output.split('\n'):
+                lower_line = line.lower()
+                numbers = re.findall(r'(\d+)', line)
+                last_number = int(numbers[-1]) if numbers else None
+
+                if 'images downloaded' in lower_line or 'image sources' in lower_line:
+                    if last_number is not None:
+                        total_images = last_number
+                elif 'json files generated' in lower_line:
+                    if last_number is not None:
+                        total_images = last_number
+                elif 'missing alt' in lower_line:
+                    if last_number is not None:
+                        missing_alt = last_number
+
+        # If no JSON files, try to parse the HTML report to count images
+        if total_images == 0:
+            # Find the report first
+            temp_report_path = None
+            if session_id:
+                reports_base = Path(get_absolute_folder_path('reports'))
+                candidate_folder = reports_base / session_id
+                if candidate_folder.exists():
+                    candidates = list(candidate_folder.glob('*.html'))
+                    candidates = [c for c in candidates if c.name != 'report_template.html']
+                    if candidates:
+                        candidates = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)
+                        temp_report_path = candidates[0]
+
+            if temp_report_path and temp_report_path.exists():
+                try:
+                    from bs4 import BeautifulSoup
+                    with open(temp_report_path, 'r', encoding='utf-8') as f:
+                        soup = BeautifulSoup(f.read(), 'html.parser')
+
+                    # Find the summary section and look for "Total Images Analyzed"
+                    summary = soup.find('section', class_='summary')
+                    if summary:
+                        for p in summary.find_all('p'):
+                            if 'Total Images Analyzed' in p.get_text():
+                                match = re.search(r'(\d+)', p.get_text())
+                                if match:
+                                    total_images = int(match.group(1))
+                                    break
+
+                    # Count image cards in the report if still 0
+                    if total_images == 0:
+                        image_cards = soup.find_all('div', class_='image-card')
+                        total_images = len(image_cards)
+
+                    log_message(f"Parsed HTML report: found {total_images} images", "INFORMATION")
+                except Exception as e:
+                    log_message(f"Failed to parse HTML report for image count: {e}", "WARNING")
+
+        # Align counts
+        has_alt = max(has_alt, 0)
+        if total_images:
+            has_alt = max(has_alt, total_images - missing_alt)
+
+        # If report path wasn't in stdout, try to locate it using the session folder
+        if not report_path:
+            reports_base = Path(get_absolute_folder_path('reports'))
+            candidate_folder = reports_base / session_id if session_id else reports_base
+            if candidate_folder.exists():
+                # Prefer the standard generated report name if present
+                candidates = list(candidate_folder.glob('*.html'))
+                candidates = [c for c in candidates if c.name != 'report_template.html']
+                if candidates:
+                    # Use the most recently modified report
+                    candidates = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)
+                    report_path = str(candidates[0])
+
+        # Normalize report path to a project-relative string when possible
+        if report_path:
+            project_root = Path(__file__).parent.parent
+            try:
+                # Convert to Path object, resolve to absolute, then make relative
+                report_path_obj = Path(report_path).resolve()
+                report_path = str(report_path_obj.relative_to(project_root))
+                # Ensure forward slashes for cross-platform compatibility
+                report_path = report_path.replace('\\', '/')
+            except Exception as e:
+                # If we can't make it relative, try to extract just the output/... part
+                log_message(f"Could not make path relative: {e}", "WARNING")
+                report_path_str = str(report_path)
+                # Try to find 'output/' in the path and use everything from there
+                if 'output' in report_path_str:
+                    idx = report_path_str.find('output')
+                    report_path = report_path_str[idx:]
+                    report_path = report_path.replace('\\', '/')
+                else:
+                    report_path = report_path_str.replace('\\', '/')
+
+        return {
+            "success": True,
+            "url": url,
+            "report_path": report_path,
+            "summary": {
+                "total_images": total_images,
+                "missing_alt": missing_alt,
+                "has_alt": has_alt
+            },
+            "output": output  # Include full output for debugging
+        }
+
+    except HTTPException:
+        raise
+    except subprocess.TimeoutExpired:
+        log_message("Analysis timeout", "ERROR")
+        raise HTTPException(status_code=504, detail="Analysis timed out after 5 minutes")
+    except Exception as e:
+        log_message(f"Analyze page error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _resolve_report_path(path: str) -> "Path":
+    """
+    Resolve a report path safely within the output directory and recover the newest report
+    when a folder or stale path is provided.
+    """
+    from pathlib import Path
+
+    project_root = Path(__file__).parent.parent
+    output_dir = project_root / 'output'
+
+    # Resolve provided path relative to project root when it's not absolute
+    report_file = Path(path)
+    if not report_file.is_absolute():
+        report_file = project_root / report_file
+
+    try:
+        report_file_abs = report_file.resolve()
+        output_dir_abs = output_dir.resolve()
+
+        # Ensure the requested path stays inside output/
+        if not str(report_file_abs).startswith(str(output_dir_abs)):
+            log_message(f"Access denied: {report_file_abs} is outside {output_dir_abs}", "WARNING")
+            raise HTTPException(status_code=403, detail="Access denied: File outside output directory")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_message(f"Path validation error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    # If the exact file does not exist, attempt to recover a report within the same folder
+    if not report_file_abs.exists():
+        fallback_folder = report_file_abs if report_file_abs.is_dir() else report_file_abs.parent
+        if fallback_folder.exists():
+            candidates = list(fallback_folder.glob('*.html'))
+            candidates = [c for c in candidates if c.name != 'report_template.html']
+            if candidates:
+                # Use most recent HTML report
+                candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                recovered = candidates[0]
+                log_message(f"Resolved missing report path to latest file: {recovered}", "INFORMATION")
+                return recovered.resolve()
+
+        log_message(f"Report file not found: {report_file_abs}", "WARNING")
+        raise HTTPException(status_code=404, detail=f"Report file not found: {path}")
+
+    return report_file_abs
+
+
+@app.get("/api/download-report")
+async def download_report(path: str):
+    """Download a generated report file."""
+    try:
+        from fastapi.responses import FileResponse
+
+        report_file_abs = _resolve_report_path(path)
+
+        log_message(f"Downloading report: {report_file_abs}", "INFORMATION")
+        return FileResponse(
+            path=str(report_file_abs),
+            filename=report_file_abs.name,
+            media_type='text/html'
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_message(f"Download report error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/view-report")
+async def view_report(path: str):
+    """View a generated report file in browser."""
+    try:
+        from fastapi.responses import FileResponse
+
+        report_file_abs = _resolve_report_path(path)
+
+        log_message(f"Viewing report: {report_file_abs}", "INFORMATION")
+        return FileResponse(
+            path=str(report_file_abs),
+            media_type='text/html'
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_message(f"View report error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/upload-test-files")
+async def upload_test_files(
+    request: Request,
+    response: Response,
+    images: List[UploadFile] = File(..., description="Image files"),
+    context: Optional[List[UploadFile]] = File(None, description="Optional context files")
+):
+    """
+    Upload test images and context files for prompt comparison.
+
+    Creates a temporary session folder and returns the paths for use with batch-compare-prompts.
+
+    Returns:
+        dict: Contains images_folder and context_folder paths
+    """
+    import shutil
+
+    try:
+        # Get or create session ID
+        session_id = get_or_create_session_id(request)
+
+        # Set session cookie in response
+        response.set_cookie(
+            key="web_session_id",
+            value=session_id,
+            max_age=86400,  # 24 hours
+            httponly=True,
+            samesite="lax"
+        )
+
+        # Get session folders
+        session_folders = get_session_folders(session_id)
+        images_folder = session_folders['images']
+
+        # Create context folder (sibling to images folder)
+        base_context = get_absolute_folder_path('context')
+        context_folder = os.path.join(base_context, session_id)
+        os.makedirs(context_folder, exist_ok=True)
+
+        # Save uploaded images
+        image_count = 0
+        for image_file in images:
+            if image_file.content_type and image_file.content_type.startswith('image/'):
+                # Extract just the filename (remove any directory separators)
+                safe_filename = os.path.basename(image_file.filename)
+                file_path = os.path.join(images_folder, safe_filename)
+                content = await image_file.read()
+                with open(file_path, 'wb') as f:
+                    f.write(content)
+                image_count += 1
+
+        # Save uploaded context files if any
+        context_count = 0
+        if context:
+            for context_file in context:
+                if context_file.filename.endswith('.txt'):
+                    # Extract just the filename (remove any directory separators)
+                    safe_filename = os.path.basename(context_file.filename)
+                    file_path = os.path.join(context_folder, safe_filename)
+                    content = await context_file.read()
+                    with open(file_path, 'wb') as f:
+                        f.write(content)
+                    context_count += 1
+
+        return {
+            "success": True,
+            "images_folder": images_folder,
+            "context_folder": context_folder if context_count > 0 else "",
+            "images_uploaded": image_count,
+            "context_files_uploaded": context_count,
+            "session_id": session_id
+        }
+
+    except Exception as e:
+        log_message(f"Upload test files error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/available-prompts")
+async def available_prompts():
+    """Get list of available processing prompts."""
+    try:
+        from pathlib import Path
+
+        # Get prompt folder path
+        prompt_folder = Path(__file__).parent.parent / 'prompt' / 'processing'
+
+        if not prompt_folder.exists():
+            return {"prompts": [], "default": ["v0", "v4"]}
+
+        # List all .txt files
+        prompt_files = []
+        for file in prompt_folder.glob('processing_prompt_v*.txt'):
+            # Extract version from filename (e.g., processing_prompt_v0.txt -> v0)
+            version = file.stem.replace('processing_prompt_', '')
+            prompt_files.append(version)
+
+        # Sort versions
+        prompt_files.sort()
+
+        return {
+            "prompts": prompt_files,
+            "default": ["v0", "v4"] if "v0" in prompt_files and "v4" in prompt_files else prompt_files[:2] if len(prompt_files) >= 2 else prompt_files
+        }
+
+    except Exception as e:
+        log_message(f"Available prompts error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/available-test-folders")
+async def available_test_folders():
+    """Get list of available test image folders."""
+    try:
+        from pathlib import Path
+        import os
+
+        # Base test folder
+        test_base = Path(__file__).parent.parent / 'test' / 'input' / 'images'
+
+        if not test_base.exists():
+            return {"folders": []}
+
+        folders = []
+
+        # Helper: count supported image types in a folder
+        def count_images(folder: Path) -> int:
+            return len(list(folder.glob('*.jpg')) + list(folder.glob('*.png')) +
+                       list(folder.glob('*.gif')) + list(folder.glob('*.webp')))
+
+        # If images live directly under test_base, include that folder
+        base_image_count = count_images(test_base)
+        if base_image_count > 0:
+            folders.append({
+                "path": str(test_base),
+                "name": test_base.name.replace('_', ' ').replace('-', ' ').title(),
+                "image_count": base_image_count,
+                "context_folder": str(test_base).replace('/images', '/context')
+            })
+
+        # Iterate through subdirectories
+        for folder in test_base.iterdir():
+            if folder.is_dir():
+                image_count = count_images(folder)
+
+                if image_count > 0:
+                    folders.append({
+                        "path": str(folder),
+                        "name": folder.name.replace('_', ' ').replace('-', ' ').title(),
+                        "image_count": image_count,
+                        "context_folder": str(folder).replace('/images', '/context')
+                    })
+
+        # Sort by name
+        folders.sort(key=lambda x: x['name'])
+
+        return {"folders": folders}
+
+    except Exception as e:
+        log_message(f"Available test folders error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/batch-compare-prompts")
+async def batch_compare_prompts(request: Request):
+    """
+    Execute batch prompt comparison tool.
+
+    Runs: python3 /app/backend/tools/batch_compare_prompts.py
+
+    Request body:
+    {
+        "prompts": ["v0", "v4"],
+        "images_folder": "/app/test/input/images/geo",
+        "context_folder": "/app/test/input/context/geo",
+        "languages": ["en"],
+        "vision_provider": "openai",
+        "vision_model": "gpt-4o",
+        "processing_provider": "openai",
+        "processing_model": "gpt-4o",
+        "translation_provider": "openai",
+        "translation_model": "gpt-4o",
+        "advanced_translation": false,
+        "geo_boost": false
+    }
+    """
+    try:
+        data = await request.json()
+
+        prompts = data.get('prompts', [])
+        images_folder = data.get('images_folder')
+        context_folder = data.get('context_folder', '')
+        languages = data.get('languages', ['en'])
+
+        # Advanced options
+        vision_provider = data.get('vision_provider')
+        vision_model = data.get('vision_model')
+        processing_provider = data.get('processing_provider')
+        processing_model = data.get('processing_model')
+        translation_provider = data.get('translation_provider')
+        translation_model = data.get('translation_model')
+        advanced_translation = data.get('advanced_translation', False)
+        geo_boost = data.get('geo_boost', False)
+
+        # Validation
+        if not prompts or len(prompts) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 prompts required")
+
+        if not images_folder:
+            raise HTTPException(status_code=400, detail="Images folder is required")
+
+        # Build command
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        script_path = Path(__file__).parent.parent / 'tools' / 'batch_compare_prompts.py'
+
+        if not script_path.exists():
+            raise HTTPException(status_code=404, detail="Batch compare tool not found")
+
+        cmd = [sys.executable, str(script_path)]
+
+        # Add arguments
+        cmd.extend(['--images-folder', images_folder])
+
+        if context_folder:
+            cmd.extend(['--context-folder', context_folder])
+
+        # Add languages
+        for lang in languages:
+            cmd.extend(['--language', lang])
+
+        # Add prompts
+        cmd.append('--prompts')
+        cmd.extend(prompts)
+
+        # Add report flag
+        cmd.append('--report')
+
+        # Add advanced options
+        if vision_provider:
+            cmd.extend(['--vision-provider', vision_provider])
+        if vision_model:
+            cmd.extend(['--vision-model', vision_model])
+        if processing_provider:
+            cmd.extend(['--processing-provider', processing_provider])
+        if processing_model:
+            cmd.extend(['--processing-model', processing_model])
+        if translation_provider:
+            cmd.extend(['--translation-provider', translation_provider])
+        if translation_model:
+            cmd.extend(['--translation-model', translation_model])
+        if advanced_translation:
+            cmd.append('--advanced-translation')
+        if geo_boost:
+            cmd.append('--geo-boost')
+
+        log_message(f"Executing: {' '.join(cmd)}", "INFORMATION")
+
+        # Execute
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minute timeout for batch processing
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or "Unknown error"
+            log_message(f"Batch compare failed: {error_msg}", "ERROR")
+            raise HTTPException(status_code=500, detail=f"Batch comparison failed: {error_msg}")
+
+        # Parse output to find report paths
+        output = result.stdout
+        report_path = None
+        csv_path = None
+
+        import re
+
+        for line in output.split('\n'):
+            if '.html' in line and 'prompt_comparison' in line:
+                match = re.search(r'(output/reports/prompt_comparison_[^\s]+\.html)', line)
+                if match:
+                    report_path = match.group(1)
+            elif '.csv' in line and 'prompt_comparison' in line:
+                match = re.search(r'(output/reports/prompt_comparison_[^\s]+\.csv)', line)
+                if match:
+                    csv_path = match.group(1)
+
+        # Count images processed
+        from pathlib import Path
+        images_path = Path(images_folder)
+        image_count = 0
+        if images_path.exists():
+            image_count = len(list(images_path.glob('*.jpg')) + list(images_path.glob('*.png')) +
+                             list(images_path.glob('*.gif')) + list(images_path.glob('*.webp')))
+
+        return {
+            "success": True,
+            "report_path": report_path,
+            "csv_path": csv_path,
+            "summary": {
+                "total_images": image_count,
+                "prompts_compared": len(prompts),
+                "languages": len(languages),
+                "processing_time_seconds": 0,  # Could parse from output
+                "success_rate": 100
+            },
+            "output": output
+        }
+
+    except HTTPException:
+        raise
+    except subprocess.TimeoutExpired:
+        log_message("Batch comparison timeout", "ERROR")
+        raise HTTPException(status_code=504, detail="Batch comparison timed out after 10 minutes")
+    except Exception as e:
+        log_message(f"Batch compare error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/alt-text-length-config")
+async def get_alt_text_length_config():
+    """
+    Get current alt-text length configuration.
+
+    Returns:
+        Dictionary with min_alt_text_length and max_alt_text_length values
+    """
+    from app import CONFIG
+
+    if not CONFIG:
+        load_config()
+        from app import CONFIG
+
+    # Get values from config, default to 125 if not set
+    min_length = CONFIG.get('min_alt_text_length', 125)
+    max_length = CONFIG.get('max_alt_text_length', 125)
+
+    return {
+        'min_alt_text_length': min_length,
+        'max_alt_text_length': max_length
+    }
+
+
+class AltTextLengthConfig(BaseModel):
+    min_alt_text_length: int
+    max_alt_text_length: int
+
+
+@app.post("/api/alt-text-length-config")
+async def update_alt_text_length_config(config: AltTextLengthConfig):
+    """
+    Update alt-text length configuration in memory.
+
+    This updates the runtime configuration. Changes are not persisted to config.json
+    and will be lost when the application restarts.
+
+    Args:
+        config: AltTextLengthConfig with min and max values
+
+    Returns:
+        Updated configuration values
+    """
+    from app import CONFIG
+
+    if not CONFIG:
+        load_config()
+        from app import CONFIG
+
+    # Validate values
+    if config.min_alt_text_length < 1:
+        raise HTTPException(status_code=400, detail="min_alt_text_length must be at least 1")
+
+    if config.max_alt_text_length < config.min_alt_text_length:
+        raise HTTPException(status_code=400, detail="max_alt_text_length must be greater than or equal to min_alt_text_length")
+
+    # Update CONFIG in memory
+    CONFIG['min_alt_text_length'] = config.min_alt_text_length
+    CONFIG['max_alt_text_length'] = config.max_alt_text_length
+
+    log_message("INFO", f"Alt-text length configuration updated: min={config.min_alt_text_length}, max={config.max_alt_text_length}")
+
+    return {
+        'min_alt_text_length': config.min_alt_text_length,
+        'max_alt_text_length': config.max_alt_text_length,
+        'message': 'Configuration updated successfully (runtime only, not persisted to file)'
     }
 
 

@@ -89,29 +89,50 @@
     "enabled": false,
     "_comment_enabled": "Set to true to enable Ollama provider (requires ollama package and running Ollama server). Set to false to disable and prevent warning messages.",
     "base_url": "http://host.docker.internal:11434",
-    "_comment_available_models_vision": "Ollama vision models: granite3.2-vision (IBM Granite 3.2 with vision, recommended), llama3.2-vision (Meta Llama 3.2 with vision), moondream (lightweight vision model), llava (LLaVA multimodal model)",
-    "_comment_available_models_processing": "Ollama text models: phi3 (Microsoft Phi-3 3.8B, fast and efficient, recommended), llama3.2 (Meta Llama 3.2 3B), granite3.2 (IBM Granite 3.2 3B), qwen2.5 (Alibaba Qwen 2.5), mistral (Mistral 7B)",
-    "_comment_available_models_translation": "Ollama translation models: Same as processing models - phi3 (recommended for speed), llama3.2, granite3.2, qwen2.5 (good for non-Latin scripts), mistral",
+    "_comment_available_models_vision": "Ollama vision models: qwen3-vl (Alibaba Qwen3-VL multimodal model, recommended), granite3.2-vision (IBM Granite 3.2 with vision), llama3.2-vision (Meta Llama 3.2 with vision), llava (LLaVA multimodal model), moondream (lightweight vision model)",
+    "_comment_available_models_processing": "Ollama text models: qwen2.5 (Alibaba Qwen 2.5, recommended), phi3 (Microsoft Phi-3 3.8B, fast and efficient), mistral (Mistral 7B), llama3.2 (Meta Llama 3.2 3B)",
+    "_comment_available_models_translation": "Ollama translation models: Same as processing models - qwen2.5 (recommended, good for non-Latin scripts), phi3 (fast), mistral, llama3.2",
     "available_models": {
       "vision": [
+        "qwen3-vl",
         "granite3.2-vision",
         "llama3.2-vision",
-        "moondream",
-        "llava"
+        "llava",
+        "moondream"
       ],
       "processing": [
-        "phi3",
-        "llama3.2",
-        "granite3.2",
         "qwen2.5",
-        "mistral"
+        "phi3",
+        "mistral",
+        "llama3.2"
       ],
       "translation": [
-        "phi3",
-        "llama3.2",
-        "granite3.2",
         "qwen2.5",
-        "mistral"
+        "phi3",
+        "mistral",
+        "llama3.2"
+      ]
+    }
+  },
+  "gemini": {
+    "enabled": true,
+    "_comment_enabled": "Set to true to enable Google Gemini provider (requires google-generativeai package and GEMINI_API_KEY). Set to false to disable and prevent warning messages.",
+    "_comment_available_models": "Gemini models: gemini-2.0-flash-exp (latest experimental model, fast, multimodal), gemini-1.5-pro (production-ready, multimodal), gemini-1.5-flash (faster, lighter)",
+    "available_models": {
+      "vision": [
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash"
+      ],
+      "processing": [
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash"
+      ],
+      "translation": [
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash"
       ]
     }
   },
@@ -120,9 +141,9 @@
   "_comment_prompt": "Prompt template configuration: processing_files (list of processing prompt files), default_processing_prompt (fallback), vision_files (list of vision prompt files), default_vision_prompt (fallback), translation_files (list of translation prompt files), default_translation_prompt (fallback). For merge_separator setting, see config.advanced.json",
   "prompt": {
     "processing_files": [
-      "processing_prompt_v2.txt"
+      "processing_prompt_v5.txt"
     ],
-    "default_processing_prompt": "processing_prompt_v3.txt",
+    "default_processing_prompt": "processing_prompt_v5.txt",
     "vision_files": [
       "vision_prompt_v1.txt"
     ],
@@ -135,5 +156,19 @@
       "translation_system_prompt_v0.txt"
     ],
     "default_translation_system_prompt": "translation_system_prompt_v0.txt"
+  },
+  "_comment_batch_comparison": "Batch prompt comparison for AI engineers: test_geo_boost=true generates BOTH GEO and non-GEO versions for each image+prompt combination, test_geo_boost=false generates only standard WCAG alt-text",
+  "batch_comparison": {
+    "prompts": [
+      {
+        "file": "processing_prompt_v0.txt",
+        "label": "v0: base promt"
+      }
+    ],
+    "test_images": [
+      "1.png"
+    ],
+    "language": "en",
+    "test_geo_boost": false
   }
 }

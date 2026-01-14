@@ -15,14 +15,13 @@ MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant conte
 
 ### Core Capabilities
 - 🧠 **Context aware**: Uses page context to refine descriptions
-- 📍 **GEO boost**: Generates AI friendly descriptions (Generative Engine Optimization - GEO)
-- 🔒 **Privacy**: Use local AI models trough Ollama 
-- 🤖 **AI providers**: OpenAI GPT-4o/5.1/5.2, Claude Sonnet-4/Opus-4, You enterprise LLM (like the ECB-LLM), or Ollama running on local machine with your favorite model like Phi, LLava etc.
+- 📍 **GEO boost**: Generates AI-friendly descriptions optimized for AI search engines (Generative Engine Optimization)
+- 🔒 **Privacy**: Use local AI models through Ollama
+- 🤖 **AI providers**: OpenAI GPT-4o/5.1/5.2, Claude Sonnet-4/Opus-4, Your enterprise LLM (like ECB-LLM), or Ollama running on local machine with models like Phi, LLava etc.
 - ♿ **WCAG 2.2 compliant**: Follows accessibility standards
 - 🖼️ **Multi-format support**: JPG, PNG, GIF, WEBP, SVG, BMP, TIFF
 - 🌍 **24 EU languages**: Multilingual alt-text generation
 - 🔄 **Multiple interfaces**: CLI, Web UI, REST API
-
 
 ## Quick Start with Docker 🐳
 
@@ -40,6 +39,10 @@ docker compose ps
 # 4. Open in browser
 # Web UI: http://localhost:8080/home.html
 # API Docs: http://localhost:8000/api/docs
+
+# 5. Stop, build and restart after conf update
+docker stop myaccessibilitybuddy && docker rm myaccessibilitybuddy
+docker compose build myaccessibilitybuddy && docker compose up
 ```
 
 ### AWS/Production Deployment
@@ -56,10 +59,15 @@ environment:
 ```
 
 The application automatically handles CORS for localhost development. Additional origins can be specified as comma-separated values.
+
+## Report Formats
+MyAccessibilityBuddy generates three types of reports, each with a standardized naming convention: `YYYYMMDD-<report name>.html`, details are in the **[Reports format] section (#Report Formats)**:
+
 ## Documentation
 - **[docs/DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md)** - Get started in 3 minutes with Docker
 - **[docs/DOCKER.md](docs/DOCKER.md)** - Complete Docker deployment guide
 - **[docs/CLAUDE.md](docs/CLAUDE.md)** - Developer guide and architecture
+
 
 ## Use cases
 
@@ -74,7 +82,7 @@ Generate compliant alt-text for single images using the web interface or API. Pe
 Open http://localhost:8080/home.html
 1. Upload image (drag & drop or browse)
 2. Select language(s)
-3. Click "Generate Alt Text"
+3. Click "Generate"
 
 # To clean all temporary files 
 docker exec myaccessibilitybuddy python3 backend/app.py --clear-all --force
@@ -102,10 +110,14 @@ docker compose exec myaccessibilitybuddy python3 /app/backend/app.py --legacy -g
 docker compose exec myaccessibilitybuddy python3 /app/backend/app.py --legacy -p --images-folder /app/test/input/images --num-images 2 --context-folder /app/test/input/context --language en --report --clear-all --force
 
 5) Full workflow: download images and context from a given URL and generates the report
-docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -w --url https://ecb.europa.eu --num-images 2 --language en --report --clear-all --force 
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -w --url https://ecb.europa.eu --num-images 2 --language en --report --clear-all --force
+
+6) Generate GEO-optimized alt text (AI-friendly for search engines)
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -g 1.png --language en --geo --report
+docker compose exec myaccessibilitybuddy python3 /app/backend/app.py -w --url https://ecb.europa.eu --num-images 2 --language en --geo --report --clear-all --force 
 
 # For AI engineers: Batch Prompt Comparison Tool
-# Run with default config (compares prompts v0-v4 on test images)
+# Run with default config (compares prompts v0-v5 on test images)
 docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
 ```
 
@@ -152,12 +164,14 @@ Edit `backend/config/config.advanced.json` for advanced settings.
 
 #### Example Output
 
-**HTML Report** (`output/reports/accessibility_report_[timestamp].html`):
+**HTML Report** (format: `YYYYMMDD-analysis-report-<url>.html`):
 - Image analysis overview with statistics
 - Image type distribution (decorative/informative/functional)
 - Current vs. proposed alt-text comparison
 - WCAG compliance recommendations
 - Visual previews and detailed reasoning
+
+**Example filename:** `20260113-analysis-report-www.ecb.europa.eu.html`
 
 ### For AI engineers: Batch Prompt Comparison Tool
 
@@ -166,54 +180,77 @@ Compare multiple prompt templates to optimize your alt-text quality. The batch c
 #### Quick Start
 
 ```bash
-# Run with default config (compares prompts v0-v4 on test images)
-docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
+# Edit backend/config/config.json -> batch_comparison.prompts and verify the change
+docker compose exec myaccessibilitybuddy cat /app/backend/config/config.json | grep "test_geo_boost"
 
 # Compare specific prompts (edit config first)
-# Edit backend/config/config.advanced.json -> testing.batch_comparison.prompts
-docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
-
-# Test with more images (add to config.advanced.json)
-# testing.batch_comparison.test_images: ["1.png", "2.png", "3.png", "4.png"]
 docker compose exec myaccessibilitybuddy python3 /app/tools/batch_compare_prompts.py
 ```
 
 #### Configuration
 
-Edit `backend/config/config.advanced.json` to customize your test:
+Edit `backend/config/config.json` to customize your test:
 
 ```json
 {
-  "testing": {
-    "batch_comparison": {
-      "prompts": [
-        {"file": "processing_prompt_v0.txt", "label": "v0: base prompt"},
-        {"file": "processing_prompt_v3.txt", "label": "v3: WCAG focused"}
-      ],
-      "test_images": ["1.png", "2.png"],
-      "test_context": ["1.txt", "2.txt"],
-      "language": "en"
-    }
+  "batch_comparison": {
+    "prompts": [
+      {"file": "processing_prompt_v3.txt", "label": "v3: WCAG focused"},
+      {"file": "processing_prompt_v5.txt", "label": "v5: enhanced WCAG"}
+    ],
+    "test_images": ["1.png", "2.png"],
+    "language": "en",
+    "test_geo_boost": false
   }
 }
 ```
 
+**GEO Boost Testing:**
+
+The `test_geo_boost` parameter controls how GEO optimization is tested:
+
+- **`"test_geo_boost": false`** (default): Tests each prompt in standard WCAG mode only
+  - Generates one alt-text per image per prompt
+  - Output: Single column per prompt in reports
+
+- **`"test_geo_boost": true`**: Dual-mode testing - tests each prompt with BOTH standard and GEO optimization
+  - Generates TWO alt-texts per image per prompt (standard + GEO)
+  - Output: Two columns per prompt in reports (Standard vs. GEO)
+  - Ideal for comparing the impact of GEO boost within the same test run
+
+**Example dual-mode output:**
+
+When `test_geo_boost: true`, the CSV will have columns like:
+```
+Image Filename | v3: WCAG focused (Standard) | v3: WCAG focused (GEO) | v5: enhanced WCAG (Standard) | v5: enhanced WCAG (GEO)
+```
+
+This allows you to directly compare how GEO optimization affects each prompt's output quality.
+
 #### Example Output
 
-The tool generates two reports:
+The tool generates two reports with standardized naming:
 
-**CSV Report** (`test/output/reports/prompt_comparison_[timestamp].csv`):
+**CSV Report** (format: `prompt_comparison_YYYYMMDD_HHMMSS.csv`):
 ```
 Image Filename,Alt Text (v0: base prompt),Alt Text (v2: WCAG focused)
 1.png,"Monetary policy graphic","Illustration showing ECB monetary policy with 2% inflation target"
 2.png,"Interest rate chart","Chart displaying key ECB interest rates over time"
 ```
 
-**HTML Report** (`test/output/reports/prompt_comparison_[timestamp].html`):
+**Example filename:** `prompt_comparison_20260113_142530.csv`
+
+**HTML Report** (format: `prompt_comparison_YYYYMMDD_HHMMSS.html`):
 - Side-by-side comparison of all prompts
 - Accessible HTML format
 - Visual preview of test images
 - Character count and reasoning for each result
+
+**Example filename:** `prompt_comparison_20260113_142530.html`
+
+When GEO boost testing is enabled (`test_geo_boost: true`), filenames include `_geo_comparison` suffix:
+- `prompt_comparison_20260113_142530_geo_comparison.csv`
+- `prompt_comparison_20260113_142530_geo_comparison.html`
 
 ## Overview
 
@@ -238,10 +275,69 @@ By enabling accessibility at scale, it supports participation, autonomy, and equ
 MyAccessibilityBuddy reframes accessibility from a compliance obligation to **shared digital infrastructure**.  
 By improving both human accessibility and machine interpretability, it aligns inclusive design with the future of AI-mediated information access.
 
+## Report Formats
+### 1. Accessibility Compliance Reports
+Generated when analyzing web pages for WCAG compliance.
+**Format:** `YYYYMMDD-analysis-report-<url>.html`
+**Examples:**
+- `20260113-analysis-report-www.ecb.europa.eu.html`
+
+**Location:** `output/reports/<session-id>/`
+
+**Generated by:**
+- CLI: `python3 app.py -w --url <URL> --report`
+- Web UI: Accessibility Compliance tool
+- API: `/api/analyze-page` endpoint
+
+### 2. Webmaster Reports
+Generated when processing individual images or image batches via the webmaster tool.
+
+**Format:** `webmaster-report-YYYY-MM-DD-HHMMSS.html`
+
+**Example:** `webmaster-report-2026-01-13-143052.html`
+
+**Location:** `output/reports/<session-id>/`
+
+**Generated by:**
+- Web UI: Webmaster tool (upload images)
+- API: `/api/generate-report` endpoint
+
+### 3. Prompt Comparison Reports
+Generated when comparing multiple prompt templates for AI engineering optimization.
+
+**Formats:**
+- CSV: `prompt_comparison_YYYYMMDD_HHMMSS.csv`
+- HTML: `prompt_comparison_YYYYMMDD_HHMMSS.html`
+- With GEO testing: `prompt_comparison_YYYYMMDD_HHMMSS_geo_comparison.csv`
+
+**Examples:**
+- `prompt_comparison_20260113_142530.csv`
+- `prompt_comparison_20260113_142530_geo_comparison.html`
+
+**Location:** `test/output/reports/`
+
+**Generated by:**
+- CLI: `python3 tools/batch_compare_prompts.py`
+- API: `/api/batch-compare-prompts` endpoint
+
+All reports are saved in the output folder structure defined in `backend/config/config.json` or `backend/config/config.advanced.json`.
+
 
 ## License
+Copyright © 2026 Nicola Caione - nicola.caione@gmail.com
+All rights reserved.
 
-Copyright 2025 by <TEAM NAME>. All rights reserved.
+This software and its associated documentation files (the “Software”) are provided for non-commercial use only.
+
+Permission is hereby granted to use, copy, modify, and distribute the Software solely for personal, educational, research, or non-profit purposes, provided that this copyright notice and this licence statement are included in all copies or substantial portions of the Software.
+
+Commercial use is strictly prohibited, including but not limited to:
+Use in products or services that are sold, licensed, or monetized
+Use within commercial organizations for internal or external business purposes
+Use as part of paid consulting, training, or support services
+Any commercial use requires prior written permission from the copyright holder.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
 
 ## Project Information
 

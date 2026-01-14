@@ -15,6 +15,8 @@
     "prompt_processing": "prompt/processing",
     "prompt_vision": "prompt/vision",
     "prompt_translation": "prompt/translation",
+    "prompt_optimization_test_images": "test/input/images",
+    "prompt_optimization_test_context": "test/input/context",
     "logs": "logs",
     "training": "training",
     "training_datasets": "training/datasets",
@@ -54,6 +56,12 @@
     "timeout": 30,
     "delay_between_requests": 3,
     "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  },
+
+  "_comment_web_ui": "Web UI default settings",
+  "web_ui": {
+    "_comment_default_num_images": "Default number of images to process when 'Process all images' is unchecked (1-100)",
+    "default_num_images": 1
   },
 
   "_comment_image_extraction": "Configure which HTML tags and attributes to use for finding images",

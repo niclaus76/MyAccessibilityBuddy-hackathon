@@ -7,12 +7,14 @@
     let translationModel = '';
     let selectedLanguages = ['en']; // Array of selected language codes
     let translationMode = 'fast'; // 'fast' or 'accurate'
+    let geoBoost = false; // GEO (Generative Engine Optimization) boost
     let selectedFile = null;
     let selectedContextFile = null;
     let contextText = '';
     let languageResults = {}; // Store alt text results for each language {lang: {text, imageId, jsonPath}}
     let isAuthenticated = false;
     let loginUrl = null;
+    let currentAbortController = null; // For aborting ongoing requests
 
     // Model options for each provider (will be loaded from API)
     let modelOptions = {};
@@ -124,7 +126,8 @@
                 'OpenAI': 'openai',
                 'Claude': 'claude',
                 'ECB-LLM': 'ecb-llm',
-                'Ollama': 'ollama'
+                'Ollama': 'ollama',
+                'Gemini': 'gemini'
             };
             return providerMap[provider] || provider.toLowerCase();
         };
@@ -200,7 +203,7 @@
                     <div class="alert alert-warning" role="alert">
                         <h6 class="alert-heading"><strong>No providers enabled!</strong></h6>
                         <p class="mb-0">Please enable at least one provider in config.json to use this feature.</p>
-                        <p class="mb-0"><small>Available providers: OpenAI, Claude, ECB-LLM, or Ollama</small></p>
+                        <p class="mb-0"><small>Available providers: OpenAI, Claude, ECB-LLM, Gemini, or Ollama</small></p>
                     </div>
                 </div>
             `;
@@ -246,7 +249,8 @@
                     'openai': 'OpenAI',
                     'claude': 'Claude',
                     'ecb-llm': 'ECB-LLM',
-                    'ollama': 'Ollama'
+                    'ollama': 'Ollama',
+                    'gemini': 'Gemini'
                 };
 
                 option.textContent = displayNames[provider] || provider;
@@ -286,6 +290,20 @@
         }
 
         console.log(`[TRANSLATION] Mode set to: ${translationMode}`);
+    }
+
+    // GEO Boost toggle
+    function handleGeoBoostChange() {
+        const geoBoostToggle = document.getElementById('geoBoostToggle');
+        const isGeoBoostEnabled = Boolean(geoBoostToggle && geoBoostToggle.checked);
+
+        geoBoost = isGeoBoostEnabled;
+
+        if (geoBoostToggle) {
+            geoBoostToggle.setAttribute('aria-checked', isGeoBoostEnabled ? 'true' : 'false');
+        }
+
+        console.log(`[GEO] Boost set to: ${geoBoost}`);
     }
 
     // Initialize Bootstrap tooltips
@@ -331,6 +349,22 @@
 
             // Initialize state to ensure ARIA attributes are in sync
             handleTranslationModeChange();
+        }
+
+        // Set up GEO Boost listener
+        const geoBoostToggle = document.getElementById('geoBoostToggle');
+        if (geoBoostToggle) {
+            geoBoostToggle.addEventListener('change', handleGeoBoostChange);
+            geoBoostToggle.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    geoBoostToggle.checked = !geoBoostToggle.checked;
+                    handleGeoBoostChange();
+                }
+            });
+
+            // Initialize state to ensure ARIA attributes are in sync
+            handleGeoBoostChange();
         }
 
         // Toggle detailed instructions visibility
@@ -399,6 +433,7 @@
     const previewContainer = document.getElementById('previewContainer');
     const previewImage = document.getElementById('previewImage');
     const generateBtn = document.getElementById('generateBtn');
+    const stopGenerationBtn = document.getElementById('stopGenerationBtn');
     const clearBtn = document.getElementById('clearBtn');
     const resultSection = document.getElementById('resultSection');
     const resultsContainer = document.getElementById('resultsContainer');
@@ -484,6 +519,80 @@
     langSelect.addEventListener('change', (e) => {
         selectedLanguages = Array.from(e.target.selectedOptions).map(opt => opt.value);
         console.log('[LANGUAGE] Selected languages:', selectedLanguages);
+
+        // Announce selection changes to screen readers
+        const count = selectedLanguages.length;
+        const langNames = selectedLanguages.map(code => languageNames[code] || code).join(', ');
+        announceToScreenReader(`${count} language${count !== 1 ? 's' : ''} selected: ${langNames}`);
+    });
+
+    // Enhanced keyboard navigation for language selection
+    let lastSelectedIndex = -1;
+
+    langSelect.addEventListener('keydown', (e) => {
+        const options = Array.from(langSelect.options);
+        const focusedIndex = langSelect.selectedIndex;
+
+        // Handle Space key for selection
+        if (e.key === ' ') {
+            e.preventDefault();
+
+            const currentOption = options[focusedIndex] || options[0];
+
+            if (e.ctrlKey || e.metaKey) {
+                // Ctrl/Cmd + Space: Toggle selection
+                currentOption.selected = !currentOption.selected;
+            } else if (e.shiftKey && lastSelectedIndex !== -1) {
+                // Shift + Space: Range selection
+                const start = Math.min(lastSelectedIndex, focusedIndex);
+                const end = Math.max(lastSelectedIndex, focusedIndex);
+                for (let i = start; i <= end; i++) {
+                    options[i].selected = true;
+                }
+            } else {
+                // Plain Space: Toggle current option
+                currentOption.selected = !currentOption.selected;
+            }
+
+            // Update last selected index
+            lastSelectedIndex = focusedIndex;
+
+            // Trigger change event
+            langSelect.dispatchEvent(new Event('change'));
+        }
+
+        // Handle Shift + Arrow keys for range selection
+        if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            if (lastSelectedIndex === -1) {
+                lastSelectedIndex = focusedIndex;
+            }
+
+            // Let the default behavior handle navigation, then select the range
+            setTimeout(() => {
+                const newIndex = Array.from(options).findIndex(opt => opt === document.activeElement) || focusedIndex;
+                const start = Math.min(lastSelectedIndex, newIndex);
+                const end = Math.max(lastSelectedIndex, newIndex);
+
+                for (let i = start; i <= end; i++) {
+                    options[i].selected = true;
+                }
+
+                langSelect.dispatchEvent(new Event('change'));
+            }, 0);
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            // Update last selected index on regular arrow navigation
+            setTimeout(() => {
+                lastSelectedIndex = Array.from(options).findIndex(opt => opt === document.activeElement) || focusedIndex;
+            }, 0);
+        }
+
+        // Handle Ctrl/Cmd + A for select all
+        if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+            e.preventDefault();
+            options.forEach(opt => opt.selected = true);
+            langSelect.dispatchEvent(new Event('change'));
+            announceToScreenReader('All languages selected');
+        }
     });
 
     // Character count and visual feedback for a specific textarea
@@ -521,7 +630,7 @@
         const altTextDisplay = altText === "" ? '(Empty alt text for decorative image)' : altText;
 
         // Build descriptive label with processing and translation mode context
-        const labelText = `Generated alternative text for ${langName}, using processing mode '${processingMode}' and translation mode '${translationMode}'`;
+        const labelText = `Generated alternative text for ${langName}`;
 
         const card = document.createElement('div');
         card.className = 'card shadow-sm mb-3';
@@ -813,7 +922,7 @@
             uploadArea.classList.add('d-none');
             previewContainer.classList.remove('d-none');
             generateBtn.disabled = false;
-            generateBtn.focus();
+            contextDragdrop.focus();
 
             // Update Remove button with file name for accessibility
             removeImage.setAttribute('aria-label', `Remove ${file.name}`);
@@ -1126,9 +1235,24 @@
         const btnSpinner = document.getElementById('btnSpinner');
         const generationStatus = document.getElementById('generationStatus');
 
+        // Clear previous session data before starting new generation
+        try {
+            await clearSessionData();
+            console.log('[WEBMASTER] Cleared previous session data before new generation');
+        } catch (error) {
+            console.error('[WEBMASTER] Failed to clear previous session data:', error);
+            // Continue anyway - don't block new generation
+        }
+
         btnText.textContent = 'Generating...';
         btnSpinner.classList.remove('d-none');
         generateBtn.disabled = true;
+        if (stopGenerationBtn) {
+            stopGenerationBtn.disabled = false;
+        }
+
+        // Create new AbortController for this generation
+        currentAbortController = new AbortController();
 
         // Clear previous results and errors
         resultsContainer.innerHTML = '';
@@ -1155,6 +1279,7 @@
                 formData.append('image', selectedFile);
                 formData.append('language', lang);
                 formData.append('translation_mode', translationMode);
+                formData.append('use_geo_boost', geoBoost);
 
                 // Handle processing mode
                 if (processingMode === 'basic') {
@@ -1197,14 +1322,37 @@
                 const response = await fetch(`${API_BASE_URL}/generate-alt-text`, {
                     method: 'POST',
                     credentials: 'include',
-                    body: formData
+                    body: formData,
+                    signal: currentAbortController.signal
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
                 const data = await response.json();
+
+                // Check for API quota or rate limit errors
+                if (!response.ok) {
+                    // Check if error message contains quota/rate limit information
+                    let errorMsg = `HTTP error! status: ${response.status}`;
+
+                    if (data.error) {
+                        errorMsg = data.error;
+
+                        // Detect quota exceeded errors
+                        if (errorMsg.toLowerCase().includes('quota') ||
+                            errorMsg.toLowerCase().includes('insufficient_quota') ||
+                            errorMsg.toLowerCase().includes('rate limit')) {
+                            throw new Error(`API Quota Exceeded: Your API provider has run out of credits or reached rate limits. Please check your billing settings or try using a different provider (enable Advanced Processing Mode to switch providers).`);
+                        }
+
+                        // Detect authentication errors
+                        if (errorMsg.toLowerCase().includes('authentication') ||
+                            errorMsg.toLowerCase().includes('api key') ||
+                            errorMsg.toLowerCase().includes('unauthorized')) {
+                            throw new Error(`API Authentication Error: ${errorMsg}. Please verify your API keys are configured correctly.`);
+                        }
+                    }
+
+                    throw new Error(errorMsg);
+                }
 
                 if (data.success && data.alt_text !== undefined && data.alt_text !== null) {
                     // Store result for this language
@@ -1220,7 +1368,16 @@
 
                     console.log(`[GENERATE] Successfully generated for ${lang}`);
                 } else {
-                    throw new Error(data.error || `Failed to generate alt-text for ${lang}`);
+                    // Check if the backend returned a generation error with details
+                    if (data.error) {
+                        // Check for quota issues in the error message
+                        if (data.error.toLowerCase().includes('quota') ||
+                            data.error.toLowerCase().includes('insufficient_quota')) {
+                            throw new Error(`API Quota Exceeded: Your API provider has run out of credits. Please add credits to your account or switch to a different provider (enable Advanced Processing Mode to change providers).`);
+                        }
+                        throw new Error(data.error);
+                    }
+                    throw new Error(`Failed to generate alt-text for ${lang}`);
                 }
             }
 
@@ -1249,21 +1406,81 @@
             }, 500);
 
         } catch (error) {
-            console.error('Error generating alt-text:', error);
-            const errorMessage = `Generation error: ${error.message}. Make sure the API server is running (python backend/api.py).`;
+            console.error('[GENERATE] Error generating alt-text:', error);
+
+            // Check if error was due to abort
+            if (error.name === 'AbortError') {
+                console.log('[GENERATE] Generation aborted by user');
+                return; // Stop function already handled the cleanup
+            }
+
+            // Determine if this is a known error type
+            let errorMessage;
+            if (error.message.includes('API Quota Exceeded')) {
+                errorMessage = error.message;
+            } else if (error.message.includes('API Authentication Error')) {
+                errorMessage = error.message;
+            } else if (error.message.includes('HTTP error! status: 500')) {
+                errorMessage = `Server Error (500): The backend encountered an error processing your request. This may be due to API quota limits or configuration issues. Check the browser console and server logs for details.`;
+            } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                errorMessage = `Network Error: Cannot connect to the API server. Make sure the backend is running (python backend/api.py) and accessible.`;
+            } else {
+                errorMessage = `Generation Error: ${error.message}`;
+            }
+
             showErrorMessage(errorMessage);
             announceToScreenReader(errorMessage, true);
             if (generationStatus) {
-                generationStatus.textContent = 'Generation failed. Please see error message.';
+                generationStatus.textContent = 'Generation failed. Please see error message above.';
             }
         } finally {
             btnText.textContent = 'Generate';
             btnSpinner.classList.add('d-none');
             generateBtn.disabled = false;
+            if (stopGenerationBtn) {
+                stopGenerationBtn.disabled = true;
+            }
+            currentAbortController = null;
         }
     }
 
     // Copy and Save buttons are now handled dynamically in createLanguageResultCard()
+
+    // Stop generation function
+    async function stopGeneration() {
+        if (currentAbortController) {
+            currentAbortController.abort();
+        }
+        // Clear session data to start from a clean state
+        await clearSessionData();
+        currentAbortController = null;
+        languageResults = {};
+        resultsContainer.innerHTML = '';
+        resultSection.classList.add('d-none');
+        showErrorMessage('Generation stopped and session data cleared');
+        announceToScreenReader('Generation stopped and session data cleared');
+    }
+
+    // Clear session data helper function
+    async function clearSessionData() {
+        try {
+            await fetch(`${API_BASE_URL}/clear-session`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+        } catch (error) {
+            console.error('[WEBMASTER] Failed to clear session data:', error);
+        }
+    }
+
+    // Stop button event listener
+    if (stopGenerationBtn) {
+        stopGenerationBtn.addEventListener('click', stopGeneration);
+    }
 
     // Clear all - reset form to initial state and clear session data
     clearBtn.addEventListener('click', async () => {
@@ -1335,6 +1552,13 @@
             translationModeToggle.checked = false;
         }
         handleTranslationModeChange();
+
+        // Reset GEO Boost
+        const geoBoostToggle = document.getElementById('geoBoostToggle');
+        if (geoBoostToggle) {
+            geoBoostToggle.checked = false;
+        }
+        handleGeoBoostChange();
 
         // Hide result section and clear results
         resultSection.classList.add('d-none');
