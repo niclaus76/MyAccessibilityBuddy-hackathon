@@ -186,8 +186,8 @@
     },
     "_comment_quality_control": "Dataset quality control settings",
     "quality_control": {
-      "min_alt_text_length": 10,
-      "max_alt_text_length": 125,
+      "min_alt_text_length": 125,
+      "max_alt_text_length": 200,
       "check_image_validity": true,
       "check_context_matching": true
     }

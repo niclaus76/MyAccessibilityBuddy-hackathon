@@ -674,12 +674,14 @@
         }
 
         if (!enabled) {
-            btnText.textContent = 'Generating...';
+            const selectedLanguages = getSelectedLanguages();
+            const totalLanguages = Math.max(selectedLanguages.length, 1);
+            btnText.textContent = `Generating (1/${totalLanguages})...`;
             btnSpinner.classList.remove('d-none');
         } else {
             btnText.textContent = 'Generate';
-        btnSpinner.classList.add('d-none');
-    }
+            btnSpinner.classList.add('d-none');
+        }
 
     // Clear Form with progress feedback
     async function clearFormWithProgress() {

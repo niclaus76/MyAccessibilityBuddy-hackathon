@@ -28,30 +28,36 @@ textarea:focus-visible,
 }
 
 /* Stop button styling - dark grey background with white text and icon */
-#stopAnalysisBtn {
+#stopAnalysisBtn,
+#stopGenerationBtn {
     background-color: #4a4a4a !important;
     border-color: #4a4a4a !important;
     color: white !important;
 }
 
-#stopAnalysisBtn svg {
+#stopAnalysisBtn svg,
+#stopGenerationBtn svg {
     fill: white;
 }
 
-#stopAnalysisBtn:hover:not(:disabled) {
+#stopAnalysisBtn:hover:not(:disabled),
+#stopGenerationBtn:hover:not(:disabled) {
     background-color: #333333 !important;
     border-color: #333333 !important;
     color: white !important;
 }
 
 #stopAnalysisBtn:active:not(:disabled),
-#stopAnalysisBtn:focus:not(:disabled) {
+#stopAnalysisBtn:focus:not(:disabled),
+#stopGenerationBtn:active:not(:disabled),
+#stopGenerationBtn:focus:not(:disabled) {
     background-color: #2a2a2a !important;
     border-color: #2a2a2a !important;
     color: white !important;
 }
 
-#stopAnalysisBtn:disabled {
+#stopAnalysisBtn:disabled,
+#stopGenerationBtn:disabled {
     background-color: #6a6a6a !important;
     border-color: #6a6a6a !important;
     opacity: 0.6;
