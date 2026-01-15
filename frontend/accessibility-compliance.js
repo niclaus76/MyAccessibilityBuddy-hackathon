@@ -792,9 +792,10 @@
 
         // Only show report path if it's an actual generated report (not the template)
         if (data.report_path && !data.report_path.includes('report_template.html')) {
+            const reportFileName = data.report_path.split('/').pop();
             summaryHTML += `
                 <p class="text-muted small mt-3">
-                    <strong>Report Location:</strong> <code>${escapeHtml(data.report_path)}</code>
+                    <strong>Report Location:</strong> <code>${escapeHtml(reportFileName)}</code>
                 </p>
             `;
         }

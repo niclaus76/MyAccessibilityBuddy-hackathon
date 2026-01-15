@@ -1681,13 +1681,15 @@ async def analyze_page(request: Request):
             timeout=300  # 5 minute timeout
         )
 
+        error_msg = None
         if result.returncode != 0:
             error_msg = result.stderr or result.stdout or "Unknown error"
             log_message(f"CLI execution failed: {error_msg}", "ERROR")
-            raise HTTPException(status_code=500, detail=f"Analysis failed: {error_msg}")
 
         # Parse output to find session info, report path, and summary stats
         output = result.stdout
+        if result.stderr:
+            output = f"{output}\n{result.stderr}"
         report_path = None
         session_id = None
         alt_text_folder = None
@@ -1706,7 +1708,9 @@ async def analyze_page(request: Request):
                     # Fallback to simpler pattern
                     match = re.search(r'([^\s]*output/reports[^\s]*\.html)', line)
                 if match:
-                    report_path = match.group(1).strip()
+                    candidate_path = match.group(1).strip()
+                    if 'report_template.html' not in candidate_path:
+                        report_path = candidate_path
 
             if not session_id:
                 session_match = re.search(r'Using session:\s*([^\s]+)', line)
@@ -1717,6 +1721,9 @@ async def analyze_page(request: Request):
                 folder_match = re.search(r'Output folder:\s*([^\s]+)', line, flags=re.IGNORECASE)
                 if folder_match:
                     alt_text_folder = folder_match.group(1).strip()
+
+        if report_path and 'report_template.html' in report_path:
+            report_path = None
 
         # Derive alt-text folder from session when not explicitly printed
         base_alt_text = Path(get_absolute_folder_path('alt_text'))
@@ -1833,8 +1840,12 @@ async def analyze_page(request: Request):
         if report_path:
             project_root = Path(__file__).parent.parent
             try:
-                # Convert to Path object, resolve to absolute, then make relative
-                report_path_obj = Path(report_path).resolve()
+                # Resolve relative paths against project root instead of CWD
+                report_path_obj = Path(report_path)
+                if not report_path_obj.is_absolute():
+                    report_path_obj = (project_root / report_path_obj).resolve()
+                else:
+                    report_path_obj = report_path_obj.resolve()
                 report_path = str(report_path_obj.relative_to(project_root))
                 # Ensure forward slashes for cross-platform compatibility
                 report_path = report_path.replace('\\', '/')
@@ -1850,6 +1861,12 @@ async def analyze_page(request: Request):
                 else:
                     report_path = report_path_str.replace('\\', '/')
 
+        if error_msg and not report_path:
+            raise HTTPException(status_code=500, detail=f"Analysis failed: {error_msg}")
+
+        if error_msg:
+            log_message("CLI reported errors but a report was generated; returning report path anyway.", "WARNING")
+
         return {
             "success": True,
             "url": url,
@@ -1859,7 +1876,8 @@ async def analyze_page(request: Request):
                 "missing_alt": missing_alt,
                 "has_alt": has_alt
             },
-            "output": output  # Include full output for debugging
+            "output": output,
+            "warning": error_msg
         }
 
     except HTTPException:

@@ -63,8 +63,8 @@
         <div class="container py-5">
             <div class="row justify-content-center mb-1">
                 <div class="col-12 col-md-8 text-center">
-                    <div class="mb-2">
-                        <img src="assets/accessibility-compliance.png" alt="Alternative text compliance checker" width="96" height="96">
+                    <div class="mb-3">
+                        <img src="assets/Buddy-Logo_no_text.png" alt="My Accessibility Buddy logo" width="96" height="96">
                     </div>
                     <h1 class="mb-2" style="font-size: 1.75rem;">My Accessibility Buddy - Accessibility Compliance</h1>
                     <p class="lead mb-0">Generate complete alternative text reports for your web pages</p>
@@ -377,7 +377,7 @@
             <!-- Results Section -->
             <div id="resultsSection" style="display: none;">
                 <div class="row justify-content-center mt-5">
-                    <div class="col-12 col-md-10">
+                    <div class="col-12 col-md-8">
                         <div class="card shadow-sm">
                             <div class="card-body p-4">
                                 <h2 class="h4 mb-4">Analysis Complete</h2>
@@ -385,19 +385,16 @@
                                     <p class="alert alert-success">
                                         <strong>Report generated successfully!</strong>
                                     </p>
-                                    <div class="d-flex gap-2 flex-wrap">
-                                        <button type="button" class="btn btn-primary" id="downloadReportBtn">
+                                    <div class="mt-4" id="reportSummary">
+                                        <!-- Report summary will be inserted here by JavaScript -->
+                                    </div>
+                                    <div class="d-flex flex-column mt-3">
+                                        <button type="button" class="btn btn-primary btn-lg w-100 mb-2" id="downloadReportBtn">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="me-1" aria-hidden="true">
                                                 <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
                                             </svg>
                                             Download HTML Report
                                         </button>
-                                        <a href="home.html" class="btn btn-outline-secondary">
-                                            Return to Home
-                                        </a>
-                                    </div>
-                                    <div class="mt-4" id="reportSummary">
-                                        <!-- Report summary will be inserted here by JavaScript -->
                                     </div>
                                 </div>
                             </div>
