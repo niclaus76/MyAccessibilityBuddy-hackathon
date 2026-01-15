@@ -73,10 +73,16 @@ class Colors:
     NC = '\033[0m'  # No Color
 
 # Configuration
-BACKEND_DIR = Path("backend")
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+BACKEND_DIR = PROJECT_ROOT / "backend"
 CONFIG_FILE = BACKEND_DIR / "config" / "config.json"
 CONFIG_ADVANCED_FILE = BACKEND_DIR / "config" / "config.advanced.json"
-PROMPT_DIR = Path("prompt/processing")
+PROMPT_DIR = PROJECT_ROOT / "prompt" / "processing"
+
+def resolve_project_path(path: Path) -> Path:
+    """Resolve paths relative to project root when not absolute."""
+    return path if path.is_absolute() else (PROJECT_ROOT / path).resolve()
 
 # These will be loaded from config.json
 PROMPTS = []
@@ -143,10 +149,10 @@ def load_test_config():
             test_folders = {}
 
         # Set folder paths from configuration
-        IMAGES_DIR = Path(test_folders.get('test_images', 'test/input/images'))
-        CONTEXT_DIR = Path(test_folders.get('test_context', 'test/input/context'))
-        OUTPUT_REPORTS_DIR = Path(test_folders.get('test_reports', 'test/output/reports'))
-        OUTPUT_DIR = Path("output/alt-text")  # Keep original output for intermediate results
+        IMAGES_DIR = resolve_project_path(Path(test_folders.get('test_images', 'test/input/images')))
+        CONTEXT_DIR = resolve_project_path(Path(test_folders.get('test_context', 'test/input/context')))
+        OUTPUT_REPORTS_DIR = resolve_project_path(Path(test_folders.get('test_reports', 'test/output/reports')))
+        OUTPUT_DIR = resolve_project_path(Path("output/alt-text"))  # Keep original output for intermediate results
 
         print_success("Loaded batch comparison configuration from config.json")
         print_info(f"Test mode: {'GEO Boost Comparison (both modes)' if TEST_GEO_BOOST else 'Standard WCAG only'}")
@@ -261,8 +267,8 @@ def run_batch_processing(use_geo=False):
         # Build command with test folders (without --legacy to use session-based folders)
         cmd = [
             "python3", "app.py", "-p",
-            "--images-folder", f"../{IMAGES_DIR}",
-            "--context-folder", f"../{CONTEXT_DIR}",
+            "--images-folder", str(IMAGES_DIR),
+            "--context-folder", str(CONTEXT_DIR),
             "--language", TEST_LANGUAGE
         ]
 

@@ -1244,7 +1244,11 @@
             // Continue anyway - don't block new generation
         }
 
-        btnText.textContent = 'Generating...';
+        if (processingMode === 'basic') {
+            btnText.textContent = 'Image 1 of 1';
+        } else {
+            btnText.textContent = `Image 1 of 1, language 1 of ${selectedLanguages.length}`;
+        }
         btnSpinner.classList.remove('d-none');
         generateBtn.disabled = true;
         if (stopGenerationBtn) {
@@ -1267,8 +1271,6 @@
             for (let i = 0; i < selectedLanguages.length; i++) {
                 const lang = selectedLanguages[i];
                 const langName = languageNames[lang] || lang;
-                btnText.textContent = `Generating (${i + 1}/${selectedLanguages.length})...`;
-
                 // Update status for screen readers
                 if (generationStatus) {
                     generationStatus.textContent = `Generating alt text for ${langName}, language ${i + 1} of ${selectedLanguages.length}`;

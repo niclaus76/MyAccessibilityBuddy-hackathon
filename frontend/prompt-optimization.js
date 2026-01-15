@@ -519,9 +519,8 @@
         }
 
         if (!enabled) {
-            const selectedLanguages = getSelectedLanguages();
-            const totalLanguages = Math.max(selectedLanguages.length, 1);
-            btnText.textContent = `Generating (1/${totalLanguages})...`;
+            const imageTotal = Math.max(selectedImageFiles.length, 1);
+            btnText.textContent = `Image 1 of ${imageTotal}`;
             btnSpinner.classList.remove('d-none');
         } else {
             btnText.textContent = 'Generate';

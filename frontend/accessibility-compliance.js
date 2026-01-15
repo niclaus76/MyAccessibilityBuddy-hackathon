@@ -676,7 +676,13 @@
         if (!enabled) {
             const selectedLanguages = getSelectedLanguages();
             const totalLanguages = Math.max(selectedLanguages.length, 1);
-            btnText.textContent = `Generating (1/${totalLanguages})...`;
+            const numImages = parseInt(numImagesInput.value, 10);
+            const imageTotal = processAllImagesToggle.checked ? 'all' : (Number.isFinite(numImages) ? numImages : 1);
+            if (advancedOptionsToggle.checked) {
+                btnText.textContent = `Image 1 of ${imageTotal}, language 1 of ${totalLanguages}`;
+            } else {
+                btnText.textContent = `Image 1 of ${imageTotal}`;
+            }
             btnSpinner.classList.remove('d-none');
         } else {
             btnText.textContent = 'Generate';
