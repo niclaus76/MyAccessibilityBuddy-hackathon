@@ -17,13 +17,13 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.8.2/dist/css/bootstrap-italia.min.css" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <style>
-    body { background: #f8fafc; color: #17324d; }
-    .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1030; }
-    .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1050; overflow-y: auto; font-size: 0.7rem; }
+    /* Body background now controlled by styles.css */
+    .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1080; }
+    .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1100; overflow-y: auto; font-size: 0.7rem; }
     .nav-menu .btn { font-size: 0.7rem; padding: 0.5rem 0.75rem; }
     .nav-menu .fw-bold { font-size: 0.75rem; }
     .nav-menu.active { transform: translateX(0); }
-    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1040; pointer-events: none; }
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1090; pointer-events: none; }
     .overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
   </style>
 </head>
@@ -40,7 +40,7 @@
     </div>
     <a class="btn btn-outline-primary w-100" href="home.html">Home</a>
     <a class="btn btn-outline-primary w-100" href="webmaster.html">Webmaster Tool</a>
-    <a class="btn btn-outline-primary w-100" href="accessibility-compliance.html">Accessibility Compliance</a>
+    <a class="btn btn-outline-primary w-100" href="accessibility-compliance.html">Website Accessibility Tool</a>
     <a class="btn btn-outline-primary w-100" href="prompt-optimization.html">Prompt Optimization</a>
     <a class="btn btn-outline-primary w-100" href="remediation.html">Remediation Tool</a>
     <a class="btn btn-primary w-100" aria-current="page" href="admin.html">Administration Tool</a>
@@ -48,7 +48,7 @@
 
   <header class="py-5 text-center">
     <div class="container">
-      <img src="assets/admin-tool.png" alt="Administration tool" class="mb-3" style="max-width:180px;">
+      <img src="assets/Admin-tool.png" alt="Administration tool" class="mb-3" style="max-width:180px;">
       <h1 class="fw-bold">Administration Tool</h1>
       <p class="lead mb-0">Configuration parameters and administrative tools for My Accessibility Buddy.</p>
     </div>
@@ -89,6 +89,32 @@
                 aria-describedby="maxAltTextHelp"
                 placeholder="125">
               <small id="maxAltTextHelp" class="form-text text-muted">Maximum number of characters (default: 125)</small>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label for="geoBoostIncreasePercent" class="form-label fw-semibold">GEO Boost Increase (%)</label>
+              <input
+                type="number"
+                class="form-control"
+                id="geoBoostIncreasePercent"
+                min="0"
+                max="100"
+                aria-describedby="geoBoostHelp"
+                placeholder="20">
+              <small id="geoBoostHelp" class="form-text text-muted">Percentage increase for alt-text length when GEO boost is enabled (default: 20%). Example: 125 chars + 20% = 150 chars</small>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Calculated GEO Boost Limit</label>
+              <input
+                type="text"
+                class="form-control"
+                id="calculatedGeoLimit"
+                readonly
+                aria-describedby="calculatedGeoHelp"
+                placeholder="150">
+              <small id="calculatedGeoHelp" class="form-text text-muted">Max alt-text length when GEO boost is ON (auto-calculated)</small>
             </div>
           </div>
 
@@ -196,12 +222,26 @@
       const API_BASE = window.location.origin;
       const minInput = document.getElementById('minAltTextLength');
       const maxInput = document.getElementById('maxAltTextLength');
+      const geoBoostInput = document.getElementById('geoBoostIncreasePercent');
+      const calculatedGeoLimit = document.getElementById('calculatedGeoLimit');
       const saveBtn = document.getElementById('saveParamsBtn');
       const resetBtn = document.getElementById('resetParamsBtn');
       const statusMessage = document.getElementById('statusMessage');
       const saveSpinner = document.getElementById('saveSpinner');
 
-      let configDefaults = { min_alt_text_length: 125, max_alt_text_length: 125 };
+      let configDefaults = { min_alt_text_length: 125, max_alt_text_length: 125, geo_boost_increase_percent: 20 };
+
+      // Calculate and display GEO boost limit
+      function updateCalculatedGeoLimit() {
+        const maxValue = parseInt(maxInput.value, 10) || 125;
+        const geoPercent = parseInt(geoBoostInput.value, 10) || 20;
+        const geoLimit = Math.round(maxValue * (1 + geoPercent / 100));
+        calculatedGeoLimit.value = geoLimit + ' characters';
+      }
+
+      // Add event listeners for real-time calculation
+      maxInput.addEventListener('input', updateCalculatedGeoLimit);
+      geoBoostInput.addEventListener('input', updateCalculatedGeoLimit);
 
       // Show status message
       function showStatus(message, type = 'success') {
@@ -226,12 +266,17 @@
           const data = await response.json();
           configDefaults = {
             min_alt_text_length: data.min_alt_text_length,
-            max_alt_text_length: data.max_alt_text_length
+            max_alt_text_length: data.max_alt_text_length,
+            geo_boost_increase_percent: data.geo_boost_increase_percent
           };
 
           // Set input values
           minInput.value = data.min_alt_text_length;
           maxInput.value = data.max_alt_text_length;
+          geoBoostInput.value = data.geo_boost_increase_percent;
+
+          // Update calculated GEO limit
+          updateCalculatedGeoLimit();
 
         } catch (error) {
           console.error('Error loading configuration:', error);
@@ -243,6 +288,7 @@
       async function saveConfig() {
         const minValue = parseInt(minInput.value, 10);
         const maxValue = parseInt(maxInput.value, 10);
+        const geoBoostValue = parseInt(geoBoostInput.value, 10);
 
         // Validation
         if (isNaN(minValue) || minValue < 1) {
@@ -263,6 +309,12 @@
           return;
         }
 
+        if (isNaN(geoBoostValue) || geoBoostValue < 0 || geoBoostValue > 100) {
+          showStatus('GEO Boost increase must be between 0 and 100', 'warning');
+          geoBoostInput.focus();
+          return;
+        }
+
         // Show loading state
         saveBtn.disabled = true;
         saveSpinner.classList.remove('d-none');
@@ -275,7 +327,8 @@
             },
             body: JSON.stringify({
               min_alt_text_length: minValue,
-              max_alt_text_length: maxValue
+              max_alt_text_length: maxValue,
+              geo_boost_increase_percent: geoBoostValue
             })
           });
 
@@ -290,6 +343,7 @@
           // Update stored defaults
           configDefaults.min_alt_text_length = minValue;
           configDefaults.max_alt_text_length = maxValue;
+          configDefaults.geo_boost_increase_percent = geoBoostValue;
 
         } catch (error) {
           console.error('Error saving configuration:', error);
@@ -305,6 +359,8 @@
       function resetToDefaults() {
         minInput.value = configDefaults.min_alt_text_length;
         maxInput.value = configDefaults.max_alt_text_length;
+        geoBoostInput.value = configDefaults.geo_boost_increase_percent;
+        updateCalculatedGeoLimit();
         showStatus('Values reset to configuration defaults', 'info');
       }
 
@@ -320,6 +376,12 @@
       });
 
       maxInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          saveConfig();
+        }
+      });
+
+      geoBoostInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
           saveConfig();
         }

@@ -466,7 +466,18 @@
 
         const url = pageUrlInput.value.trim();
         const languages = getSelectedLanguages();
-        const numImages = processAllImagesToggle.checked ? null : parseInt(numImagesInput.value, 10);
+        const numImagesValue = numImagesInput.value;
+        const processAllChecked = processAllImagesToggle.checked;
+        const numImages = processAllChecked ? null : parseInt(numImagesValue, 10);
+
+        console.log('[COMPLIANCE] ===== NUM IMAGES DEBUG =====');
+        console.log('[COMPLIANCE] numImagesInput element:', numImagesInput);
+        console.log('[COMPLIANCE] numImagesInput.value (raw):', numImagesValue);
+        console.log('[COMPLIANCE] numImagesInput.value type:', typeof numImagesValue);
+        console.log('[COMPLIANCE] processAllImagesToggle.checked:', processAllChecked);
+        console.log('[COMPLIANCE] parseInt result:', parseInt(numImagesValue, 10));
+        console.log('[COMPLIANCE] Final numImages value:', numImages);
+        console.log('[COMPLIANCE] ===========================');
 
         // Clear previous session data before starting new analysis
         if (currentSessionId) {
@@ -499,9 +510,9 @@
             }
 
             announceToScreenReader('Starting web page analysis');
-            updateProgress(10, 'Fetching web page...');
+            updateProgress(10, 'Starting analysis...');
 
-            // Call backend API
+            // Build request data
             const requestData = {
                 url: url,
                 languages: languages,
@@ -549,9 +560,10 @@
                 }
             }
 
-            console.log('[COMPLIANCE] Sending analysis request:', requestData);
+            console.log('[COMPLIANCE] Sending async analysis request:', requestData);
 
-            const response = await fetch(`${API_BASE_URL}/analyze-page`, {
+            // Start async analysis job
+            const startResponse = await fetch(`${API_BASE_URL}/analyze-page-async`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -560,48 +572,88 @@
                 signal: currentAbortController.signal
             });
 
-            updateProgress(30, 'Analyzing HTML structure...');
-
-            if (!response.ok) {
-                // Clone the response so we can read it multiple times if needed
-                const responseClone = response.clone();
-                let errorData;
-                try {
-                    errorData = await response.json();
-                } catch (jsonError) {
-                    // Response is not JSON, try to get text from the clone
-                    const errorText = await responseClone.text();
-                    throw new Error(errorText || `Server error: ${response.status}`);
-                }
-                throw new Error(errorData.detail || errorData.error || `Server error: ${response.status}`);
+            if (!startResponse.ok) {
+                const errorData = await startResponse.json().catch(() => ({}));
+                throw new Error(errorData.detail || errorData.error || `Server error: ${startResponse.status}`);
             }
 
-            updateProgress(50, 'Detecting images...');
+            const startData = await startResponse.json();
+            const jobId = startData.job_id;
+            console.log('[COMPLIANCE] Started job:', jobId);
 
-            const data = await response.json();
-            console.log('[COMPLIANCE] Analysis response:', data);
+            // Poll for progress
+            let pollCount = 0;
+            const maxPolls = 300; // 10 minutes max (2 second intervals)
+            let lastMessage = '';
 
-            updateProgress(70, 'Generating AI-powered suggestions...');
+            while (pollCount < maxPolls) {
+                // Check if aborted
+                if (currentAbortController.signal.aborted) {
+                    throw new DOMException('Aborted', 'AbortError');
+                }
 
-            // Simulate progress for user feedback
-            await new Promise(resolve => setTimeout(resolve, 500));
-            updateProgress(90, 'Compiling report...');
+                // Wait before polling (2 seconds)
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                pollCount++;
 
-            await new Promise(resolve => setTimeout(resolve, 500));
-            updateProgress(100, 'Analysis complete!');
+                // Poll job status
+                const statusResponse = await fetch(`${API_BASE_URL}/job-status/${jobId}`, {
+                    signal: currentAbortController.signal
+                });
 
-            // Store report data (filter out template files)
-            currentReportPath = (data.report_path && !data.report_path.includes('report_template.html'))
-                ? data.report_path
-                : null;
-            currentReportData = data;
-            console.log('[COMPLIANCE] Stored report path:', currentReportPath);
+                if (!statusResponse.ok) {
+                    console.warn('[COMPLIANCE] Status poll failed:', statusResponse.status);
+                    continue;
+                }
 
-            // Show results
-            await new Promise(resolve => setTimeout(resolve, 500));
-            showResults(data);
+                const status = await statusResponse.json();
+                console.log('[COMPLIANCE] Job status:', status);
 
-            announceToScreenReader('Analysis completed successfully. Report is ready.');
+                // Update progress bar with real data from backend
+                if (status.percent !== undefined && status.message) {
+                    updateProgress(status.percent, status.message);
+
+                    // Announce significant progress changes to screen readers
+                    if (status.message !== lastMessage) {
+                        lastMessage = status.message;
+                        // Only announce phase changes, not every update
+                        if (status.phase && (status.phase === 'downloading' || status.phase === 'processing')) {
+                            if (status.current_image && status.total_images) {
+                                announceToScreenReader(`${status.phase === 'downloading' ? 'Downloading' : 'Processing'} image ${status.current_image} of ${status.total_images}`);
+                            }
+                        }
+                    }
+                }
+
+                // Check if job completed
+                if (status.status === 'complete') {
+                    console.log('[COMPLIANCE] Job completed:', status.result);
+                    updateProgress(100, 'Analysis complete!');
+
+                    // Store report data
+                    const data = status.result;
+                    currentReportPath = (data.report_path && !data.report_path.includes('report_template.html'))
+                        ? data.report_path
+                        : null;
+                    currentReportData = data;
+                    console.log('[COMPLIANCE] Stored report path:', currentReportPath);
+
+                    // Show results
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    showResults(data);
+
+                    announceToScreenReader('Analysis completed successfully. Report is ready.');
+                    return; // Exit the function successfully
+                }
+
+                // Check if job failed
+                if (status.status === 'error') {
+                    throw new Error(status.error || 'Analysis failed');
+                }
+            }
+
+            // Timeout
+            throw new Error('Analysis timed out. Please try again with fewer images.');
 
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -674,20 +726,14 @@
         }
 
         if (!enabled) {
-            const selectedLanguages = getSelectedLanguages();
-            const totalLanguages = Math.max(selectedLanguages.length, 1);
-            const numImages = parseInt(numImagesInput.value, 10);
-            const imageTotal = processAllImagesToggle.checked ? 'all' : (Number.isFinite(numImages) ? numImages : 1);
-            if (advancedOptionsToggle.checked) {
-                btnText.textContent = `Image 1 of ${imageTotal}, language 1 of ${totalLanguages}`;
-            } else {
-                btnText.textContent = `Image 1 of ${imageTotal}`;
-            }
+            // Show "Generate..." with spinner during processing
+            btnText.textContent = 'Generate...';
             btnSpinner.classList.remove('d-none');
         } else {
             btnText.textContent = 'Generate';
             btnSpinner.classList.add('d-none');
         }
+    }
 
     // Clear Form with progress feedback
     async function clearFormWithProgress() {
@@ -728,7 +774,6 @@
         currentSessionId = null;
 
         announceToScreenReader('Form cleared');
-    }
     }
 
     async function stopAnalysis() {

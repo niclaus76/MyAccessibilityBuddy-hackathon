@@ -17,16 +17,16 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.8.2/dist/css/bootstrap-italia.min.css" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <style>
-    body { background: #f8fafc; color: #17324d; }
+    /* Body background now controlled by styles.css */
     .card-tool { border: none; border-radius: 12px; transition: transform 0.25s ease, box-shadow 0.25s ease; box-shadow: 0 8px 24px rgba(0,0,0,0.08); background: #f0f6fc; }
     .card-tool:hover, .card-tool:focus-within { transform: translateY(-4px); box-shadow: 0 12px 28px rgba(0,0,0,0.12); }
     .card-tool img { max-height: 180px; object-fit: contain; }
-    .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1030; }
-    .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1050; overflow-y: auto; font-size: 0.7rem; }
+    .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1080; }
+    .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1100; overflow-y: auto; font-size: 0.7rem; }
     .nav-menu .btn { font-size: 0.7rem; padding: 0.5rem 0.75rem; }
     .nav-menu .fw-bold { font-size: 0.75rem; }
     .nav-menu.active { transform: translateX(0); }
-    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1040; pointer-events: none; }
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1090; pointer-events: none; }
     .overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
     .skip-link { position:absolute; left:-999px; top:auto; width:1px; height:1px; overflow:hidden; } .skip-link:focus { position:fixed; top:0; left:0; width:auto; height:auto; padding:0.5rem 1rem; background:#0066cc; color:#fff; z-index:1060; }
   </style>
@@ -44,7 +44,7 @@
     </div>
     <a class="btn btn-outline-primary w-100" href="home.html">Home</a>
     <a class="btn btn-outline-primary w-100" href="webmaster.html">Webmaster Tool</a>
-    <a class="btn btn-outline-primary w-100" href="accessibility-compliance.html">Accessibility Compliance</a>
+    <a class="btn btn-outline-primary w-100" href="accessibility-compliance.html">Website accessibility tool</a>
     <a class="btn btn-outline-primary w-100" href="prompt-optimization.html">Prompt Optimization</a>
     <a class="btn btn-outline-primary w-100" href="remediation.html">Remediation Tool</a>
     <a class="btn btn-outline-primary w-100" href="admin.html">Administration Tool</a>
@@ -53,7 +53,7 @@
 
   <header class="py-5 text-center">
     <div class="container">
-      <img src="assets/Buddy-Logo_no_text.png" alt="My Accessibility Buddy logo" width="96" height="96" class="mb-3">
+      <img src="assets/MyAccessibilityBuddy-logo.png" alt="My Accessibility Buddy logo" width="96" height="96" class="mb-3">
       <h1 class="fw-bold" style="font-size: 2rem;">My Accessibility Buddy</h1>
       <p class="lead mb-1">AI-Powered Accessibility Tools Suite</p>
       <p class="text-muted mb-0">WCAG 2.2-focused tools for compliant alternative text, compliance checks, and remediation.</p>
@@ -76,7 +76,7 @@
           <a class="card card-tool h-100 text-decoration-none" href="accessibility-compliance.html">
             <img src="assets/accessibility-compliance.png" class="card-img-top p-3" alt="Alternative text compliance checker">
             <div class="card-body">
-              <h2 class="h4 text-primary">Accessibility Compliance</h2>
+              <h2 class="h4 text-primary">Website accessibility tool</h2>
               <p class="mb-0 text-dark">Check your web page for WCAG 2.2 alternative text compliance and get detailed accessibility reports.</p>
             </div>
           </a>
@@ -101,7 +101,7 @@
         </div>
         <div class="col">
           <a class="card card-tool h-100 text-decoration-none" href="admin.html">
-            <img src="assets/admin-tool.png" class="card-img-top p-3" alt="Administration tool">
+            <img src="assets/Admin-tool.png" class="card-img-top p-3" alt="Administration tool">
             <div class="card-body">
               <h2 class="h4 text-primary">Administration Tool</h2>
               <p class="mb-0 text-dark">Configuration parameters and administrative tools for My Accessibility Buddy.</p>

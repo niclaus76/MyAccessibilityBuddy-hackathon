@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <meta name="description" content="Alternative Text Compliance Checker - Generate complete alternative text reports for your web pages">
     <meta name="theme-color" content="#0066cc">
-    <title>Accessibility Compliance | My Accessibility Buddy</title>
+    <title>Website Accessibility Tool | My Accessibility Buddy</title>
 
     <!-- Favicons -->
     <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
@@ -22,13 +22,13 @@
     <!-- Custom CSS -->
     <link href="styles.css" rel="stylesheet">
     <style>
-        body { background: #f8fafc; color: #17324d; }
-        .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1030; }
-        .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1050; overflow-y: auto; font-size: 0.7rem; }
+        /* Body background now controlled by styles.css */
+        .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1080; }
+        .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1100; overflow-y: auto; font-size: 0.7rem; }
         .nav-menu .btn { font-size: 0.7rem; padding: 0.5rem 0.75rem; }
         .nav-menu .fw-bold { font-size: 0.75rem; }
         .nav-menu.active { transform: translateX(0); }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1040; pointer-events: none; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1090; pointer-events: none; }
         .overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
     </style>
 </head>
@@ -47,7 +47,7 @@
         </div>
         <a class="btn btn-outline-primary w-100" href="home.html">Home</a>
         <a class="btn btn-outline-primary w-100" href="webmaster.html">Webmaster Tool</a>
-        <a class="btn btn-primary w-100" aria-current="page" href="accessibility-compliance.html">Accessibility Compliance</a>
+        <a class="btn btn-primary w-100" aria-current="page" href="accessibility-compliance.html">Website Accessibility Tool</a>
         <a class="btn btn-outline-primary w-100" href="prompt-optimization.html">Prompt Optimization</a>
         <a class="btn btn-outline-primary w-100" href="remediation.html">Remediation Tool</a>
         <a class="btn btn-outline-primary w-100" href="admin.html">Administration Tool</a>
@@ -64,9 +64,9 @@
             <div class="row justify-content-center mb-1">
                 <div class="col-12 col-md-8 text-center">
                     <div class="mb-3">
-                        <img src="assets/Buddy-Logo_no_text.png" alt="My Accessibility Buddy logo" width="96" height="96">
+                        <img src="assets/accessibility-compliance.png" alt="Website Accessibility Tool" style="max-width:180px;">
                     </div>
-                    <h1 class="mb-2" style="font-size: 1.75rem;">My Accessibility Buddy - Accessibility Compliance</h1>
+                    <h1 class="mb-2" style="font-size: 1.75rem;">My Accessibility Buddy - Website Accessibility Tool</h1>
                     <p class="lead mb-0">Generate complete alternative text reports for your web pages</p>
                 </div>
             </div>

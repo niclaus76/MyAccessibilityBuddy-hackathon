@@ -47,7 +47,10 @@
     "display_proposed_alt_text": true,
     "display_image_tag_attribute": true,
     "display_reasoning": true,
-    "display_context": true
+    "display_context": true,
+    "display_vision_prompt": true,
+    "display_processing_prompt": true,
+    "display_translation_prompt": true
   },
 
   "_comment_download": "Web scraping download settings",

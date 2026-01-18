@@ -156,6 +156,22 @@ def load_config(config_file=None):
         DEBUG_MODE = True
         debug_log(f"Error loading configuration: {str(e)}, using defaults")
 
+def get_max_chars(use_geo_boost: bool = False) -> int:
+    """
+    Calculate max character limit for alt-text based on GEO boost setting.
+
+    Args:
+        use_geo_boost: Whether GEO boost is enabled
+
+    Returns:
+        int: Maximum character limit (base limit or boosted limit)
+    """
+    base_limit = CONFIG.get('alt_text_max_chars', 125)
+    if use_geo_boost:
+        increase_percent = CONFIG.get('geo_boost_increase_percent', 20)
+        return int(base_limit * (1 + increase_percent / 100))
+    return base_limit
+
 def initialize_log_file(url=None):
     """
     Initialize a log file for the current session.
@@ -265,6 +281,56 @@ def debug_log(message, level="DEBUG"):
     """
     if DEBUG_MODE:
         log_message(message, level)
+
+
+# Global variable to store progress file path (set from CLI args)
+PROGRESS_FILE_PATH = None
+
+
+def write_progress(percent, message, phase=None, current_image=None, total_images=None):
+    """
+    Write progress update to a JSON file for async API polling.
+
+    Args:
+        percent (int): Progress percentage (0-100)
+        message (str): Human-readable status message
+        phase (str): Current phase (e.g., 'downloading', 'processing', 'generating')
+        current_image (int): Current image number being processed
+        total_images (int): Total number of images to process
+    """
+    global PROGRESS_FILE_PATH
+
+    if not PROGRESS_FILE_PATH:
+        return  # No progress file configured, skip
+
+    try:
+        import json
+        progress_data = {
+            "percent": percent,
+            "message": message,
+            "timestamp": get_cet_time().isoformat()
+        }
+
+        if phase:
+            progress_data["phase"] = phase
+        if current_image is not None:
+            progress_data["current_image"] = current_image
+        if total_images is not None:
+            progress_data["total_images"] = total_images
+
+        # Write atomically by writing to temp file first
+        temp_file = PROGRESS_FILE_PATH + ".tmp"
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(progress_data, f)
+
+        # Rename to final file (atomic on most systems)
+        import shutil
+        shutil.move(temp_file, PROGRESS_FILE_PATH)
+
+    except Exception as e:
+        # Don't let progress reporting errors break the main process
+        debug_log(f"Failed to write progress: {e}", "WARNING")
+
 
 def close_log_file():
     """Close the current log file and add footer with duration."""
@@ -963,7 +1029,7 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         # Load and encode logo
         logo_base64 = ""
         try:
-            logo_path = config_settings.PROJECT_ROOT / "frontend" / "assets" / "Buddy-Logo_no_text.png"
+            logo_path = config_settings.PROJECT_ROOT / "frontend" / "assets" / "MyAccessibilityBuddy-logo.png"
             if logo_path.exists():
                 import base64
                 with open(logo_path, 'rb') as logo_file:
@@ -1020,6 +1086,74 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
             translation_method_text = "Accurate (generated for every language)"
         else:
             translation_method_text = "None (single language)"
+
+        geo_boost_values = [
+            item.get('geo_boost_status')
+            for item in image_data
+            if isinstance(item, dict) and 'geo_boost_status' in item
+        ]
+        if any(val is True for val in geo_boost_values):
+            geo_boost_status_text = "Enabled"
+        elif geo_boost_values and all(val is False for val in geo_boost_values):
+            geo_boost_status_text = "Disabled"
+        else:
+            geo_boost_status_text = "Unknown"
+
+        prompt_details_html = ""
+        prompt_display_settings = CONFIG.get('html_report_display', {})
+        show_vision_prompt = prompt_display_settings.get('display_vision_prompt', False)
+        show_processing_prompt = prompt_display_settings.get('display_processing_prompt', False)
+        show_translation_prompt = prompt_display_settings.get('display_translation_prompt', False)
+        if show_vision_prompt or show_processing_prompt or show_translation_prompt:
+            import html as html_lib
+            prompt_blocks = []
+
+            def build_prompt_block(title, prompt_text, subtitle=None):
+                safe_text = html_lib.escape(prompt_text) if prompt_text else "(prompt unavailable)"
+                subtitle_text = f" {subtitle}" if subtitle else ""
+                return f"""
+        <div class="field prompt-block">
+            <p><strong>{html_lib.escape(title)}{html_lib.escape(subtitle_text)}</strong></p>
+            <pre class="prompt-text">{safe_text}</pre>
+        </div>
+"""
+
+            if show_vision_prompt:
+                try:
+                    vision_prompt_folder = get_absolute_folder_path('prompt_vision')
+                    vision_prompt_text = load_vision_prompt(vision_prompt_folder)
+                except Exception as e:
+                    debug_log(f"Could not load vision prompt for report: {str(e)}", "WARNING")
+                    vision_prompt_text = ""
+                prompt_blocks.append(build_prompt_block("Vision Prompt", vision_prompt_text))
+
+            if show_processing_prompt:
+                try:
+                    processing_prompt_folder = get_absolute_folder_path('prompt_processing')
+                    processing_prompt_text, processing_prompt_files = load_and_merge_prompts(processing_prompt_folder)
+                except Exception as e:
+                    debug_log(f"Could not load processing prompt for report: {str(e)}", "WARNING")
+                    processing_prompt_text = ""
+                    processing_prompt_files = []
+                files_label = f"(files: {', '.join(processing_prompt_files)})" if processing_prompt_files else ""
+                prompt_blocks.append(build_prompt_block("Processing Prompt", processing_prompt_text, files_label))
+
+            if show_translation_prompt:
+                try:
+                    translation_prompt_folder = get_absolute_folder_path('prompt_translation')
+                    translation_prompt_text = load_translation_prompt(translation_prompt_folder)
+                except Exception as e:
+                    debug_log(f"Could not load translation prompt for report: {str(e)}", "WARNING")
+                    translation_prompt_text = ""
+                prompt_blocks.append(build_prompt_block("Translation Prompt", translation_prompt_text))
+
+            if prompt_blocks:
+                prompt_details_html = """
+        <div class="stats-section">
+            <h3>Prompts</h3>
+""" + "".join(prompt_blocks) + """
+        </div>
+"""
 
         # Get global display settings from config.json
         global_display_settings = CONFIG.get('html_report_display', {
@@ -1323,18 +1457,20 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         html_content = html_content.replace('{TRANSLATION_PROVIDER}', translation_provider)
         html_content = html_content.replace('{AI_TRANSLATION_MODEL}', ai_translation_model)
         html_content = html_content.replace('{TRANSLATION_METHOD_TEXT}', translation_method_text)
+        html_content = html_content.replace('{GEO_BOOST_STATUS}', geo_boost_status_text)
         html_content = html_content.replace('{TOTAL_IMAGES}', str(len(image_data)))
         html_content = html_content.replace('{TOTAL_PROCESSING_TIME}', f"{total_processing_time:.2f}")
         html_content = html_content.replace('{GENERATION_TIMESTAMP}', get_cet_time().strftime('%Y-%m-%d %H:%M:%S CET'))
         html_content = html_content.replace('{IMAGE_ANALYSIS_OVERVIEW_HTML}', image_analysis_overview_html)
         html_content = html_content.replace('{IMAGE_CARDS_HTML}', image_cards_html)
+        html_content = html_content.replace('{PROMPT_DETAILS_HTML}', prompt_details_html)
 
         # Generate filename based on source URL and date
         # Format: <date>-analysis-report-<url>.html
         from datetime import datetime
 
-        # Get current date in YYYYMMDD format
-        date_str = datetime.now().strftime('%Y%m%d')
+        # Get current date in DDMonYY format (e.g., 18Jan26)
+        date_str = datetime.now().strftime('%d%b%y')
 
         # Check if user provided custom filename (not the default)
         is_default_filename = output_filename in ["alt-text-report.html", "MyAccessibilityBuddy-AltTextReport.html"]
@@ -1634,18 +1770,19 @@ def load_translation_prompt(translation_prompt_folder):
 
     # Fallback to hardcoded prompt
     debug_log("No translation prompt files found, using hardcoded fallback", "WARNING")
-    return """Translate the following alternative text from {SOURCE_LANGUAGE} to {TARGET_LANGUAGE}.
+    max_chars = CONFIG.get('alt_text_max_chars', 125)
+    return f"""Translate the following alternative text from {{SOURCE_LANGUAGE}} to {{TARGET_LANGUAGE}}.
 
 CRITICAL REQUIREMENTS:
-1. The translation MUST be 125 characters or less (including spaces and punctuation)
+1. The translation MUST be {max_chars} characters or less (including spaces and punctuation)
 2. Maintain the meaning and accessibility compliance
 3. End with a period
 4. Be concise and natural in the target language
-5. If the direct translation exceeds 125 characters, use a shorter equivalent that preserves the core meaning
+5. If the direct translation exceeds {max_chars} characters, use a shorter equivalent that preserves the core meaning
 
-Source text ({SOURCE_LANGUAGE}): "{ALT_TEXT}"
+Source text ({{SOURCE_LANGUAGE}}): "{{ALT_TEXT}}"
 
-Provide ONLY the translated text in {TARGET_LANGUAGE}, nothing else. Do not include explanations or metadata."""
+Provide ONLY the translated text in {{TARGET_LANGUAGE}}, nothing else. Do not include explanations or metadata."""
 
 def load_translation_system_prompt(translation_prompt_folder):
     """
@@ -1694,11 +1831,12 @@ def load_translation_system_prompt(translation_prompt_folder):
 
     # Fallback to hardcoded prompt
     debug_log("No translation system prompt files found, using hardcoded fallback", "WARNING")
-    return "You are a professional translator specializing in WCAG-compliant alternative text. Translate to {TARGET_LANGUAGE} while ensuring the output is exactly 125 characters or less."
+    max_chars = CONFIG.get('alt_text_max_chars', 125)
+    return f"You are a professional translator specializing in WCAG-compliant alternative text. Translate to {{TARGET_LANGUAGE}} while ensuring the output is exactly {max_chars} characters or less."
 
 def translate_alt_text(alt_text, source_language, target_language):
     """
-    Translate alt-text from source language to target language while maintaining 125 character limit.
+    Translate alt-text from source language to target language while maintaining configured character limit.
 
     Args:
         alt_text (str): The alt-text to translate
@@ -1706,7 +1844,7 @@ def translate_alt_text(alt_text, source_language, target_language):
         target_language (str): ISO language code for translation (e.g., 'it', 'es')
 
     Returns:
-        str: Translated alt-text (max 125 chars) or None if failed
+        str: Translated alt-text (max config.alt_text_max_chars) or None if failed
     """
     func_name = "translate_alt_text"
     debug_log(f"Translating alt-text from {source_language} to {target_language}")
@@ -1854,10 +1992,11 @@ def translate_alt_text(alt_text, source_language, target_language):
         if translated_text.startswith("'") and translated_text.endswith("'"):
             translated_text = translated_text[1:-1]
 
-        # Ensure compliance
-        if len(translated_text) > 125:
-            debug_log(f"Translation exceeds 125 chars ({len(translated_text)}), truncating", "WARNING")
-            translated_text = translated_text[:122] + "..."
+        # Ensure compliance with configured max character limit
+        max_chars = CONFIG.get('alt_text_max_chars', 125)
+        if len(translated_text) > max_chars:
+            debug_log(f"Translation exceeds {max_chars} chars ({len(translated_text)}), truncating", "WARNING")
+            translated_text = translated_text[:max_chars - 3] + "..."
 
         if translated_text and not translated_text.endswith('.'):
             translated_text += "."
@@ -2317,11 +2456,12 @@ Based on this image description, generate the required JSON output:
         # Fallback: create basic response structure
         if result is None:
             debug_log("Creating fallback response structure", "WARNING")
+            max_chars = CONFIG.get('alt_text_max_chars', 125)
             result = {
                 "image_type": "informative",
                 "image_description": image_description,
                 "reasoning": f"Generated via {processing_provider} two-step processing",
-                "alt_text": image_description[:125]  # Truncate to WCAG limit
+                "alt_text": image_description[:max_chars]  # Truncate to configured limit
             }
 
         # Add vision model output to the result (Step 1 output)
@@ -2628,6 +2768,9 @@ def download_images_from_url(url, images_folder=None, max_images=None):
             else:
                 log_message(f"Found {len(image_sources)} image sources on the page")
 
+        # Calculate total images for progress
+        total_to_download = min(len(image_sources), max_images) if max_images else len(image_sources)
+
         for i, img_data in enumerate(image_sources):
             # Check if we've reached the maximum number of images to download
             if max_images and len(downloaded_images) >= max_images:
@@ -2637,6 +2780,16 @@ def download_images_from_url(url, images_folder=None, max_images=None):
                 break
 
             debug_log(f"Processing image {i+1}/{len(image_sources)}")
+
+            # Report download progress (10-30% range for downloading phase)
+            download_percent = 10 + int((i / total_to_download) * 20)
+            write_progress(
+                download_percent,
+                f"Downloading image {i+1} of {total_to_download}...",
+                phase="downloading",
+                current_image=i+1,
+                total_images=total_to_download
+            )
 
             try:
                 img_url = img_data['url']
@@ -3305,12 +3458,15 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
         def create_prompt_for_language(lang_code):
             """Create combined prompt with language placeholder replaced and GEO instructions injected if needed."""
             lang_name = language_map.get(lang_code, lang_code)
+            # Calculate max characters based on GEO boost setting
+            max_chars = get_max_chars(use_geo_boost)
             lang_prompt = prompt_template.replace('{LANGUAGE}', lang_name)
+            lang_prompt = lang_prompt.replace('{MAX_CHARS}', str(max_chars))
 
             # Inject GEO instructions if use_geo_boost is True
             if use_geo_boost:
                 geo_who_you_are = "\n* You are an accessibility and Generative Engine Optimization (GEO) optimization expert."
-                geo_boost_content = """
+                geo_boost_content = f"""
 #### GEO OPTIMIZATION CONSTRAINTS:
 When GEO boost is enabled, apply these additional constraints to alt-text generation:
 - Write alt text as if it may be extracted and reused by AI systems
@@ -3319,7 +3475,7 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
 - Prefer noun-first, entity-explicit phrasing
 - Avoid pronouns, deixis, or page-dependent references
 - Allow limited redundancy if it improves standalone clarity
-- Use all the 125 characters to maximize information density
+- Use all the {max_chars} characters to maximize information density
 """
                 # Inject WHO YOU ARE enhancement after first occurrence of "WHO YOU ARE:"
                 if "WHO YOU ARE:" in lang_prompt:
@@ -3345,7 +3501,7 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
             elif lang_prompt:
                 return f"{lang_prompt}\n\nImage filename: {image_filename}"
             else:
-                return f"Analyze this image and provide: image_type (decorative/informative/functional), image_description, reasoning, and alt_text (max 125 chars).\n\nImage filename: {image_filename}"
+                return f"Analyze this image and provide: image_type (decorative/informative/functional), image_description, reasoning, and alt_text (max {max_chars} chars).\n\nImage filename: {image_filename}"
 
         # Try LLM analysis (OpenAI or ECB-LLM based on configuration)
         translation_method = None  # Track translation method used
@@ -3371,6 +3527,9 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
         # Convert boolean legacy format to string format
         if isinstance(translation_mode_config, bool):
             translation_mode_config = 'accurate' if translation_mode_config else 'fast'
+
+        # Calculate max characters based on GEO boost setting (used for validation)
+        max_chars_limit = get_max_chars(use_geo_boost)
 
         if is_multilingual:
             # Generate alt-text for multiple languages
@@ -3408,8 +3567,8 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
                         lang_reasoning = llm_result.get("reasoning", "")
 
                         # Ensure alt_text compliance
-                        if len(lang_alt_text) > 125:
-                            lang_alt_text = lang_alt_text[:122] + "..."
+                        if len(lang_alt_text) > max_chars_limit:
+                            lang_alt_text = lang_alt_text[:max_chars_limit - 3] + "..."
                         if lang_alt_text and not lang_alt_text.endswith('.'):
                             lang_alt_text += "."
 
@@ -3462,8 +3621,8 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
                     models_used = llm_result.get("_models_used")
 
                     # Ensure alt_text compliance
-                    if len(first_lang_alt_text) > 125:
-                        first_lang_alt_text = first_lang_alt_text[:122] + "..."
+                    if len(first_lang_alt_text) > max_chars_limit:
+                        first_lang_alt_text = first_lang_alt_text[:max_chars_limit - 3] + "..."
                     if first_lang_alt_text and not first_lang_alt_text.endswith('.'):
                         first_lang_alt_text += "."
 
@@ -3531,8 +3690,8 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
                 models_used = llm_result.get("_models_used")
 
                 # Ensure alt_text compliance
-                if len(alt_text) > 125:
-                    alt_text = alt_text[:122] + "..."
+                if len(alt_text) > max_chars_limit:
+                    alt_text = alt_text[:max_chars_limit - 3] + "..."
                 if alt_text and not alt_text.endswith('.'):
                     alt_text += "."
 
@@ -3601,6 +3760,7 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
             "image_URL": image_url if image_url else "",
             "image_tag_attribute": image_tag_attribute if image_tag_attribute else {"tag": "unknown", "attribute": "unknown"},
             "language": target_languages if is_multilingual else target_languages[0],
+            "geo_boost_status": bool(use_geo_boost),
             "reasoning": reasoning,
             "extended_description": image_description,
             "current_alt_text": current_alt_text if current_alt_text else "",
@@ -3740,10 +3900,20 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
         
         for i, image_filename in enumerate(image_files, 1):
             debug_log(f"Processing image {i}/{len(image_files)}: {image_filename}")
-            
+
             if CONFIG.get('logging', {}).get('show_information', True):
                 log_message(f"[{i}/{len(image_files)}] Processing: {image_filename}", "INFORMATION")
-            
+
+            # Report processing progress (30-90% range for processing phase)
+            process_percent = 30 + int(((i - 1) / len(image_files)) * 60)
+            write_progress(
+                process_percent,
+                f"Processing image {i} of {len(image_files)}: {image_filename}",
+                phase="processing",
+                current_image=i,
+                total_images=len(image_files)
+            )
+
             try:
                 # Get image metadata (URL, tag/attribute info, and current alt text) if available
                 image_url = None
@@ -3934,6 +4104,8 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
         }
         
         # Step 1: Download images
+        write_progress(5, "Step 1/3: Downloading images from web page...", phase="downloading")
+
         if CONFIG.get('logging', {}).get('show_information', True):
             if max_images:
                 print(f"\nStep 1/3: Downloading images (max {max_images})...")
@@ -3967,9 +4139,11 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
             print(f"Downloaded {len(download_results)} images")
         
         # Step 2: Extract context for all images
+        write_progress(30, f"Step 2/3: Extracting context for {len(download_results)} images...", phase="context")
+
         if CONFIG.get('logging', {}).get('show_information', True):
             print(f"\nStep 2/3: Extracting context for {len(download_results)} images...")
-        
+
         debug_log("Starting context extraction step")
         context_results = {"successful": 0, "failed": 0, "details": []}
 
@@ -4039,6 +4213,8 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
             print(f"Context extracted: {context_results['successful']} successful, {context_results['failed']} failed")
         
         # Step 3: Generate JSON files for all images
+        write_progress(35, "Step 3/3: Generating alt-text for all images...", phase="processing")
+
         if CONFIG.get('logging', {}).get('show_information', True):
             print(f"\nStep 3/3: Generating JSON files for all images...")
 
@@ -4059,6 +4235,9 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
         }
         
         debug_log(f"AutoAltText workflow complete: {workflow_results['summary']}")
+
+        # Report completion progress
+        write_progress(95, "Finalizing results...", phase="finalizing")
 
         if CONFIG.get('logging', {}).get('show_information', True):
             print(f"\nAutoAltText Complete!")
@@ -4161,6 +4340,10 @@ def main():
 
     parser.add_argument('--report', action='store_true', help='Generate accessible HTML report after processing')
 
+    # Progress reporting (for async API calls)
+    parser.add_argument('--progress-file', type=str, default=None,
+                        help='Path to JSON file for writing progress updates (used by async API)')
+
     # Parse arguments
     args = parser.parse_args()
 
@@ -4174,6 +4357,12 @@ def main():
     SESSION_NEW_SENTINEL = "__SESSION_NEW__"
     if getattr(args, 'session', None) == SESSION_NEW_SENTINEL:
         args.session = SESSION_NEW_SENTINEL
+
+    # Set up progress file for async API polling
+    global PROGRESS_FILE_PATH
+    if getattr(args, 'progress_file', None):
+        PROGRESS_FILE_PATH = args.progress_file
+        write_progress(0, "Initializing...", phase="init")
 
     # Handle session management commands FIRST (before other operations)
     if args.list_sessions:

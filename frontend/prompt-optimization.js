@@ -519,8 +519,8 @@
         }
 
         if (!enabled) {
-            const imageTotal = Math.max(selectedImageFiles.length, 1);
-            btnText.textContent = `Image 1 of ${imageTotal}`;
+            // Show "Generate..." with spinner during processing
+            btnText.textContent = 'Generate...';
             btnSpinner.classList.remove('d-none');
         } else {
             btnText.textContent = 'Generate';

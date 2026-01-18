@@ -167,6 +167,10 @@ OAUTH_STATES = {}
 # Maps session_id -> {"created": timestamp, "last_accessed": timestamp}
 WEB_APP_SESSIONS = {}
 
+# Job status storage for async operations (polling support)
+# Maps job_id -> {"status": "running"|"complete"|"error", "percent": 0-100, "message": str, ...}
+JOB_STATUS = {}
+
 def get_or_create_session_id(request: Request) -> str:
     """
     Get existing session ID from cookie or create a new one.
@@ -796,6 +800,8 @@ async def get_available_providers():
         'processing': {'provider': 'OpenAI', 'model': 'gpt-4o'},
         'translation': {'provider': 'OpenAI', 'model': 'gpt-4o'}
     })
+    current_config['alt_text_max_chars'] = CONFIG.get('alt_text_max_chars', 125)
+    current_config['geo_boost_increase_percent'] = CONFIG.get('geo_boost_increase_percent', 20)
 
     return {
         'providers': available_providers,
@@ -1599,6 +1605,9 @@ async def analyze_page(request: Request):
         num_images = data.get('num_images')  # Can be None for all images
         session_id_override = data.get('session')
 
+        # Debug logging for num_images
+        log_message(f"[DEBUG] Received num_images from request: {num_images} (type: {type(num_images).__name__})", "INFORMATION")
+
         # Advanced options
         vision_provider = data.get('vision_provider')
         vision_model = data.get('vision_model')
@@ -1888,6 +1897,345 @@ async def analyze_page(request: Request):
     except Exception as e:
         log_message(f"Analyze page error: {str(e)}", "ERROR")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/analyze-page-async")
+async def analyze_page_async(request: Request):
+    """
+    Start async web page analysis and return a job_id for polling progress.
+
+    This endpoint starts the analysis in a background thread and returns immediately
+    with a job_id that can be used to poll for progress via /api/job-status/{job_id}.
+
+    Request body: Same as /api/analyze-page
+
+    Returns:
+    {
+        "job_id": "job-abc123",
+        "status": "started",
+        "message": "Analysis started"
+    }
+    """
+    import threading
+
+    try:
+        data = await request.json()
+        url = data.get('url')
+
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+
+        # Generate unique job ID
+        job_id = f"job-{uuid.uuid4().hex[:12]}"
+
+        # Initialize job status
+        JOB_STATUS[job_id] = {
+            "status": "starting",
+            "percent": 0,
+            "message": "Initializing analysis...",
+            "url": url,
+            "created": datetime.now().isoformat(),
+            "result": None,
+            "error": None
+        }
+
+        # Start background thread to run analysis
+        def run_analysis():
+            try:
+                _run_analysis_with_progress(job_id, data)
+            except Exception as e:
+                JOB_STATUS[job_id]["status"] = "error"
+                JOB_STATUS[job_id]["error"] = str(e)
+                JOB_STATUS[job_id]["message"] = f"Error: {str(e)}"
+                log_message(f"Background analysis error for job {job_id}: {e}", "ERROR")
+
+        thread = threading.Thread(target=run_analysis, daemon=True)
+        thread.start()
+
+        return {
+            "job_id": job_id,
+            "status": "started",
+            "message": "Analysis started"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_message(f"Analyze page async error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _run_analysis_with_progress(job_id: str, data: dict):
+    """
+    Run the analysis CLI and update job status with progress.
+
+    This function reads progress from a temporary progress file that the CLI writes to.
+    """
+    import subprocess
+    import sys
+    import json
+    import re
+    import time
+
+    url = data.get('url')
+    languages = data.get('languages', ['en'])
+    num_images = data.get('num_images')
+    session_id_override = data.get('session')
+
+    # Advanced options
+    vision_provider = data.get('vision_provider')
+    vision_model = data.get('vision_model')
+    processing_provider = data.get('processing_provider')
+    processing_model = data.get('processing_model')
+    translation_provider = data.get('translation_provider')
+    translation_model = data.get('translation_model')
+    advanced_translation = data.get('advanced_translation', False)
+    geo_boost = data.get('geo_boost', False)
+
+    # Update status
+    JOB_STATUS[job_id]["status"] = "running"
+    JOB_STATUS[job_id]["percent"] = 5
+    JOB_STATUS[job_id]["message"] = "Validating URL..."
+
+    # Validate URL
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError("Invalid URL format")
+    except Exception as e:
+        JOB_STATUS[job_id]["status"] = "error"
+        JOB_STATUS[job_id]["error"] = f"Invalid URL: {str(e)}"
+        return
+
+    # Build command line arguments
+    cmd_args = ['-w', '--url', url, '--report']
+
+    # Create progress file for CLI to write to
+    progress_file = Path(tempfile.gettempdir()) / f"{job_id}-progress.json"
+
+    # Add progress file argument
+    cmd_args.extend(['--progress-file', str(progress_file)])
+
+    # Add languages
+    if languages and isinstance(languages, list):
+        for lang in languages:
+            cmd_args.extend(['--language', lang])
+
+    # Add num_images if specified
+    if num_images is not None:
+        try:
+            num_images_int = int(num_images)
+            if num_images_int >= 1:
+                cmd_args.extend(['--num-images', str(num_images_int)])
+        except ValueError:
+            pass
+
+    # Add session if provided
+    if session_id_override:
+        cmd_args.extend(['--session', session_id_override])
+
+    # Add advanced options
+    if vision_provider:
+        cmd_args.extend(['--vision-provider', vision_provider])
+    if vision_model:
+        cmd_args.extend(['--vision-model', vision_model])
+    if processing_provider:
+        cmd_args.extend(['--processing-provider', processing_provider])
+    if processing_model:
+        cmd_args.extend(['--processing-model', processing_model])
+    if translation_provider:
+        cmd_args.extend(['--translation-provider', translation_provider])
+    if translation_model:
+        cmd_args.extend(['--translation-model', translation_model])
+    if advanced_translation:
+        cmd_args.append('--advanced-translation')
+    if geo_boost:
+        cmd_args.append('--geo-boost')
+
+    # Get the app.py path
+    app_py_path = Path(__file__).parent / 'app.py'
+    cmd = [sys.executable, str(app_py_path)] + cmd_args
+
+    log_message(f"[Job {job_id}] Executing: {' '.join(cmd)}", "INFORMATION")
+
+    JOB_STATUS[job_id]["percent"] = 10
+    JOB_STATUS[job_id]["message"] = "Fetching web page..."
+
+    # Start subprocess
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    # Poll for progress while process runs
+    last_progress_check = 0
+    while process.poll() is None:
+        time.sleep(0.5)  # Check every 500ms
+
+        # Read progress file if it exists
+        if progress_file.exists():
+            try:
+                with open(progress_file, 'r') as f:
+                    progress_data = json.load(f)
+
+                # Update job status from progress file
+                if 'percent' in progress_data:
+                    JOB_STATUS[job_id]["percent"] = progress_data['percent']
+                if 'message' in progress_data:
+                    JOB_STATUS[job_id]["message"] = progress_data['message']
+                if 'current_image' in progress_data:
+                    JOB_STATUS[job_id]["current_image"] = progress_data['current_image']
+                if 'total_images' in progress_data:
+                    JOB_STATUS[job_id]["total_images"] = progress_data['total_images']
+                if 'phase' in progress_data:
+                    JOB_STATUS[job_id]["phase"] = progress_data['phase']
+
+            except (json.JSONDecodeError, IOError):
+                pass  # Progress file might be being written
+
+    # Process completed - get output
+    stdout, stderr = process.communicate()
+    output = stdout
+    if stderr:
+        output = f"{output}\n{stderr}"
+
+    # Clean up progress file
+    try:
+        if progress_file.exists():
+            progress_file.unlink()
+    except:
+        pass
+
+    # Check for errors
+    if process.returncode != 0:
+        error_msg = stderr or stdout or "Unknown error"
+        log_message(f"[Job {job_id}] CLI execution failed: {error_msg}", "ERROR")
+        # Don't fail yet - might still have generated a report
+
+    # Parse output for report path and stats (same logic as sync endpoint)
+    report_path = None
+    session_id = None
+    alt_text_folder = None
+
+    for line in output.split('\n'):
+        lower_line = line.lower()
+
+        if not report_path and 'report' in lower_line and '.html' in lower_line:
+            match = re.search(r'(output/reports/[^/\s]+/[^\s]+\.html)', line)
+            if not match:
+                match = re.search(r'([^\s]*output/reports[^\s]*\.html)', line)
+            if match:
+                candidate_path = match.group(1).strip()
+                if 'report_template.html' not in candidate_path:
+                    report_path = candidate_path
+
+        if not session_id:
+            session_match = re.search(r'Using session:\s*([^\s]+)', line)
+            if session_match:
+                session_id = session_match.group(1).strip()
+
+        if not alt_text_folder and 'output folder' in lower_line:
+            folder_match = re.search(r'Output folder:\s*([^\s]+)', line, flags=re.IGNORECASE)
+            if folder_match:
+                alt_text_folder = folder_match.group(1).strip()
+
+    # Count images from alt-text folder
+    total_images = 0
+    missing_alt = 0
+    has_alt = 0
+
+    base_alt_text = Path(get_absolute_folder_path('alt_text'))
+    if not alt_text_folder and session_id:
+        candidate = base_alt_text / session_id
+        if candidate.exists():
+            alt_text_folder = str(candidate)
+
+    if alt_text_folder:
+        alt_text_path = Path(alt_text_folder)
+        json_files = list(alt_text_path.glob('*.json'))
+        total_images = len(json_files)
+
+        for json_file in json_files:
+            try:
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    file_data = json.load(f)
+                current_alt = (file_data.get('current_alt_text') or '').strip()
+                if current_alt:
+                    has_alt += 1
+                else:
+                    missing_alt += 1
+            except Exception:
+                continue
+
+    # Normalize report path
+    if report_path:
+        project_root = Path(__file__).parent.parent
+        try:
+            report_path_obj = Path(report_path)
+            if not report_path_obj.is_absolute():
+                report_path_obj = (project_root / report_path_obj).resolve()
+            else:
+                report_path_obj = report_path_obj.resolve()
+            report_path = str(report_path_obj.relative_to(project_root))
+            report_path = report_path.replace('\\', '/')
+        except Exception:
+            pass
+
+    # Update final status
+    if report_path or total_images > 0:
+        JOB_STATUS[job_id]["status"] = "complete"
+        JOB_STATUS[job_id]["percent"] = 100
+        JOB_STATUS[job_id]["message"] = "Analysis complete!"
+        JOB_STATUS[job_id]["result"] = {
+            "success": True,
+            "url": url,
+            "report_path": report_path,
+            "summary": {
+                "total_images": total_images,
+                "missing_alt": missing_alt,
+                "has_alt": has_alt
+            }
+        }
+    else:
+        JOB_STATUS[job_id]["status"] = "error"
+        JOB_STATUS[job_id]["error"] = "No report generated"
+        JOB_STATUS[job_id]["message"] = "Analysis failed - no report generated"
+
+    log_message(f"[Job {job_id}] Analysis complete. Status: {JOB_STATUS[job_id]['status']}", "INFORMATION")
+
+
+@app.get("/api/job-status/{job_id}")
+async def get_job_status(job_id: str):
+    """
+    Get the status of an async analysis job.
+
+    Returns:
+    {
+        "job_id": "job-abc123",
+        "status": "running" | "complete" | "error",
+        "percent": 0-100,
+        "message": "Processing image 3 of 10...",
+        "current_image": 3,  // optional
+        "total_images": 10,  // optional
+        "result": {...}  // only when status is "complete"
+        "error": "..."  // only when status is "error"
+    }
+    """
+    if job_id not in JOB_STATUS:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+    status = JOB_STATUS[job_id].copy()
+
+    # Clean up old completed/errored jobs after 5 minutes
+    if status["status"] in ("complete", "error"):
+        created = datetime.fromisoformat(status.get("created", datetime.now().isoformat()))
+        if datetime.now() - created > timedelta(minutes=5):
+            del JOB_STATUS[job_id]
+
+    return {"job_id": job_id, **status}
 
 
 def _resolve_report_path(path: str) -> "Path":
@@ -2308,7 +2656,7 @@ async def get_alt_text_length_config():
     Get current alt-text length configuration.
 
     Returns:
-        Dictionary with min_alt_text_length and max_alt_text_length values
+        Dictionary with min_alt_text_length, max_alt_text_length, and geo_boost_increase_percent values
     """
     from app import CONFIG
 
@@ -2316,19 +2664,22 @@ async def get_alt_text_length_config():
         load_config()
         from app import CONFIG
 
-    # Get values from config, default to 125 if not set
+    # Get values from config, with defaults
     min_length = CONFIG.get('min_alt_text_length', 125)
-    max_length = CONFIG.get('max_alt_text_length', 125)
+    max_length = CONFIG.get('max_alt_text_length', CONFIG.get('alt_text_max_chars', 125))
+    geo_boost_increase_percent = CONFIG.get('geo_boost_increase_percent', 20)
 
     return {
         'min_alt_text_length': min_length,
-        'max_alt_text_length': max_length
+        'max_alt_text_length': max_length,
+        'geo_boost_increase_percent': geo_boost_increase_percent
     }
 
 
 class AltTextLengthConfig(BaseModel):
     min_alt_text_length: int
     max_alt_text_length: int
+    geo_boost_increase_percent: int = 20
 
 
 @app.post("/api/alt-text-length-config")
@@ -2340,7 +2691,7 @@ async def update_alt_text_length_config(config: AltTextLengthConfig):
     and will be lost when the application restarts.
 
     Args:
-        config: AltTextLengthConfig with min and max values
+        config: AltTextLengthConfig with min, max, and geo_boost_increase_percent values
 
     Returns:
         Updated configuration values
@@ -2358,15 +2709,25 @@ async def update_alt_text_length_config(config: AltTextLengthConfig):
     if config.max_alt_text_length < config.min_alt_text_length:
         raise HTTPException(status_code=400, detail="max_alt_text_length must be greater than or equal to min_alt_text_length")
 
+    if config.geo_boost_increase_percent < 0 or config.geo_boost_increase_percent > 100:
+        raise HTTPException(status_code=400, detail="geo_boost_increase_percent must be between 0 and 100")
+
     # Update CONFIG in memory
     CONFIG['min_alt_text_length'] = config.min_alt_text_length
     CONFIG['max_alt_text_length'] = config.max_alt_text_length
+    CONFIG['alt_text_max_chars'] = config.max_alt_text_length  # Keep in sync
+    CONFIG['geo_boost_increase_percent'] = config.geo_boost_increase_percent
 
-    log_message("INFO", f"Alt-text length configuration updated: min={config.min_alt_text_length}, max={config.max_alt_text_length}")
+    # Calculate GEO boost limit for logging
+    geo_boost_limit = int(config.max_alt_text_length * (1 + config.geo_boost_increase_percent / 100))
+
+    log_message("INFO", f"Alt-text length configuration updated: min={config.min_alt_text_length}, max={config.max_alt_text_length}, geo_boost_increase={config.geo_boost_increase_percent}% (GEO limit={geo_boost_limit})")
 
     return {
         'min_alt_text_length': config.min_alt_text_length,
         'max_alt_text_length': config.max_alt_text_length,
+        'geo_boost_increase_percent': config.geo_boost_increase_percent,
+        'geo_boost_limit': geo_boost_limit,
         'message': 'Configuration updated successfully (runtime only, not persisted to file)'
     }
 

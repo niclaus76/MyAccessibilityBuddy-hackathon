@@ -12,13 +12,13 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.8.2/dist/css/bootstrap-italia.min.css" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <style>
-        body { background: #f8fafc; color: #17324d; }
-        .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1030; }
-        .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1050; overflow-y: auto; font-size: 0.7rem; }
+        /* Body background now controlled by styles.css */
+        .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1080; }
+        .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1100; overflow-y: auto; font-size: 0.7rem; }
         .nav-menu .btn { font-size: 0.7rem; padding: 0.5rem 0.75rem; }
         .nav-menu .fw-bold { font-size: 0.75rem; }
         .nav-menu.active { transform: translateX(0); }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1040; pointer-events: none; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1090; pointer-events: none; }
         .overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
         .skip-link { position:absolute; left:-999px; top:auto; width:1px; height:1px; overflow:hidden; } .skip-link:focus { position:fixed; top:0; left:0; width:auto; height:auto; padding:0.5rem 1rem; background:#0066cc; color:#fff; z-index:1060; }
     </style>
@@ -42,7 +42,7 @@
         </div>
         <a class="btn btn-outline-primary w-100" href="home.html">Home</a>
         <a class="btn btn-outline-primary w-100" href="webmaster.html">Webmaster Tool</a>
-        <a class="btn btn-outline-primary w-100" href="accessibility-compliance.html">Accessibility Compliance</a>
+        <a class="btn btn-outline-primary w-100" href="accessibility-compliance.html">Website Accessibility Tool</a>
         <a class="btn btn-primary w-100" aria-current="page" href="prompt-optimization.html">Prompt Optimization</a>
         <a class="btn btn-outline-primary w-100" href="remediation.html">Remediation Tool</a>
         <a class="btn btn-outline-primary w-100" href="admin.html">Administration Tool</a>
@@ -52,8 +52,8 @@
     <!-- Header -->
     <header class="py-5 text-center">
         <div class="container">
-            <img src="assets/Buddy-Logo_no_text.png" alt="My Accessibility Buddy logo" width="96" height="96" class="mb-3">
-            <h1 class="fw-bold" style="font-size: 2rem;">Prompt Optimization Tool</h1>
+            <img src="assets/prompt-optimization-tool.png" alt="Prompt optimization tool" class="mb-3" style="max-width:180px;">
+            <h1 class="fw-bold" style="font-size: 2rem;">My Accessibility Buddy - Prompt Optimization</h1>
             <p class="lead mb-1">Compare and Optimize AI Prompts</p>
             <p class="text-muted mb-0">Systematically test prompt variants for generating WCAG 2.2-compliant alternative text</p>
         </div>

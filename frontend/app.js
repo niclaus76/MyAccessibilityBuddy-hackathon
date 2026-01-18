@@ -21,6 +21,8 @@
     let availableProviders = [];
     let processingMode = 'basic'; // 'basic' or 'advanced'
     let configDefaults = {}; // Store default config values
+    let baseAltTextMaxChars = 125; // Default alt-text limit (configurable via backend)
+    let geoBoostIncreasePercent = 20; // Default GEO boost increase (configurable via backend)
 
     // Language names mapping
     const languageNames = {
@@ -66,6 +68,13 @@
             // Store config defaults if provided
             if (data.config_defaults) {
                 configDefaults = data.config_defaults;
+                if (typeof data.config_defaults.alt_text_max_chars === 'number') {
+                    baseAltTextMaxChars = data.config_defaults.alt_text_max_chars;
+                }
+                if (typeof data.config_defaults.geo_boost_increase_percent === 'number') {
+                    geoBoostIncreasePercent = data.config_defaults.geo_boost_increase_percent;
+                }
+                updateAltTextLimitDisplays();
             }
 
             // Show/hide ECB-LLM info in the "Read more" section based on availability
@@ -303,6 +312,7 @@
             geoBoostToggle.setAttribute('aria-checked', isGeoBoostEnabled ? 'true' : 'false');
         }
 
+        updateAltTextLimitDisplays();
         console.log(`[GEO] Boost set to: ${geoBoost}`);
     }
 
@@ -447,6 +457,38 @@
     const contextFileName = document.getElementById('contextFileName');
     const contextFilePreview = document.getElementById('contextFilePreview');
     const removeContext = document.getElementById('removeContext');
+
+    // Progress bar elements
+    const progressContainer = document.getElementById('progressContainer');
+    const progressStatus = document.getElementById('progressStatus');
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+
+    // Update Progress bar
+    function updateProgress(percent, message) {
+        if (progressBar) {
+            progressBar.style.width = `${percent}%`;
+            progressBar.setAttribute('aria-valuenow', percent);
+        }
+        if (progressPercent) {
+            progressPercent.textContent = `${percent}%`;
+        }
+        if (progressStatus) {
+            progressStatus.textContent = message;
+        }
+    }
+
+    // Show/Hide Progress bar
+    function showProgress(show) {
+        if (progressContainer) {
+            if (show) {
+                progressContainer.style.display = '';
+                updateProgress(0, 'Initializing...');
+            } else {
+                progressContainer.style.display = 'none';
+            }
+        }
+    }
 
     // Function to populate model dropdown for a specific step
     function populateModelDropdown(provider, stepType, modelSelect) {
@@ -596,30 +638,56 @@
     });
 
     // Character count and visual feedback for a specific textarea
+    function getAltTextLimit() {
+        if (geoBoost) {
+            return Math.floor(baseAltTextMaxChars * (1 + geoBoostIncreasePercent / 100));
+        }
+        return baseAltTextMaxChars;
+    }
+
+    function updateAltTextLimitDisplays() {
+        const maxChars = getAltTextLimit();
+        document.querySelectorAll('[data-char-warning]').forEach((warning) => {
+            warning.textContent = ` (⚠ Over ${maxChars} characters)`;
+        });
+        document.querySelectorAll('[data-recommended-limit]').forEach((limitLabel) => {
+            limitLabel.textContent = `Recommended: ≤ ${maxChars} characters`;
+        });
+        document.querySelectorAll('[data-alt-text-input]').forEach((textarea) => {
+            const lang = textarea.getAttribute('data-lang');
+            const charCountNum = document.getElementById(`charCountNum_${lang}`);
+            const charWarning = document.getElementById(`charWarning_${lang}`);
+            if (charCountNum && charWarning) {
+                updateCharacterCount(textarea, charCountNum, charWarning);
+            }
+        });
+    }
+
     function updateCharacterCount(textarea, charCountNum, charWarning) {
         const text = textarea.value;
         const count = text.length;
         const previousCount = parseInt(charCountNum.textContent) || 0;
+        const maxChars = getAltTextLimit();
 
         charCountNum.textContent = count;
 
-        // Check if we crossed the 125 character threshold
-        const wasOverLimit = previousCount > 125;
-        const isOverLimit = count > 125;
+        // Check if we crossed the configured character threshold
+        const wasOverLimit = previousCount > maxChars;
+        const isOverLimit = count > maxChars;
 
         if (isOverLimit) {
             charWarning.classList.remove('d-none');
             textarea.style.color = 'red';
             // Announce when crossing threshold
             if (!wasOverLimit) {
-                announceToScreenReader(`Warning: Alt text exceeds recommended 125 characters. Current count: ${count} characters.`);
+                announceToScreenReader(`Warning: Alt text exceeds recommended ${maxChars} characters. Current count: ${count} characters.`);
             }
         } else {
             charWarning.classList.add('d-none');
             textarea.style.color = '';
             // Announce when going back under threshold
             if (wasOverLimit) {
-                announceToScreenReader(`Alt text is now within recommended limit. Current count: ${count} characters.`);
+                announceToScreenReader(`Alt text is now within recommended limit (${maxChars} characters). Current count: ${count} characters.`);
             }
         }
     }
@@ -628,6 +696,7 @@
     function createLanguageResultCard(lang, altText, imageId, jsonPath) {
         const langName = languageNames[lang] || lang;
         const altTextDisplay = altText === "" ? '(Empty alt text for decorative image)' : altText;
+        const maxChars = getAltTextLimit();
 
         // Build descriptive label with processing and translation mode context
         const labelText = `Generated alternative text for ${langName}`;
@@ -640,15 +709,15 @@
             <div class="card-body">
                 <div class="callout success">
                     <label for="resultText_${lang}" class="form-label">${labelText}</label>
-                    <textarea id="resultText_${lang}" class="form-control mb-2" rows="4"
+                    <textarea id="resultText_${lang}" class="form-control mb-2" rows="4" data-alt-text-input data-lang="${lang}"
                         placeholder="Generated alt text will appear here..."
                         aria-describedby="charCount_${lang}">${altTextDisplay}</textarea>
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <small id="charCount_${lang}" class="text-muted" aria-live="polite" aria-atomic="true">
                             <span id="charCountNum_${lang}">${altText.length}</span> characters
-                            <span id="charWarning_${lang}" class="text-warning ${altText.length > 125 ? '' : 'd-none'}" role="status"> (⚠ Over 125 characters)</span>
+                            <span id="charWarning_${lang}" class="text-warning ${altText.length > maxChars ? '' : 'd-none'}" role="status" data-char-warning> (⚠ Over ${maxChars} characters)</span>
                         </small>
-                        <small class="text-muted" aria-hidden="true">Recommended: ≤ 125 characters</small>
+                        <small class="text-muted" aria-hidden="true" data-recommended-limit>Recommended: ≤ ${maxChars} characters</small>
                     </div>
                     <div class="text-center">
                         <button type="button" class="btn btn-primary btn-sm copy-btn" data-lang="${lang}" aria-label="Copy alt text for ${langName}">
@@ -702,6 +771,7 @@
         let errorCount = 0;
         const errors = [];
 
+        const maxChars = getAltTextLimit();
         // Check for over-length warnings
         const warnings = [];
         for (const lang of Object.keys(languageResults)) {
@@ -709,7 +779,7 @@
             if (textarea) {
                 const reviewedText = textarea.value;
                 const textToSave = reviewedText === '(Empty alt text for decorative image)' ? '' : reviewedText;
-                if (textToSave.length > 125) {
+                if (textToSave.length > maxChars) {
                     const langName = languageNames[lang] || lang;
                     warnings.push(`${langName}: ${textToSave.length} characters`);
                 }
@@ -718,7 +788,7 @@
 
         if (warnings.length > 0) {
             const confirmSave = confirm(
-                `⚠️ Warning: Some alt texts exceed 125 characters:\n\n${warnings.join('\n')}\n\n` +
+                `⚠️ Warning: Some alt texts exceed ${maxChars} characters:\n\n${warnings.join('\n')}\n\n` +
                 `Longer alt text may not be ideal for screen reader users.\n\n` +
                 `Do you want to save them anyway?`
             );
@@ -1235,6 +1305,10 @@
         const btnSpinner = document.getElementById('btnSpinner');
         const generationStatus = document.getElementById('generationStatus');
 
+        // Show progress bar
+        showProgress(true);
+        updateProgress(5, 'Clearing previous session data...');
+
         // Clear previous session data before starting new generation
         try {
             await clearSessionData();
@@ -1244,11 +1318,10 @@
             // Continue anyway - don't block new generation
         }
 
-        if (processingMode === 'basic') {
-            btnText.textContent = 'Image 1 of 1';
-        } else {
-            btnText.textContent = `Image 1 of 1, language 1 of ${selectedLanguages.length}`;
-        }
+        updateProgress(10, 'Preparing generation...');
+
+        // Show "Generate..." with spinner during processing
+        btnText.textContent = 'Generate...';
         btnSpinner.classList.remove('d-none');
         generateBtn.disabled = true;
         if (stopGenerationBtn) {
@@ -1268,12 +1341,18 @@
 
         try {
             // Generate for each selected language
-            for (let i = 0; i < selectedLanguages.length; i++) {
+            const totalLanguages = selectedLanguages.length;
+            for (let i = 0; i < totalLanguages; i++) {
                 const lang = selectedLanguages[i];
                 const langName = languageNames[lang] || lang;
+
+                // Calculate progress (10-90% for generation, reserve 90-100% for completion)
+                const progressPercent = Math.round(10 + (i / totalLanguages) * 80);
+                updateProgress(progressPercent, `Generating alt text for ${langName} (${i + 1} of ${totalLanguages})...`);
+
                 // Update status for screen readers
                 if (generationStatus) {
-                    generationStatus.textContent = `Generating alt text for ${langName}, language ${i + 1} of ${selectedLanguages.length}`;
+                    generationStatus.textContent = `Generating alt text for ${langName}, language ${i + 1} of ${totalLanguages}`;
                 }
 
                 // Prepare FormData
@@ -1320,6 +1399,10 @@
                     formData.append('context', contextText.trim());
                 }
 
+                // Update progress before API call
+                const sendingPercent = Math.round(10 + ((i + 0.3) / totalLanguages) * 80);
+                updateProgress(sendingPercent, `Sending request for ${langName}...`);
+
                 // API Call
                 const response = await fetch(`${API_BASE_URL}/generate-alt-text`, {
                     method: 'POST',
@@ -1327,6 +1410,10 @@
                     body: formData,
                     signal: currentAbortController.signal
                 });
+
+                // Update progress while processing response
+                const processingPercent = Math.round(10 + ((i + 0.7) / totalLanguages) * 80);
+                updateProgress(processingPercent, `Processing response for ${langName}...`);
 
                 const data = await response.json();
 
@@ -1383,6 +1470,9 @@
                 }
             }
 
+            // Update progress to complete
+            updateProgress(100, 'Generation complete!');
+
             // Show result section and scroll to it
             resultSection.classList.remove('d-none');
             resultSection.scrollIntoView({ behavior: 'smooth' });
@@ -1399,13 +1489,16 @@
                 generationStatus.textContent = `Generation complete. ${selectedLanguages.length} language${selectedLanguages.length > 1 ? 's' : ''} processed.`;
             }
 
+            // Hide progress bar after a short delay
+            setTimeout(() => showProgress(false), 500);
+
             // Move focus to first result textarea
             setTimeout(() => {
                 const firstTextarea = document.getElementById(`resultText_${selectedLanguages[0]}`);
                 if (firstTextarea) {
                     firstTextarea.focus();
                 }
-            }, 500);
+            }, 600);
 
         } catch (error) {
             console.error('[GENERATE] Error generating alt-text:', error);
@@ -1413,6 +1506,7 @@
             // Check if error was due to abort
             if (error.name === 'AbortError') {
                 console.log('[GENERATE] Generation aborted by user');
+                showProgress(false);
                 return; // Stop function already handled the cleanup
             }
 
@@ -1435,6 +1529,7 @@
             if (generationStatus) {
                 generationStatus.textContent = 'Generation failed. Please see error message above.';
             }
+            showProgress(false);
         } finally {
             btnText.textContent = 'Generate';
             btnSpinner.classList.add('d-none');
@@ -1450,17 +1545,49 @@
 
     // Stop generation function
     async function stopGeneration() {
+        // Update progress to show stopping
+        updateProgress(0, 'Stopping generation...');
+        announceToScreenReader('Stopping generation and clearing session data');
+
         if (currentAbortController) {
             currentAbortController.abort();
+            updateProgress(30, 'Request aborted');
         }
+
+        // Small delay for visual feedback
+        await new Promise(resolve => setTimeout(resolve, 200));
+        updateProgress(50, 'Clearing session data...');
+
         // Clear session data to start from a clean state
-        await clearSessionData();
+        try {
+            await clearSessionData();
+            updateProgress(90, 'Session data cleared');
+        } catch (error) {
+            console.error('[WEBMASTER] Failed to clear session data:', error);
+            updateProgress(90, 'Session cleanup attempted');
+        }
+
         currentAbortController = null;
         languageResults = {};
         resultsContainer.innerHTML = '';
         resultSection.classList.add('d-none');
+
+        updateProgress(100, 'Stop complete');
+
+        // Small delay before hiding progress
+        await new Promise(resolve => setTimeout(resolve, 300));
+        showProgress(false);
+
         showErrorMessage('Generation stopped and session data cleared');
         announceToScreenReader('Generation stopped and session data cleared');
+
+        // Reset button states
+        const btnText = document.getElementById('btnText');
+        const btnSpinner = document.getElementById('btnSpinner');
+        if (btnText) btnText.textContent = 'Generate';
+        if (btnSpinner) btnSpinner.classList.add('d-none');
+        generateBtn.disabled = false;
+        if (stopGenerationBtn) stopGenerationBtn.disabled = true;
     }
 
     // Clear session data helper function

@@ -138,6 +138,9 @@
   },
   "_comment_translation_mode": "translation_mode: 'fast' (generate once in first language, then translate) or 'accurate' (generate fresh alt-text for each language). 'fast' is recommended for cost/speed.",
   "translation_mode": "fast",
+  "_comment_alt_text_limits": "Character limits for alt-text generation. alt_text_max_chars is the base limit (used when GEO boost is OFF), geo_boost_increase_percent is the percentage increase when GEO boost is ON. Example: 125 base + 20% = 150 chars with GEO boost",
+  "alt_text_max_chars": 125,
+  "geo_boost_increase_percent": 20,
   "_comment_prompt": "Prompt template configuration: processing_files (list of processing prompt files), default_processing_prompt (fallback), vision_files (list of vision prompt files), default_vision_prompt (fallback), translation_files (list of translation prompt files), default_translation_prompt (fallback). For merge_separator setting, see config.advanced.json",
   "prompt": {
     "processing_files": [
