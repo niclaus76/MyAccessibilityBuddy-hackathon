@@ -49,3 +49,17 @@
 2026-01-18 21:36:18 [DEBUG] Running: docker run -d --name mab-test -p 8000:8000 myaccessibilitybuddy-api:latest
 2026-01-18 21:36:19 [WARNING] Could not start test container
 2026-01-18 21:36:19 [INFO] Port 8000 is in use (race condition)
+2026-01-18 21:36:20 [INFO] Continuing with deployment...
+2026-01-18 21:36:20 [INFO] Logging into AWS ECR...
+2026-01-18 21:36:20 [DEBUG] ECR registry: 514201995752.dkr.ecr.eu-central-1.amazonaws.com, Region: eu-central-1
+2026-01-18 21:36:20 [SUCCESS] Found 40 invalidation(s)
+2026-01-18 21:36:26 [WARNING] Latest invalidation is still in progress
+2026-01-18 21:36:26 [INFO] This typically takes 5-15 minutes
+2026-01-18 21:36:26 [INFO] Monitor again with:
+2026-01-18 21:36:27 [SUCCESS] ECR login successful
+2026-01-18 21:36:27 [INFO] Tagging image for ECR...
+2026-01-18 21:36:27 [DEBUG] Tagging: myaccessibilitybuddy-api:latest → 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
+2026-01-18 21:36:27 [INFO] Pushing image to ECR...
+2026-01-18 21:36:27 [DEBUG] Pushing: 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
+2026-01-18 21:39:18 [ERROR] Image push failed
+2026-01-18 21:39:19 [ERROR] One or more parallel deployments failed

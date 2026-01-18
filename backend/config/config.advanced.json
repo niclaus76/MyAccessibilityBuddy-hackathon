@@ -48,9 +48,10 @@
     "display_image_tag_attribute": true,
     "display_reasoning": true,
     "display_context": true,
-    "display_vision_prompt": true,
+    "display_vision_prompt": false,
     "display_processing_prompt": true,
-    "display_translation_prompt": true
+    "display_translation_prompt": false,
+    "display_geotag": true
   },
 
   "_comment_download": "Web scraping download settings",
