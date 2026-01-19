@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Comparison Report - MyAccessibilityBuddy</title>
+    <style>
+        /* Visually hidden content for screen readers */
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* Skip to main content link */
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            background: #0066cc;
+            color: white;
+            padding: 8px;
+            text-decoration: none;
+            z-index: 100;
+            font-weight: bold;
+        }
+        .skip-link:focus {
+            top: 0;
+            outline: 3px solid #ffdd00;
+            outline-offset: 2px;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+            line-height: 1.5;
+        }
+        /* Focus indicators for better keyboard navigation */
+        a:focus, button:focus {
+            outline: 3px solid #0066cc;
+            outline-offset: 2px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #0066cc;
+            margin-top: 30px;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 2px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        .summary {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-left: 4px solid #0066cc;
+            margin-bottom: 30px;
+        }
+        .image-preview {
+            max-width: 400px;
+            max-height: 200px;
+            height: auto;
+            display: block;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .image-card {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .image-card h3 {
+            color: #0066cc;
+            margin-top: 0;
+            font-size: 1.3em;
+            border-bottom: none;
+        }
+        .field {
+            margin-bottom: 15px;
+        }
+        .field-label {
+            font-weight: bold;
+            color: #595959;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .field-value {
+            color: #333;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-left: 3px solid #0066cc;
+        }
+        .image-type {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+        .type-informative {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .type-decorative {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .type-functional {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        .type-generation_error {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .alt-text {
+            font-size: 1.1em;
+            font-style: italic;
+        }
+        .context-text {
+            color: #4a4a4a;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .error {
+            color: #721c24;
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #f5c6cb;
+        }
+        .stats-section {
+            margin: 20px 0;
+        }
+        .stats-section h3 {
+            color: #0066cc;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .prompt-block p {
+            margin: 0 0 6px 0;
+        }
+        .prompt-text {
+            white-space: pre-wrap;
+            word-break: break-word;
+            background-color: #f9f9f9;
+            border-left: 3px solid #0066cc;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 0.95em;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .stat-item {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #0066cc;
+        }
+        .stat-label {
+            font-weight: bold;
+            color: #595959;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 1.3em;
+            color: #333;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .image-card {
+                padding: 15px;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <style>
+        .prompt-comparison {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .prompt-header {
+            font-weight: bold;
+            color: #0066cc;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #e8f4f8;
+            border-left: 4px solid #0066cc;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .comparison-table th {
+            background-color: #0066cc;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        .comparison-table td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            vertical-align: top;
+        }
+        .comparison-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .alt-text-cell {
+            font-style: italic;
+            line-height: 1.6;
+        }
+        .char-count {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <header class="header">
+        <h1>Prompt Comparison Report</h1>
+        <p>MyAccessibilityBuddy - Batch Prompt Analysis</p>
+    </header>
+
+    <main id="main-content">
+        <section class="summary" role="region" aria-label="Summary">
+            <h2>Summary</h2>
+            <p><strong>Total Images Analyzed:</strong> 0</p>
+            <p><strong>Prompts Tested:</strong> 2</p>
+            <p><strong>Testing Mode:</strong> Standard mode</p>
+            <p><strong>Total Alt-Texts Generated:</strong> 0</p>
+            <p><strong>Generated:</strong> 2026-01-19 01:16:33</p>
+
+            <h3>Configuration:</h3>
+            <ul>
+                <li><strong>Language:</strong> en</li>
+                <li><strong>Test Images:</strong> 1.png</li>
+                <li><strong>GEO Boost Testing:</strong> Disabled (standard only)</li>
+            </ul>
+
+            <h3>Prompts Tested:</h3>
+            <ul>
+                <li><strong>v0</strong> - processing_prompt_v0.txt</li>
+                <li><strong>v1</strong> - processing_prompt_v1.txt</li>
+            </ul>
+        </section>
+
+        <h2>Detailed Comparison</h2>
+
+    </main>
+</body>
+</html>

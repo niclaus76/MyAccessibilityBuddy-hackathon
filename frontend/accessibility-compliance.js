@@ -53,6 +53,8 @@
     const progressStatus = document.getElementById('progressStatus');
     const progressBar = document.getElementById('progressBar');
     const progressPercent = document.getElementById('progressPercent');
+    const progressEstimate = document.getElementById('progressEstimate');
+    const estimatePreview = document.getElementById('estimatePreview');
     const resultsSection = document.getElementById('resultsSection');
     const reportSummary = document.getElementById('reportSummary');
     const downloadReportBtn = document.getElementById('downloadReportBtn');
@@ -66,6 +68,7 @@
     let modelOptions = {};
     let availableProviders = [];
     let configDefaults = {};
+    let timeEstimation = {};
     let currentAbortController = null;
     let currentSessionId = null;
 
@@ -94,6 +97,9 @@
             // Store config defaults if provided
             if (data.config_defaults) {
                 configDefaults = data.config_defaults;
+                if (data.config_defaults.time_estimation) {
+                    timeEstimation = data.config_defaults.time_estimation;
+                }
             }
 
             // Populate provider dropdowns
@@ -138,9 +144,18 @@
         });
 
         // Add event listeners for provider changes
-        visionProviderSelect.addEventListener('change', () => updateModelOptions('vision'));
-        processingProviderSelect.addEventListener('change', () => updateModelOptions('processing'));
-        translationProviderSelect.addEventListener('change', () => updateModelOptions('translation'));
+        visionProviderSelect.addEventListener('change', () => {
+            updateModelOptions('vision');
+            updateProgressEstimate();
+        });
+        processingProviderSelect.addEventListener('change', () => {
+            updateModelOptions('processing');
+            updateProgressEstimate();
+        });
+        translationProviderSelect.addEventListener('change', () => {
+            updateModelOptions('translation');
+            updateProgressEstimate();
+        });
     }
 
     // Update model dropdown based on selected provider
@@ -233,6 +248,7 @@
         }
 
         console.log('[COMPLIANCE] Default providers set from config');
+        updateProgressEstimate();
     }
 
     // Setup event listeners
@@ -245,10 +261,34 @@
         pageUrlInput.addEventListener('blur', validateUrl);
 
         // Advanced Options toggle
-        advancedOptionsToggle.addEventListener('change', toggleAdvancedOptions);
+        advancedOptionsToggle.addEventListener('change', () => {
+            toggleAdvancedOptions();
+            updateProgressEstimate();
+        });
 
         // Process All Images toggle
-        processAllImagesToggle.addEventListener('change', toggleNumImagesInput);
+        processAllImagesToggle.addEventListener('change', () => {
+            toggleNumImagesInput();
+            updateProgressEstimate();
+        });
+        numImagesInput.addEventListener('input', updateProgressEstimate);
+        languageSelect.addEventListener('change', updateProgressEstimate);
+
+        if (visionModelSelect) {
+            visionModelSelect.addEventListener('change', updateProgressEstimate);
+        }
+        if (processingModelSelect) {
+            processingModelSelect.addEventListener('change', updateProgressEstimate);
+        }
+        if (translationModelSelect) {
+            translationModelSelect.addEventListener('change', updateProgressEstimate);
+        }
+        if (translationModeToggle) {
+            translationModeToggle.addEventListener('change', updateProgressEstimate);
+        }
+        if (geoBoostToggle) {
+            geoBoostToggle.addEventListener('change', updateProgressEstimate);
+        }
 
         // Buttons
         generateBtn.addEventListener('click', () => {
@@ -493,6 +533,7 @@
         // Disable form during analysis
         setFormState(false);
         showProgress(true);
+        updateProgressEstimate();
         hideError();
         resultsSection.style.display = 'none';
 
@@ -692,6 +733,99 @@
     function getSelectedLanguages() {
         const selected = Array.from(languageSelect.selectedOptions).map(option => option.value);
         return selected.length > 0 ? selected : ['en'];
+    }
+
+    function formatDuration(seconds) {
+        if (!Number.isFinite(seconds) || seconds <= 0) return '--';
+        const rounded = Math.round(seconds);
+        const mins = Math.floor(rounded / 60);
+        const secs = rounded % 60;
+        if (mins >= 60) {
+            const hours = Math.floor(mins / 60);
+            const remMins = mins % 60;
+            return `${hours}h ${remMins}m`;
+        }
+        if (mins > 0) {
+            return `${mins}m ${secs}s`;
+        }
+        return `${secs}s`;
+    }
+
+    function getProviderCategory(provider) {
+        const map = timeEstimation.provider_category || {};
+        return map[provider] || 'web';
+    }
+
+    function getBaseSeconds(provider) {
+        const base = timeEstimation.base_seconds_per_image || {};
+        const category = getProviderCategory(provider);
+        return base[category] || 10;
+    }
+
+    function getStepMultiplier(step) {
+        const steps = timeEstimation.step_multipliers || {};
+        return steps[step] || 1;
+    }
+
+    function getModelMultiplier(model) {
+        const models = timeEstimation.model_multipliers || {};
+        return models[model] || 1;
+    }
+
+    function getTranslationModeMultiplier(mode) {
+        const modes = timeEstimation.translation_mode_multiplier || {};
+        return modes[mode] || 1;
+    }
+
+    function estimateAnalysisSeconds() {
+        const languages = Math.max(getSelectedLanguages().length, 1);
+        const processAllChecked = processAllImagesToggle.checked;
+        const numImagesValue = parseInt(numImagesInput.value, 10);
+        const defaultAll = timeEstimation.default_num_images_when_all || 10;
+        const images = processAllChecked ? defaultAll : (Number.isFinite(numImagesValue) ? numImagesValue : 1);
+
+        const visionProviderValue = visionProviderSelect.value;
+        const processingProviderValue = processingProviderSelect.value;
+        const translationProviderValue = translationProviderSelect.value;
+        const visionModelValue = visionModelSelect.value;
+        const processingModelValue = processingModelSelect.value;
+        const translationModelValue = translationModelSelect.value;
+
+        const translationMode = translationModeToggle.checked ? 'accurate' : 'fast';
+        const visionStep = getBaseSeconds(visionProviderValue) * getStepMultiplier('vision') * getModelMultiplier(visionModelValue);
+        const processingStep = getBaseSeconds(processingProviderValue) * getStepMultiplier('processing') * getModelMultiplier(processingModelValue);
+        const translationStep = getBaseSeconds(translationProviderValue) * getStepMultiplier('translation') * getModelMultiplier(translationModelValue);
+        const translationMultiplier = getTranslationModeMultiplier(translationMode);
+
+        let perImage = 0;
+        if (translationMode === 'accurate') {
+            perImage = (visionStep + processingStep + translationStep) * languages * translationMultiplier;
+        } else {
+            perImage = visionStep + processingStep + translationStep;
+            if (languages > 1) {
+                perImage += translationStep * (languages - 1) * translationMultiplier;
+            }
+        }
+
+        let total = perImage * images;
+
+        if (geoBoostToggle.checked) {
+            total *= timeEstimation.geo_boost_multiplier || 1.1;
+        }
+
+        total += timeEstimation.overhead_seconds || 5;
+        return total;
+    }
+
+    function updateProgressEstimate() {
+        const seconds = estimateAnalysisSeconds();
+        const formatted = `Estimated time: ~${formatDuration(seconds)}`;
+        if (progressEstimate) {
+            progressEstimate.textContent = formatted;
+        }
+        if (estimatePreview) {
+            estimatePreview.textContent = formatted;
+        }
     }
 
     // Update Progress

@@ -1107,6 +1107,11 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         if show_vision_prompt or show_processing_prompt or show_translation_prompt:
             import html as html_lib
             prompt_blocks = []
+            prompt_source = None
+            for item in image_data:
+                if isinstance(item, dict) and isinstance(item.get('prompts_used'), dict):
+                    prompt_source = item.get('prompts_used')
+                    break
 
             def build_prompt_block(title, prompt_text, subtitle=None):
                 safe_text = html_lib.escape(prompt_text) if prompt_text else "(prompt unavailable)"
@@ -1118,33 +1123,55 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         </div>
 """
 
+            def format_processing_prompts(prompts):
+                if not prompts:
+                    return ""
+                if isinstance(prompts, list):
+                    blocks = []
+                    for entry in prompts:
+                        if isinstance(entry, dict):
+                            lang = entry.get("language", "").strip()
+                            prompt_text = entry.get("prompt", "")
+                            label = f"[{lang}]" if lang else "[LANG]"
+                            blocks.append(f"{label}\n{prompt_text}")
+                        else:
+                            blocks.append(str(entry))
+                    return "\n\n".join(blocks)
+                return str(prompts)
+
+            def format_translation_prompts(prompts):
+                if not prompts:
+                    return ""
+                if isinstance(prompts, list):
+                    blocks = []
+                    for entry in prompts:
+                        if isinstance(entry, dict):
+                            lang = entry.get("language", "").strip()
+                            system_prompt = entry.get("system", "")
+                            user_prompt = entry.get("user", "")
+                            label = f"[{lang}]" if lang else "[LANG]"
+                            blocks.append(f"{label}\nSYSTEM:\n{system_prompt}\n\nUSER:\n{user_prompt}")
+                        else:
+                            blocks.append(str(entry))
+                    return "\n\n".join(blocks)
+                if isinstance(prompts, dict):
+                    system_prompt = prompts.get("system", "")
+                    user_prompt = prompts.get("user", "")
+                    return f"SYSTEM:\n{system_prompt}\n\nUSER:\n{user_prompt}"
+                return str(prompts)
+
             if show_vision_prompt:
-                try:
-                    vision_prompt_folder = get_absolute_folder_path('prompt_vision')
-                    vision_prompt_text = load_vision_prompt(vision_prompt_folder)
-                except Exception as e:
-                    debug_log(f"Could not load vision prompt for report: {str(e)}", "WARNING")
-                    vision_prompt_text = ""
+                vision_prompt_text = ""
+                if prompt_source:
+                    vision_prompt_text = prompt_source.get("vision", "")
                 prompt_blocks.append(build_prompt_block("Vision Prompt", vision_prompt_text))
 
             if show_processing_prompt:
-                try:
-                    processing_prompt_folder = get_absolute_folder_path('prompt_processing')
-                    processing_prompt_text, processing_prompt_files = load_and_merge_prompts(processing_prompt_folder)
-                except Exception as e:
-                    debug_log(f"Could not load processing prompt for report: {str(e)}", "WARNING")
-                    processing_prompt_text = ""
-                    processing_prompt_files = []
-                files_label = f"(files: {', '.join(processing_prompt_files)})" if processing_prompt_files else ""
-                prompt_blocks.append(build_prompt_block("Processing Prompt", processing_prompt_text, files_label))
+                processing_prompt_text = format_processing_prompts(prompt_source.get("processing", []) if prompt_source else [])
+                prompt_blocks.append(build_prompt_block("Processing Prompt", processing_prompt_text))
 
             if show_translation_prompt:
-                try:
-                    translation_prompt_folder = get_absolute_folder_path('prompt_translation')
-                    translation_prompt_text = load_translation_prompt(translation_prompt_folder)
-                except Exception as e:
-                    debug_log(f"Could not load translation prompt for report: {str(e)}", "WARNING")
-                    translation_prompt_text = ""
+                translation_prompt_text = format_translation_prompts(prompt_source.get("translation", []) if prompt_source else [])
                 prompt_blocks.append(build_prompt_block("Translation Prompt", translation_prompt_text))
 
             if prompt_blocks:
@@ -1469,8 +1496,8 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         # Format: <date>-analysis-report-<url>.html
         from datetime import datetime
 
-        # Get current date in DDMonYY format (e.g., 18Jan26)
-        date_str = datetime.now().strftime('%d%b%y')
+        # Get current date/time in YYYYMMDD-HHMM-SS format (safe for filenames)
+        date_str = datetime.now().strftime('%Y%m%d-%H%M-%S')
 
         # Check if user provided custom filename (not the default)
         is_default_filename = output_filename in ["alt-text-report.html", "MyAccessibilityBuddy-AltTextReport.html"]
@@ -1834,7 +1861,7 @@ def load_translation_system_prompt(translation_prompt_folder):
     max_chars = CONFIG.get('alt_text_max_chars', 125)
     return f"You are a professional translator specializing in WCAG-compliant alternative text. Translate to {{TARGET_LANGUAGE}} while ensuring the output is exactly {max_chars} characters or less."
 
-def translate_alt_text(alt_text, source_language, target_language):
+def translate_alt_text(alt_text, source_language, target_language, return_prompt: bool = False):
     """
     Translate alt-text from source language to target language while maintaining configured character limit.
 
@@ -2002,10 +2029,17 @@ def translate_alt_text(alt_text, source_language, target_language):
             translated_text += "."
 
         debug_log(f"Translation successful: {translated_text} ({len(translated_text)} chars)")
+        if return_prompt:
+            return translated_text, {
+                "system": translation_system_prompt,
+                "user": translation_prompt
+            }
         return translated_text
 
     except Exception as e:
         handle_exception(func_name, e, f"translating alt-text to {target_language}")
+        if return_prompt:
+            return None, None
         return None
 
 
@@ -3445,6 +3479,15 @@ def generate_alt_text_json(image_filename, images_folder=None, context_folder=No
 
         # Store base prompt template (will replace {LANGUAGE} per-language later)
         prompt_template = prompt_text
+        processing_prompts_used = []
+        translation_prompts_used = []
+        vision_prompt_used = None
+        try:
+            vision_prompt_folder = get_absolute_folder_path('prompt_vision')
+            vision_prompt_used = load_vision_prompt(vision_prompt_folder)
+        except Exception as e:
+            debug_log(f"Could not load vision prompt for JSON: {str(e)}", "WARNING")
+            vision_prompt_used = None
 
         # Helper function to create language-specific prompt
         language_map = {
@@ -3552,7 +3595,8 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
                     # Create language-specific prompt
                     lang_prompt = create_prompt_for_language(lang)
                     debug_log(f"Created prompt for {lang} ({language_map.get(lang, lang)})")
-                    llm_result = analyze_image_with_ai(image_path, lang_prompt, None, lang)
+                    llm_result = analyze_image_with_ai(image_path, lang_prompt, None, lang, vision_prompt=vision_prompt_used)
+                    processing_prompts_used.append({"language": lang.upper(), "prompt": lang_prompt})
 
                     if llm_result:
                         # Store metadata from first language analysis
@@ -3607,7 +3651,8 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
                 # Create language-specific prompt for first language
                 first_lang_prompt = create_prompt_for_language(first_lang)
                 debug_log(f"Created prompt for {first_lang} ({language_map.get(first_lang, first_lang)})")
-                llm_result = analyze_image_with_ai(image_path, first_lang_prompt, None, first_lang)
+                llm_result = analyze_image_with_ai(image_path, first_lang_prompt, None, first_lang, vision_prompt=vision_prompt_used)
+                processing_prompts_used.append({"language": first_lang.upper(), "prompt": first_lang_prompt})
 
                 if llm_result:
                     # Store all metadata from first language analysis
@@ -3644,7 +3689,18 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
                         debug_log(f"Translating alt-text and reasoning to language: {lang}")
 
                         # Translate alt-text
-                        translated_alt_text = translate_alt_text(first_lang_alt_text, first_lang, lang)
+                        translated_alt_text, translation_prompt_info = translate_alt_text(
+                            first_lang_alt_text,
+                            first_lang,
+                            lang,
+                            return_prompt=True
+                        )
+                        if translation_prompt_info:
+                            translation_prompts_used.append({
+                                "language": lang.upper(),
+                                "system": translation_prompt_info.get("system", ""),
+                                "user": translation_prompt_info.get("user", "")
+                            })
                         # Translate reasoning
                         translated_reasoning = translate_text(first_lang_reasoning, first_lang, lang, "reasoning")
 
@@ -3676,7 +3732,8 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
             # Create language-specific prompt
             lang_prompt = create_prompt_for_language(lang)
             debug_log(f"Created prompt for {lang} ({language_map.get(lang, lang)})")
-            llm_result = analyze_image_with_ai(image_path, lang_prompt, None, lang)
+            llm_result = analyze_image_with_ai(image_path, lang_prompt, None, lang, vision_prompt=vision_prompt_used)
+            processing_prompts_used.append({"language": lang.upper(), "prompt": lang_prompt})
 
             if llm_result:
                 # Use LLM results
@@ -3766,6 +3823,11 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
             "current_alt_text": current_alt_text if current_alt_text else "",
             "proposed_alt_text": proposed_alt_text,
             "proposed_alt_text_length": characters,
+            "prompts_used": {
+                "vision": vision_prompt_used or "",
+                "processing": processing_prompts_used,
+                "translation": translation_prompts_used
+            },
             "ai_model": {
                 "vision_provider": models_used.get('vision_provider') if (models_used and models_used.get('vision_provider')) else CONFIG.get('steps', {}).get('vision', {}).get('provider', 'Unknown'),
                 "vision_model": models_used.get('vision_model') if (models_used and models_used.get('vision_model')) else CONFIG.get('steps', {}).get('vision', {}).get('model', 'Unknown'),

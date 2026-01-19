@@ -60,25 +60,13 @@
       <div class="card shadow-sm border-0 mb-4">
         <div class="card-body">
           <h2 class="h5 text-primary mb-3">Alt-Text Length Configuration</h2>
-          <p class="mb-4">Configure the minimum and maximum character length for generated alt-text. Changes apply to the current session only.</p>
+          <p class="mb-4">Configure the maximum character length for generated alt-text. Changes apply to the current session only.</p>
 
           <!-- Status Message -->
           <div id="statusMessage" class="alert d-none" role="alert"></div>
 
           <div class="row g-3 mb-4">
-            <div class="col-md-6">
-              <label for="minAltTextLength" class="form-label fw-semibold">Minimum Alt-Text Length</label>
-              <input
-                type="number"
-                class="form-control"
-                id="minAltTextLength"
-                min="1"
-                max="500"
-                aria-describedby="minAltTextHelp"
-                placeholder="125">
-              <small id="minAltTextHelp" class="form-text text-muted">Minimum number of characters (default: 125)</small>
-            </div>
-            <div class="col-md-6">
+            <div class="col-12">
               <label for="maxAltTextLength" class="form-label fw-semibold">Maximum Alt-Text Length</label>
               <input
                 type="number"
@@ -220,7 +208,6 @@
     // Alt-Text Length Configuration Management
     (function() {
       const API_BASE = window.location.origin;
-      const minInput = document.getElementById('minAltTextLength');
       const maxInput = document.getElementById('maxAltTextLength');
       const geoBoostInput = document.getElementById('geoBoostIncreasePercent');
       const calculatedGeoLimit = document.getElementById('calculatedGeoLimit');
@@ -229,7 +216,7 @@
       const statusMessage = document.getElementById('statusMessage');
       const saveSpinner = document.getElementById('saveSpinner');
 
-      let configDefaults = { min_alt_text_length: 125, max_alt_text_length: 125, geo_boost_increase_percent: 20 };
+      let configDefaults = { max_alt_text_length: 125, geo_boost_increase_percent: 20 };
 
       // Calculate and display GEO boost limit
       function updateCalculatedGeoLimit() {
@@ -265,13 +252,11 @@
 
           const data = await response.json();
           configDefaults = {
-            min_alt_text_length: data.min_alt_text_length,
             max_alt_text_length: data.max_alt_text_length,
             geo_boost_increase_percent: data.geo_boost_increase_percent
           };
 
           // Set input values
-          minInput.value = data.min_alt_text_length;
           maxInput.value = data.max_alt_text_length;
           geoBoostInput.value = data.geo_boost_increase_percent;
 
@@ -286,25 +271,12 @@
 
       // Save configuration to API
       async function saveConfig() {
-        const minValue = parseInt(minInput.value, 10);
         const maxValue = parseInt(maxInput.value, 10);
         const geoBoostValue = parseInt(geoBoostInput.value, 10);
 
         // Validation
-        if (isNaN(minValue) || minValue < 1) {
-          showStatus('Minimum length must be at least 1', 'warning');
-          minInput.focus();
-          return;
-        }
-
         if (isNaN(maxValue) || maxValue < 1) {
           showStatus('Maximum length must be at least 1', 'warning');
-          maxInput.focus();
-          return;
-        }
-
-        if (maxValue < minValue) {
-          showStatus('Maximum length must be greater than or equal to minimum length', 'warning');
           maxInput.focus();
           return;
         }
@@ -326,7 +298,6 @@
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              min_alt_text_length: minValue,
               max_alt_text_length: maxValue,
               geo_boost_increase_percent: geoBoostValue
             })
@@ -341,7 +312,6 @@
           showStatus('Parameters saved successfully! Changes apply to current session only.', 'success');
 
           // Update stored defaults
-          configDefaults.min_alt_text_length = minValue;
           configDefaults.max_alt_text_length = maxValue;
           configDefaults.geo_boost_increase_percent = geoBoostValue;
 
@@ -357,7 +327,6 @@
 
       // Reset to config defaults
       function resetToDefaults() {
-        minInput.value = configDefaults.min_alt_text_length;
         maxInput.value = configDefaults.max_alt_text_length;
         geoBoostInput.value = configDefaults.geo_boost_increase_percent;
         updateCalculatedGeoLimit();
@@ -369,12 +338,6 @@
       resetBtn.addEventListener('click', resetToDefaults);
 
       // Handle Enter key in input fields
-      minInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-          saveConfig();
-        }
-      });
-
       maxInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
           saveConfig();

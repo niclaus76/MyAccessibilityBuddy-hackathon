@@ -1,0 +1,29 @@
+{
+  "generated_timestamp": "2026-01-18T23:01:31.166221",
+  "web_site_url": "https://www.ecb.europa.eu",
+  "page_title": "European Central Bank",
+  "image_id": "ECB_Eurosystem_OneLineLogo_Mobile_EN.svg",
+  "image_type": "informative",
+  "image_context": "Part 1: European Central Bank - eurosystem.\n\nPart 2: EN Български Čeština Dansk Deutsch Eλληνικά English Español Eesti keel Suomi Français Gaeilge Hrvatski Magyar Italiano Lietuvių Latviešu Malti Nederlands Polski Português Română Slovenčina Slovenščina Svenska Menu Monetary policy & markets Monetary policy & markets Our monetary policy strategy, the tools we use and the impact they have Overview of monetary policy and markets Quick links What is monetary policy? Strategy review Asset purchase programmes Latest monetary policy press conference 18 December 2025 Introduction Benefits of price stability Scope of monetary policy Transmission mechanism Decisions, statements & accounts Monetary policy strategy Strategy review Medium-term orientation Two per cent inflation target Economic, monetary and financial analysis Economic analysis Monetary and financial analysis Instruments Open market operations TLTROs Asset purchase programmes Securities lending Pandemic emergency purchase programme Standing facilities Minimum reserves Two-tier system....",
+  "image_URL": "https://www.ecb.europa.eu/shared/img/logos_mobile/ECB_Eurosystem_OneLineLogo_Mobile_EN.svg",
+  "image_tag_attribute": {
+    "tag": "img",
+    "attribute": "src"
+  },
+  "language": "en",
+  "geo_boost_status": true,
+  "reasoning": "Generated via OpenAI two-step processing",
+  "extended_description": "1. **Primary Subject**: The main focus of the image is a logo.\n\n2. **Visual Details**: The image displays text in a blue, all-uppercase font. The words \"EUROPEAN CENTRAL BANK\" are prominently displayed at the top. Below this, in a smaller size, the word \"EUROSYSTEM\" is written.\n\n3. **Embedded Text**: \n   - \"EUROPEAN CENTRAL BANK\"\n   - \"EUROSYSTEM\"\n\n4. **Contextual Clues**: The layout and text suggest this is a logo, likely representing an organization related to the European Central Bank.\n\n5. **Important Colors**: The text color is blue.",
+  "current_alt_text": "European Central Bank - eurosystem",
+  "proposed_alt_text": "1. **Primary Subject**: The main focus of the image is a logo.\n\n2. **Visual Details**: The image displays text in a blue, all.",
+  "proposed_alt_text_length": 126,
+  "ai_model": {
+    "vision_provider": "OpenAI",
+    "vision_model": "gpt-4o",
+    "processing_provider": "OpenAI",
+    "processing_model": "gpt-4o",
+    "translation_provider": "OpenAI",
+    "translation_model": "gpt-4o"
+  },
+  "processing_time_seconds": 12.32
+}

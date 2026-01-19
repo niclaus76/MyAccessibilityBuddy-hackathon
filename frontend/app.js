@@ -21,6 +21,7 @@
     let availableProviders = [];
     let processingMode = 'basic'; // 'basic' or 'advanced'
     let configDefaults = {}; // Store default config values
+    let timeEstimation = {}; // Progress estimate heuristics
     let baseAltTextMaxChars = 125; // Default alt-text limit (configurable via backend)
     let geoBoostIncreasePercent = 20; // Default GEO boost increase (configurable via backend)
 
@@ -74,6 +75,9 @@
                 if (typeof data.config_defaults.geo_boost_increase_percent === 'number') {
                     geoBoostIncreasePercent = data.config_defaults.geo_boost_increase_percent;
                 }
+                if (data.config_defaults.time_estimation) {
+                    timeEstimation = data.config_defaults.time_estimation;
+                }
                 updateAltTextLimitDisplays();
             }
 
@@ -96,6 +100,7 @@
                 populateProviderDropdowns();
                 // Set default values from config
                 setDefaultProviders();
+                updateProgressEstimate();
             }
 
             console.log('[PROVIDERS] Loaded available providers:', availableProviders);
@@ -118,6 +123,7 @@
             };
             populateProviderDropdowns();
             setDefaultProviders();
+            updateProgressEstimate();
         }
     }
 
@@ -285,6 +291,7 @@
             advancedSettings.classList.toggle('d-none', !isAdvanced);
         }
 
+        updateProgressEstimate();
         console.log(`[MODE] Switched to ${isAdvanced ? 'Advanced mode (two_step_processing: true)' : 'Basic mode (two_step_processing: false)'}`);
     }
 
@@ -298,6 +305,7 @@
             translationModeToggle.setAttribute('aria-checked', isAdvancedTranslation ? 'true' : 'false');
         }
 
+        updateProgressEstimate();
         console.log(`[TRANSLATION] Mode set to: ${translationMode}`);
     }
 
@@ -313,6 +321,7 @@
         }
 
         updateAltTextLimitDisplays();
+        updateProgressEstimate();
         console.log(`[GEO] Boost set to: ${geoBoost}`);
     }
 
@@ -463,6 +472,8 @@
     const progressStatus = document.getElementById('progressStatus');
     const progressBar = document.getElementById('progressBar');
     const progressPercent = document.getElementById('progressPercent');
+    const progressEstimate = document.getElementById('progressEstimate');
+    const estimatePreview = document.getElementById('estimatePreview');
 
     // Update Progress bar
     function updateProgress(percent, message) {
@@ -487,6 +498,91 @@
             } else {
                 progressContainer.style.display = 'none';
             }
+        }
+    }
+
+    function formatDuration(seconds) {
+        if (!Number.isFinite(seconds) || seconds <= 0) return '--';
+        const rounded = Math.round(seconds);
+        const mins = Math.floor(rounded / 60);
+        const secs = rounded % 60;
+        if (mins >= 60) {
+            const hours = Math.floor(mins / 60);
+            const remMins = mins % 60;
+            return `${hours}h ${remMins}m`;
+        }
+        if (mins > 0) {
+            return `${mins}m ${secs}s`;
+        }
+        return `${secs}s`;
+    }
+
+    function getProviderCategory(provider) {
+        const map = timeEstimation.provider_category || {};
+        return map[provider] || 'web';
+    }
+
+    function getBaseSeconds(provider) {
+        const base = timeEstimation.base_seconds_per_image || {};
+        const category = getProviderCategory(provider);
+        return base[category] || 10;
+    }
+
+    function getStepMultiplier(step) {
+        const steps = timeEstimation.step_multipliers || {};
+        return steps[step] || 1;
+    }
+
+    function getModelMultiplier(model) {
+        const models = timeEstimation.model_multipliers || {};
+        return models[model] || 1;
+    }
+
+    function getTranslationModeMultiplier(mode) {
+        const modes = timeEstimation.translation_mode_multiplier || {};
+        return modes[mode] || 1;
+    }
+
+    function estimateGenerationSeconds() {
+        const languages = Math.max(selectedLanguages.length, 1);
+        const visionProviderValue = visionProviderSelect.value || visionProvider;
+        const processingProviderValue = processingProviderSelect.value || processingProvider;
+        const translationProviderValue = translationProviderSelect.value || translationProvider;
+        const visionModelValue = visionModelSelect.value || visionModel;
+        const processingModelValue = processingModelSelect.value || processingModel;
+        const translationModelValue = translationModelSelect.value || translationModel;
+
+        const visionStep = getBaseSeconds(visionProviderValue) * getStepMultiplier('vision') * getModelMultiplier(visionModelValue);
+        const processingStep = getBaseSeconds(processingProviderValue) * getStepMultiplier('processing') * getModelMultiplier(processingModelValue);
+        const translationStep = getBaseSeconds(translationProviderValue) * getStepMultiplier('translation') * getModelMultiplier(translationModelValue);
+        const translationMultiplier = getTranslationModeMultiplier(translationMode);
+
+        let total = 0;
+        if (translationMode === 'accurate') {
+            total = (visionStep + processingStep + translationStep) * languages * translationMultiplier;
+        } else {
+            total = visionStep + processingStep + translationStep;
+            if (languages > 1) {
+                total += translationStep * (languages - 1) * translationMultiplier;
+            }
+        }
+
+        if (geoBoost) {
+            total *= timeEstimation.geo_boost_multiplier || 1.1;
+        }
+
+        total += timeEstimation.overhead_seconds || 5;
+        return total;
+    }
+
+    function updateProgressEstimate() {
+        const seconds = estimateGenerationSeconds();
+        const formatted = `Estimated time: ~${formatDuration(seconds)}`;
+        if (progressEstimate) {
+            progressEstimate.textContent = formatted;
+        }
+        if (estimatePreview) {
+            estimatePreview.textContent = formatted;
         }
     }
 
@@ -524,11 +620,13 @@
         populateModelDropdown(visionProvider, 'vision', visionModelSelect);
         // Auto-update the model variable with the first selected model
         visionModel = visionModelSelect.value;
+        updateProgressEstimate();
     });
 
     // Vision model selection
     visionModelSelect.addEventListener('change', (e) => {
         visionModel = e.target.value;
+        updateProgressEstimate();
     });
 
     // Processing provider selection
@@ -537,11 +635,13 @@
         populateModelDropdown(processingProvider, 'processing', processingModelSelect);
         // Auto-update the model variable with the first selected model
         processingModel = processingModelSelect.value;
+        updateProgressEstimate();
     });
 
     // Processing model selection
     processingModelSelect.addEventListener('change', (e) => {
         processingModel = e.target.value;
+        updateProgressEstimate();
     });
 
     // Translation provider selection
@@ -550,11 +650,13 @@
         populateModelDropdown(translationProvider, 'translation', translationModelSelect);
         // Auto-update the model variable with the first selected model
         translationModel = translationModelSelect.value;
+        updateProgressEstimate();
     });
 
     // Translation model selection
     translationModelSelect.addEventListener('change', (e) => {
         translationModel = e.target.value;
+        updateProgressEstimate();
     });
 
     // Language selection (multiple)
@@ -566,6 +668,7 @@
         const count = selectedLanguages.length;
         const langNames = selectedLanguages.map(code => languageNames[code] || code).join(', ');
         announceToScreenReader(`${count} language${count !== 1 ? 's' : ''} selected: ${langNames}`);
+        updateProgressEstimate();
     });
 
     // Enhanced keyboard navigation for language selection
@@ -1307,6 +1410,7 @@
 
         // Show progress bar
         showProgress(true);
+        updateProgressEstimate();
         updateProgress(5, 'Clearing previous session data...');
 
         // Clear previous session data before starting new generation

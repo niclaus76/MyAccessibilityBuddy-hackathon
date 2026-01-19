@@ -89,6 +89,137 @@
                 </div>
             </div>
 
+            <!-- Advanced Options Toggle -->
+            <div class="row justify-content-center mb-3">
+                <div class="col-12 col-md-8">
+                    <fieldset class="mb-0">
+                        <div class="form-check form-switch d-flex align-items-center justify-content-between">
+                            <input class="form-check-input order-2 ms-3" type="checkbox" role="switch" id="advancedOptionsToggle" aria-checked="false" aria-controls="advancedOptions">
+                            <label class="form-check-label h6 mb-0 d-flex align-items-center order-1" for="advancedOptionsToggle">
+                                <span class="me-2">Advanced Options</span>
+                                <button type="button" class="btn btn-link p-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Turn on to customize providers, models, and translation settings" aria-label="Learn about advanced options" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+                                    </svg>
+                                </button>
+                            </label>
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+
+            <!-- Advanced Options Content (hidden by default) -->
+            <div id="advancedOptions" class="d-none">
+                <!-- Vision Step -->
+                <div class="row justify-content-center mb-3">
+                    <div class="col-12 col-md-8">
+                        <fieldset>
+                            <legend class="h6 mb-3">Step 1: Image Analysis</legend>
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <label for="visionProviderSelect" class="form-label">Provider</label>
+                                    <select class="form-select" id="visionProviderSelect" name="vision_provider" required aria-required="true">
+                                        <option value="">Please select</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label for="visionModelSelect" class="form-label">Model</label>
+                                    <select class="form-select" id="visionModelSelect" name="vision_model" required aria-required="true" disabled>
+                                        <option value="">Please select provider first</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+
+                <!-- Processing Step -->
+                <div class="row justify-content-center mb-3">
+                    <div class="col-12 col-md-8">
+                        <fieldset>
+                            <legend class="h6 mb-3">Step 2: Alternative text generation</legend>
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <label for="processingProviderSelect" class="form-label">Provider</label>
+                                    <select class="form-select" id="processingProviderSelect" name="processing_provider" required aria-required="true">
+                                        <option value="">Please select</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label for="processingModelSelect" class="form-label">Model</label>
+                                    <select class="form-select" id="processingModelSelect" name="processing_model" required aria-required="true" disabled>
+                                        <option value="">Please select provider first</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+
+                <!-- Translation Step -->
+                <div class="row justify-content-center mb-3">
+                    <div class="col-12 col-md-8">
+                        <fieldset>
+                            <legend class="h6 mb-3">Step 3: Translation</legend>
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <label for="translationProviderSelect" class="form-label">Provider</label>
+                                    <select class="form-select" id="translationProviderSelect" name="translation_provider" required aria-required="true">
+                                        <option value="">Please select</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label for="translationModelSelect" class="form-label">Model</label>
+                                    <select class="form-select" id="translationModelSelect" name="translation_model" required aria-required="true" disabled>
+                                        <option value="">Please select provider first</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+
+                <!-- Translation Mode Selection -->
+                <div class="row justify-content-center mb-3">
+                    <div class="col-12 col-md-8">
+                        <fieldset>
+                            <legend class="visually-hidden">Translation Mode</legend>
+                            <div class="form-check form-switch d-flex align-items-center justify-content-between">
+                                <input class="form-check-input order-2 ms-3" type="checkbox" role="switch" id="translationModeToggle" aria-checked="false">
+                                <label class="form-check-label h6 mb-0 d-flex align-items-center order-1" for="translationModeToggle">
+                                    <span class="me-2">Advanced translation mode</span>
+                                    <button type="button" class="btn btn-link p-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Turn on to generate fresh alt text for each language" aria-label="Learn about advanced translation mode" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+                                        </svg>
+                                    </button>
+                                </label>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+
+                <!-- GEO Boost Toggle -->
+                <div class="row justify-content-center mb-3">
+                    <div class="col-12 col-md-8">
+                        <fieldset>
+                            <legend class="visually-hidden">GEO Boost</legend>
+                            <div class="form-check form-switch d-flex align-items-center justify-content-between">
+                                <input class="form-check-input order-2 ms-3" type="checkbox" role="switch" id="geoBoostToggle" aria-checked="false">
+                                <label class="form-check-label h6 mb-0 d-flex align-items-center order-1" for="geoBoostToggle">
+                                    <span class="me-2">Geo boost</span>
+                                    <button type="button" class="btn btn-link p-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Turn on to optimize alt text for AI search engines (GEO - Generative Engine Optimization)" aria-label="Learn about GEO boost" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+                                        </svg>
+                                    </button>
+                                </label>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+            </div>
+
             <!-- Section B: Test Image Selection -->
             <div class="row justify-content-center mb-3">
                 <div class="col-12 col-md-8">
@@ -96,10 +227,10 @@
                         <div class="card-body p-4">
                             <h2 class="h5 mb-3">Test Images</h2>
                             <div class="mb-3">
-                                <label for="folderInput" class="form-label">Select Test Images Folder</label>
-                                <input type="file" class="form-control" id="folderInput" webkitdirectory mozdirectory directory multiple aria-describedby="imageHelp" />
+                                <label for="folderInput" class="form-label">Select Test Images</label>
+                                <input type="file" class="form-control" id="folderInput" accept="image/*" multiple aria-describedby="imageHelp" />
                                 <small id="imageHelp" class="form-text text-muted">
-                                    Choose a folder (e.g., /test/input/images) to load one or more test images. Subfolders are supported.
+                                    Choose one or more test images to load for comparison.
                                 </small>
                                 <div class="mt-2">
                                     <span id="imageCount" class="badge bg-info text-dark" style="display: none;">0 images selected</span>
@@ -108,11 +239,11 @@
 
                             <div class="mb-3">
                                 <label for="contextFolderInput" class="form-label">
-                                    Context Files Folder <span class="text-muted">(optional)</span>
+                                    Context Files <span class="text-muted">(optional)</span>
                                 </label>
-                                <input type="file" class="form-control" id="contextFolderInput" webkitdirectory mozdirectory directory multiple aria-describedby="contextHelp" />
+                                <input type="file" class="form-control" id="contextFolderInput" accept=".txt,text/plain" multiple aria-describedby="contextHelp" />
                                 <small id="contextHelp" class="form-text text-muted">
-                                    Context files are matched automatically by filename (e.g., 1.png → 1.txt). Leave empty if you don't have context.
+                                    Select one or more context .txt files. They are matched automatically by filename (e.g., 1.png → 1.txt).
                                 </small>
                             </div>
                             <select id="imageSelect" class="d-none"></select>
@@ -128,38 +259,43 @@
                     <div class="card shadow-sm">
                         <div class="card-body p-4">
                             <h2 class="h5 mb-3">Languages</h2>
-                            <div class="mb-3">
-                                <label for="languageSelect" class="form-label">Select Languages</label>
-                                <select class="form-select" id="languageSelect" multiple size="3" aria-describedby="languageHelp">
-                                    <option value="en" selected>English</option>
-                                    <option value="bg">Bulgarian</option>
-                                    <option value="hr">Croatian</option>
-                                    <option value="cs">Czech</option>
-                                    <option value="da">Danish</option>
-                                    <option value="nl">Dutch</option>
-                                    <option value="et">Estonian</option>
-                                    <option value="fi">Finnish</option>
-                                    <option value="fr">French</option>
-                                    <option value="de">German</option>
-                                    <option value="el">Greek</option>
-                                    <option value="hu">Hungarian</option>
-                                    <option value="ga">Irish</option>
-                                    <option value="it">Italian</option>
-                                    <option value="lv">Latvian</option>
-                                    <option value="lt">Lithuanian</option>
-                                    <option value="mt">Maltese</option>
-                                    <option value="pl">Polish</option>
-                                    <option value="pt">Portuguese</option>
-                                    <option value="ro">Romanian</option>
-                                    <option value="sk">Slovak</option>
-                                    <option value="sl">Slovenian</option>
-                                    <option value="es">Spanish</option>
-                                    <option value="sv">Swedish</option>
-                                </select>
-                                <small id="languageHelp" class="form-text text-muted">
-                                    Select one or more languages (hold Ctrl/Cmd for multiple)
-                                </small>
-                            </div>
+                            <label for="languageSelect" class="form-label h6 mb-2 d-flex align-items-center">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="me-1" style="vertical-align: text-bottom;" aria-hidden="true">
+                                    <path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>
+                                </svg>
+                                <span class="me-2">Languages (Select one or more)</span>
+                                <button type="button" class="btn btn-link p-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Use Cmd + Click for multi-select. Use Shift + ↑ / ↓ for range selection" aria-label="Keyboard navigation help" style="vertical-align: baseline; min-width: 24px; min-height: 24px;">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="color: #0066cc;" aria-hidden="true">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+                                    </svg>
+                                </button>
+                            </label>
+                            <select class="form-select" id="languageSelect" name="language" multiple size="3" required aria-required="true" aria-multiselectable="true">
+                                <option value="bg">Български (Bulgarian)</option>
+                                <option value="cs">Čeština (Czech)</option>
+                                <option value="da">Dansk (Danish)</option>
+                                <option value="de">Deutsch (German)</option>
+                                <option value="el">Ελληνικά (Greek)</option>
+                                <option value="en" selected>English</option>
+                                <option value="es">Español (Spanish)</option>
+                                <option value="et">Eesti keel (Estonian)</option>
+                                <option value="fi">Suomi (Finnish)</option>
+                                <option value="fr">Français (French)</option>
+                                <option value="ga">Gaeilge (Irish)</option>
+                                <option value="hr">Hrvatski (Croatian)</option>
+                                <option value="hu">Magyar (Hungarian)</option>
+                                <option value="it">Italiano (Italian)</option>
+                                <option value="lt">Lietuvių (Lithuanian)</option>
+                                <option value="lv">Latviešu (Latvian)</option>
+                                <option value="mt">Malti (Maltese)</option>
+                                <option value="nl">Nederlands (Dutch)</option>
+                                <option value="pl">Polski (Polish)</option>
+                                <option value="pt">Português (Portuguese)</option>
+                                <option value="ro">Română (Romanian)</option>
+                                <option value="sk">Slovenčina (Slovak)</option>
+                                <option value="sl">Slovenščina (Slovenian)</option>
+                                <option value="sv">Svenska (Swedish)</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -175,6 +311,7 @@
                         <span id="btnText">Generate</span>
                         <span id="btnSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true"></span>
                     </button>
+                    <div id="estimatePreview" class="text-muted text-center mb-2">Estimated time: --</div>
                     <button type="button" class="btn btn-light border border-danger text-danger btn-lg w-100 mb-2" id="stopComparisonBtn" disabled>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="me-2" aria-hidden="true">
                             <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
@@ -199,14 +336,18 @@
                 <div class="col-12 col-md-8">
                     <div class="card shadow-sm">
                         <div class="card-body p-4">
-                            <h3 class="h6 mb-3">Processing</h3>
-                            <div class="mb-2">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <span id="progressStatus">Initializing...</span>
+                            <div id="progressStatus" class="mb-2 text-center fw-bold">Starting comparison...</div>
+                            <div id="progressEstimate" class="text-muted text-center mb-2">Estimated time: --</div>
+                            <div class="progress" style="height: 24px;">
+                                <div
+                                    id="progressBar"
+                                    class="progress-bar progress-bar-striped progress-bar-animated"
+                                    role="progressbar"
+                                    style="width: 0%"
+                                    aria-valuenow="0"
+                                    aria-valuemin="0"
+                                    aria-valuemax="100">
                                     <span id="progressPercent">0%</span>
-                                </div>
-                                <div class="progress" style="height: 20px;">
-                                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                                 </div>
                             </div>
                         </div>

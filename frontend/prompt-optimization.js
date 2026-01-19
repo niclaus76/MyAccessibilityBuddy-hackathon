@@ -32,6 +32,16 @@
     const contextHelp = document.getElementById('contextHelp');
     const folderInput = document.getElementById('folderInput');
     const contextFolderInput = document.getElementById('contextFolderInput');
+    const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
+    const advancedOptionsDiv = document.getElementById('advancedOptions');
+    const visionProviderSelect = document.getElementById('visionProviderSelect');
+    const visionModelSelect = document.getElementById('visionModelSelect');
+    const processingProviderSelect = document.getElementById('processingProviderSelect');
+    const processingModelSelect = document.getElementById('processingModelSelect');
+    const translationProviderSelect = document.getElementById('translationProviderSelect');
+    const translationModelSelect = document.getElementById('translationModelSelect');
+    const translationModeToggle = document.getElementById('translationModeToggle');
+    const geoBoostToggle = document.getElementById('geoBoostToggle');
     const languageSelect = document.getElementById('languageSelect');
     const generateBtn = document.getElementById('generateBtn');
     const stopComparisonBtn = document.getElementById('stopComparisonBtn');
@@ -46,6 +56,8 @@
     const progressStatus = document.getElementById('progressStatus');
     const progressBar = document.getElementById('progressBar');
     const progressPercent = document.getElementById('progressPercent');
+    const progressEstimate = document.getElementById('progressEstimate');
+    const estimatePreview = document.getElementById('estimatePreview');
     const resultsSection = document.getElementById('resultsSection');
     const resultsSummary = document.getElementById('resultsSummary');
     const downloadReportBtn = document.getElementById('downloadReportBtn');
@@ -62,13 +74,19 @@
     let currentReportPath = null;
     let currentCsvPath = null;
     let availableTestFolders = [];
+    let modelOptions = {};
+    let availableProviders = [];
+    let configDefaults = {};
+    let timeEstimation = {};
     let currentAbortController = null;
 
     // Initialize
     function init() {
         setupEventListeners();
+        initializeBootstrapTooltips();
         loadAvailablePrompts();
         loadAvailableTestFolders();
+        loadAvailableProviders();
         validateSelections();
     }
 
@@ -78,11 +96,37 @@
         promptSelect.addEventListener('change', () => {
             updatePromptCount();
             validateSelections();
+            updateProgressEstimate();
         });
 
         // Folder selection
-        folderInput.addEventListener('change', handleImageFolderSelection);
+        folderInput.addEventListener('change', (event) => {
+            handleImageFolderSelection(event);
+            updateProgressEstimate();
+        });
         contextFolderInput.addEventListener('change', handleContextFolderSelection);
+        languageSelect.addEventListener('change', updateProgressEstimate);
+        if (advancedOptionsToggle) {
+            advancedOptionsToggle.addEventListener('change', () => {
+                toggleAdvancedOptions();
+                updateProgressEstimate();
+            });
+        }
+        if (visionModelSelect) {
+            visionModelSelect.addEventListener('change', updateProgressEstimate);
+        }
+        if (processingModelSelect) {
+            processingModelSelect.addEventListener('change', updateProgressEstimate);
+        }
+        if (translationModelSelect) {
+            translationModelSelect.addEventListener('change', updateProgressEstimate);
+        }
+        if (translationModeToggle) {
+            translationModeToggle.addEventListener('change', updateProgressEstimate);
+        }
+        if (geoBoostToggle) {
+            geoBoostToggle.addEventListener('change', updateProgressEstimate);
+        }
         if (stopComparisonBtn) {
             stopComparisonBtn.addEventListener('click', stopComparison);
         }
@@ -92,6 +136,173 @@
         clearBtn.addEventListener('click', clearFormWithProgress);
         downloadReportBtn.addEventListener('click', downloadReport);
         viewReportBtn.addEventListener('click', viewReportInNewTab);
+    }
+
+    function initializeBootstrapTooltips() {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+
+    // Fetch config defaults and available providers from API
+    async function loadAvailableProviders() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/available-providers`, {
+                credentials: 'include'
+            });
+            const data = await response.json();
+
+            modelOptions = data.providers || {};
+            availableProviders = Object.keys(modelOptions);
+
+            if (data.config_defaults) {
+                configDefaults = data.config_defaults;
+                if (data.config_defaults.time_estimation) {
+                    timeEstimation = data.config_defaults.time_estimation;
+                }
+            }
+
+            populateProviderDropdowns();
+            setDefaultProviders();
+        } catch (error) {
+            console.error('[PROMPT-OPT] Error loading available providers:', error);
+        }
+    }
+
+    // Populate provider dropdowns
+    function populateProviderDropdowns() {
+        if (!visionProviderSelect || !processingProviderSelect || !translationProviderSelect) return;
+
+        visionProviderSelect.innerHTML = '<option value="">Please select</option>';
+        processingProviderSelect.innerHTML = '<option value="">Please select</option>';
+        translationProviderSelect.innerHTML = '<option value="">Please select</option>';
+
+        availableProviders.forEach(provider => {
+            const option = document.createElement('option');
+            option.value = provider;
+            option.textContent = provider.charAt(0).toUpperCase() + provider.slice(1);
+            visionProviderSelect.appendChild(option.cloneNode(true));
+            processingProviderSelect.appendChild(option.cloneNode(true));
+            translationProviderSelect.appendChild(option.cloneNode(true));
+        });
+
+        visionProviderSelect.addEventListener('change', () => {
+            updateModelOptions('vision');
+            updateProgressEstimate();
+        });
+        processingProviderSelect.addEventListener('change', () => {
+            updateModelOptions('processing');
+            updateProgressEstimate();
+        });
+        translationProviderSelect.addEventListener('change', () => {
+            updateModelOptions('translation');
+            updateProgressEstimate();
+        });
+    }
+
+    // Update model dropdown based on selected provider
+    function updateModelOptions(step) {
+        let providerSelect, modelSelect;
+        if (step === 'vision') {
+            providerSelect = visionProviderSelect;
+            modelSelect = visionModelSelect;
+        } else if (step === 'processing') {
+            providerSelect = processingProviderSelect;
+            modelSelect = processingModelSelect;
+        } else {
+            providerSelect = translationProviderSelect;
+            modelSelect = translationModelSelect;
+        }
+
+        const selectedProvider = providerSelect.value;
+        if (!selectedProvider) {
+            modelSelect.disabled = true;
+            modelSelect.innerHTML = '<option value="">Please select provider first</option>';
+            return;
+        }
+
+        const models = modelOptions[selectedProvider]?.[step] || [];
+        modelSelect.innerHTML = '';
+        modelSelect.disabled = false;
+
+        if (models.length === 0) {
+            modelSelect.innerHTML = '<option value="">No models available</option>';
+            modelSelect.disabled = true;
+        } else {
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                modelSelect.appendChild(option);
+            });
+        }
+    }
+
+    // Set default provider and model values from config
+    function setDefaultProviders() {
+        const visionDefaults = configDefaults.vision || {};
+        const processingDefaults = configDefaults.processing || {};
+        const translationDefaults = configDefaults.translation || {};
+
+        const normalizeProviderName = (provider) => {
+            if (!provider) return '';
+            const providerMap = {
+                'OpenAI': 'openai',
+                'Claude': 'claude',
+                'ECB-LLM': 'ecb-llm',
+                'Ollama': 'ollama',
+                'Gemini': 'gemini'
+            };
+            return providerMap[provider] || provider.toLowerCase();
+        };
+
+        if (visionProviderSelect) {
+            const provider = normalizeProviderName(visionDefaults.provider);
+            if (provider) {
+                visionProviderSelect.value = provider;
+                updateModelOptions('vision');
+                if (visionDefaults.model) {
+                    visionModelSelect.value = visionDefaults.model;
+                }
+            }
+        }
+
+        if (processingProviderSelect) {
+            const provider = normalizeProviderName(processingDefaults.provider);
+            if (provider) {
+                processingProviderSelect.value = provider;
+                updateModelOptions('processing');
+                if (processingDefaults.model) {
+                    processingModelSelect.value = processingDefaults.model;
+                }
+            }
+        }
+
+        if (translationProviderSelect) {
+            const provider = normalizeProviderName(translationDefaults.provider);
+            if (provider) {
+                translationProviderSelect.value = provider;
+                updateModelOptions('translation');
+                if (translationDefaults.model) {
+                    translationModelSelect.value = translationDefaults.model;
+                }
+            }
+        }
+
+        updateProgressEstimate();
+    }
+
+    // Toggle Advanced Options
+    function toggleAdvancedOptions() {
+        const isChecked = advancedOptionsToggle.checked;
+        advancedOptionsToggle.setAttribute('aria-checked', isChecked);
+        if (isChecked) {
+            advancedOptionsDiv.classList.remove('d-none');
+        } else {
+            advancedOptionsDiv.classList.add('d-none');
+        }
+        announceToScreenReader(`Advanced options ${isChecked ? 'expanded' : 'collapsed'}`);
     }
     
     // Load Available Prompts
@@ -158,7 +369,7 @@
 
             if (availableTestFolders.length === 0) {
                 if (imageHelp) {
-                    imageHelp.textContent = 'No test folders found. Please pick a folder manually.';
+                    imageHelp.textContent = 'No test folders found. Please pick image files manually.';
                 }
                 return;
             }
@@ -166,10 +377,10 @@
             // Update helper text with first folder hint
             const firstFolder = availableTestFolders[0];
             if (firstFolder && imageHelp) {
-                imageHelp.textContent = `Choose a folder (e.g., ${firstFolder.path}) to load test images. Subfolders are supported.`;
+                imageHelp.textContent = `Choose one or more image files to load test images (e.g., ${firstFolder.path}).`;
             }
             if (firstFolder && contextHelp) {
-                contextHelp.textContent = `Context files usually live in ${firstFolder.context_folder || 'test/input/context'}. They are matched by filename automatically.`;
+                contextHelp.textContent = `Select context .txt files (usually in ${firstFolder.context_folder || 'test/input/context'}). They are matched by filename automatically.`;
             }
         } catch (error) {
             console.error('[PROMPT-OPT] Error loading test folders:', error);
@@ -201,7 +412,7 @@
             imageCount.style.display = 'inline-block';
             announceToScreenReader(`${selectedImageFiles.length} images selected`);
         } else {
-            imageCount.textContent = 'No image files found in folder';
+            imageCount.textContent = 'No image files selected';
             imageCount.style.display = 'inline-block';
             imageCount.classList.add('bg-warning');
             imageCount.classList.remove('bg-info');
@@ -331,6 +542,7 @@
         // Disable form during processing
         setFormState(false);
         showProgress(true);
+        updateProgressEstimate();
         hideError();
         resultsSection.style.display = 'none';
 
@@ -374,6 +586,17 @@
                 context_folder: uploadData.context_folder || '',
                 languages: languages
             };
+
+            if (advancedOptionsToggle && advancedOptionsToggle.checked) {
+                if (visionProviderSelect.value) requestData.vision_provider = visionProviderSelect.value;
+                if (visionModelSelect.value) requestData.vision_model = visionModelSelect.value;
+                if (processingProviderSelect.value) requestData.processing_provider = processingProviderSelect.value;
+                if (processingModelSelect.value) requestData.processing_model = processingModelSelect.value;
+                if (translationProviderSelect.value) requestData.translation_provider = translationProviderSelect.value;
+                if (translationModelSelect.value) requestData.translation_model = translationModelSelect.value;
+                if (translationModeToggle && translationModeToggle.checked) requestData.advanced_translation = true;
+                if (geoBoostToggle && geoBoostToggle.checked) requestData.geo_boost = true;
+            }
 
             console.log('[PROMPT-OPT] Sending comparison request:', requestData);
 
@@ -500,9 +723,123 @@
     function showProgress(show) {
         if (show) {
             progressContainer.style.display = '';
-            updateProgress(0, 'Initializing...');
+            updateProgress(0, 'Starting comparison...');
         } else {
             progressContainer.style.display = 'none';
+        }
+    }
+
+    function formatDuration(seconds) {
+        if (!Number.isFinite(seconds) || seconds <= 0) return '--';
+        const rounded = Math.round(seconds);
+        const mins = Math.floor(rounded / 60);
+        const secs = rounded % 60;
+        if (mins >= 60) {
+            const hours = Math.floor(mins / 60);
+            const remMins = mins % 60;
+            return `${hours}h ${remMins}m`;
+        }
+        if (mins > 0) {
+            return `${mins}m ${secs}s`;
+        }
+        return `${secs}s`;
+    }
+
+    function getProviderCategory(provider) {
+        const map = timeEstimation.provider_category || {};
+        return map[provider] || 'web';
+    }
+
+    function getBaseSeconds(provider) {
+        const base = timeEstimation.base_seconds_per_image || {};
+        const category = getProviderCategory(provider);
+        return base[category] || 10;
+    }
+
+    function getStepMultiplier(step) {
+        const steps = timeEstimation.step_multipliers || {};
+        return steps[step] || 1;
+    }
+
+    function getModelMultiplier(model) {
+        const models = timeEstimation.model_multipliers || {};
+        return models[model] || 1;
+    }
+
+    function getTranslationModeMultiplier(mode) {
+        const modes = timeEstimation.translation_mode_multiplier || {};
+        return modes[mode] || 1;
+    }
+
+    function getDefaultProvider(step) {
+        if (!configDefaults) return '';
+        const defaults = configDefaults[step] || {};
+        const provider = defaults.provider || '';
+        const map = {
+            'OpenAI': 'openai',
+            'Claude': 'claude',
+            'ECB-LLM': 'ecb-llm',
+            'Ollama': 'ollama',
+            'Gemini': 'gemini'
+        };
+        return map[provider] || provider.toLowerCase();
+    }
+
+    function getDefaultModel(step) {
+        if (!configDefaults) return '';
+        const defaults = configDefaults[step] || {};
+        return defaults.model || '';
+    }
+
+    function estimateComparisonSeconds() {
+        const promptsCount = Array.from(promptSelect.selectedOptions).length;
+        const languages = Math.max(getSelectedLanguages().length, 1);
+        const images = selectedImageFiles.length;
+
+        if (promptsCount < 1 || images < 1) {
+            return 0;
+        }
+
+        const useAdvanced = advancedOptionsToggle && advancedOptionsToggle.checked;
+        const visionProviderValue = useAdvanced ? visionProviderSelect.value : getDefaultProvider('vision');
+        const processingProviderValue = useAdvanced ? processingProviderSelect.value : getDefaultProvider('processing');
+        const translationProviderValue = useAdvanced ? translationProviderSelect.value : getDefaultProvider('translation');
+        const visionModelValue = useAdvanced ? visionModelSelect.value : getDefaultModel('vision');
+        const processingModelValue = useAdvanced ? processingModelSelect.value : getDefaultModel('processing');
+        const translationModelValue = useAdvanced ? translationModelSelect.value : getDefaultModel('translation');
+
+        const translationMode = (translationModeToggle && translationModeToggle.checked) ? 'accurate' : 'fast';
+        const visionStep = getBaseSeconds(visionProviderValue) * getStepMultiplier('vision') * getModelMultiplier(visionModelValue);
+        const processingStep = getBaseSeconds(processingProviderValue) * getStepMultiplier('processing') * getModelMultiplier(processingModelValue);
+        const translationStep = getBaseSeconds(translationProviderValue) * getStepMultiplier('translation') * getModelMultiplier(translationModelValue);
+        const translationMultiplier = getTranslationModeMultiplier(translationMode);
+
+        let perImage = 0;
+        if (translationMode === 'accurate') {
+            perImage = (visionStep + processingStep + translationStep) * languages * translationMultiplier;
+        } else {
+            perImage = visionStep + processingStep + translationStep;
+            if (languages > 1) {
+                perImage += translationStep * (languages - 1) * translationMultiplier;
+            }
+        }
+
+        let total = perImage * images * promptsCount;
+        if (geoBoostToggle && geoBoostToggle.checked) {
+            total *= timeEstimation.geo_boost_multiplier || 1.1;
+        }
+        total += timeEstimation.overhead_seconds || 5;
+        return total;
+    }
+
+    function updateProgressEstimate() {
+        const seconds = estimateComparisonSeconds();
+        const formatted = `Estimated time: ~${formatDuration(seconds)}`;
+        if (progressEstimate) {
+            progressEstimate.textContent = formatted;
+        }
+        if (estimatePreview) {
+            estimatePreview.textContent = formatted;
         }
     }
 

@@ -55,6 +55,7 @@ Example Output (CSV):
 """
 
 import json
+import argparse
 import csv
 import os
 import sys
@@ -95,6 +96,13 @@ IMAGES_DIR = None
 CONTEXT_DIR = None
 OUTPUT_DIR = None
 OUTPUT_REPORTS_DIR = None
+OVERRIDE_VISION_PROVIDER = None
+OVERRIDE_VISION_MODEL = None
+OVERRIDE_PROCESSING_PROVIDER = None
+OVERRIDE_PROCESSING_MODEL = None
+OVERRIDE_TRANSLATION_PROVIDER = None
+OVERRIDE_TRANSLATION_MODEL = None
+OVERRIDE_ADVANCED_TRANSLATION = False
 
 def print_header(text: str):
     """Print a formatted header."""
@@ -118,10 +126,14 @@ def print_warning(text: str):
     """Print warning message."""
     print(f"{Colors.YELLOW}⚠ {text}{Colors.NC}")
 
-def load_test_config():
+def load_test_config(args=None):
     """Load test configuration from config.json and config.advanced.json."""
     global PROMPTS, TEST_IMAGES, TEST_LANGUAGE, TEST_GEO_BOOST
     global IMAGES_DIR, CONTEXT_DIR, OUTPUT_DIR, OUTPUT_REPORTS_DIR
+    global OVERRIDE_VISION_PROVIDER, OVERRIDE_VISION_MODEL
+    global OVERRIDE_PROCESSING_PROVIDER, OVERRIDE_PROCESSING_MODEL
+    global OVERRIDE_TRANSLATION_PROVIDER, OVERRIDE_TRANSLATION_MODEL
+    global OVERRIDE_ADVANCED_TRANSLATION
 
     if not CONFIG_FILE.exists():
         print_error(f"Configuration file not found: {CONFIG_FILE}")
@@ -154,6 +166,44 @@ def load_test_config():
         OUTPUT_REPORTS_DIR = resolve_project_path(Path(test_folders.get('test_reports', 'test/output/reports')))
         OUTPUT_DIR = resolve_project_path(Path("output/alt-text"))  # Keep original output for intermediate results
 
+        # CLI overrides (used by web app)
+        if args:
+            if args.images_folder:
+                IMAGES_DIR = resolve_project_path(Path(args.images_folder))
+            if args.context_folder:
+                CONTEXT_DIR = resolve_project_path(Path(args.context_folder))
+            if args.prompts:
+                PROMPTS = []
+                for prompt in args.prompts:
+                    if prompt.endswith('.txt'):
+                        prompt_file = prompt
+                        label = Path(prompt).stem.replace('processing_prompt_', '')
+                    else:
+                        prompt_file = f"processing_prompt_{prompt}.txt"
+                        label = prompt
+                    PROMPTS.append({
+                        "file": prompt_file,
+                        "label": label,
+                        "description": ""
+                    })
+            if args.language:
+                TEST_LANGUAGE = args.language[0]
+                if len(args.language) > 1:
+                    print_warning("Multiple languages provided; using first for batch comparison.")
+            if args.geo_boost:
+                TEST_GEO_BOOST = True
+
+            OVERRIDE_VISION_PROVIDER = args.vision_provider
+            OVERRIDE_VISION_MODEL = args.vision_model
+            OVERRIDE_PROCESSING_PROVIDER = args.processing_provider
+            OVERRIDE_PROCESSING_MODEL = args.processing_model
+            OVERRIDE_TRANSLATION_PROVIDER = args.translation_provider
+            OVERRIDE_TRANSLATION_MODEL = args.translation_model
+            OVERRIDE_ADVANCED_TRANSLATION = bool(args.advanced_translation)
+
+            # For app usage, keep reports in output/reports
+            OUTPUT_REPORTS_DIR = resolve_project_path(Path("output/reports"))
+
         print_success("Loaded batch comparison configuration from config.json")
         print_info(f"Test mode: {'GEO Boost Comparison (both modes)' if TEST_GEO_BOOST else 'Standard WCAG only'}")
         print_info(f"Language: {TEST_LANGUAGE}")
@@ -185,18 +235,26 @@ def check_environment():
         print_error(f"Images directory not found: {IMAGES_DIR}")
         return False
 
-    # Validate test images exist
-    missing_images = []
-    for image in TEST_IMAGES:
-        image_path = IMAGES_DIR / image
-        if not image_path.exists():
-            missing_images.append(image)
+        # Determine test images if not explicitly configured
+        if not TEST_IMAGES:
+            image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+            TEST_IMAGES = sorted([
+                p.name for p in IMAGES_DIR.iterdir()
+                if p.is_file() and p.suffix.lower() in image_extensions
+            ])
 
-    if missing_images:
-        print_error(f"Test images not found: {', '.join(missing_images)}")
-        return False
+        # Validate test images exist
+        missing_images = []
+        for image in TEST_IMAGES:
+            image_path = IMAGES_DIR / image
+            if not image_path.exists():
+                missing_images.append(image)
 
-    print_success(f"Found all {len(TEST_IMAGES)} test images configured")
+        if missing_images:
+            print_error(f"Test images not found: {', '.join(missing_images)}")
+            return False
+
+        print_success(f"Found all {len(TEST_IMAGES)} test images configured")
 
     # Check context directory
     if CONTEXT_DIR.exists():
@@ -268,14 +326,31 @@ def run_batch_processing(use_geo=False):
         cmd = [
             "python3", "app.py", "-p",
             "--images-folder", str(IMAGES_DIR),
-            "--context-folder", str(CONTEXT_DIR),
             "--language", TEST_LANGUAGE
         ]
+
+        if CONTEXT_DIR and CONTEXT_DIR.exists():
+            cmd.extend(["--context-folder", str(CONTEXT_DIR)])
 
         # Add --geo flag if requested
         if use_geo:
             cmd.append("--geo")
             print_info("GEO boost enabled - adding --geo flag")
+
+        if OVERRIDE_VISION_PROVIDER:
+            cmd.extend(["--vision-provider", OVERRIDE_VISION_PROVIDER])
+        if OVERRIDE_VISION_MODEL:
+            cmd.extend(["--vision-model", OVERRIDE_VISION_MODEL])
+        if OVERRIDE_PROCESSING_PROVIDER:
+            cmd.extend(["--processing-provider", OVERRIDE_PROCESSING_PROVIDER])
+        if OVERRIDE_PROCESSING_MODEL:
+            cmd.extend(["--processing-model", OVERRIDE_PROCESSING_MODEL])
+        if OVERRIDE_TRANSLATION_PROVIDER:
+            cmd.extend(["--translation-provider", OVERRIDE_TRANSLATION_PROVIDER])
+        if OVERRIDE_TRANSLATION_MODEL:
+            cmd.extend(["--translation-model", OVERRIDE_TRANSLATION_MODEL])
+        if OVERRIDE_ADVANCED_TRANSLATION:
+            cmd.append("--advanced-translation")
 
         # Change to backend directory and run the command
         result = subprocess.run(
@@ -605,12 +680,30 @@ def generate_html_report(all_results: Dict[str, Dict[str, str]], output_path: Pa
     print_success(f"HTML report created: {output_path}")
     print_success(f"Total images: {len(sorted_images)}")
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Batch prompt comparison runner")
+    parser.add_argument('--images-folder', help='Folder with test images')
+    parser.add_argument('--context-folder', help='Folder with context .txt files')
+    parser.add_argument('--language', action='append', help='Language code (can be repeated)')
+    parser.add_argument('--prompts', nargs='+', help='Prompt versions or files (e.g., v0 v1 or processing_prompt_v0.txt)')
+    parser.add_argument('--geo-boost', action='store_true', help='Enable GEO boost comparison')
+    parser.add_argument('--advanced-translation', action='store_true', help='Use advanced translation mode')
+    parser.add_argument('--vision-provider', help='Vision provider override')
+    parser.add_argument('--vision-model', help='Vision model override')
+    parser.add_argument('--processing-provider', help='Processing provider override')
+    parser.add_argument('--processing-model', help='Processing model override')
+    parser.add_argument('--translation-provider', help='Translation provider override')
+    parser.add_argument('--translation-model', help='Translation model override')
+    return parser.parse_args()
+
 def main():
     """Main execution function."""
     print_header("MyAccessibilityBuddy - Batch Prompt Comparison")
 
+    args = parse_args()
+
     # Load test configuration
-    if not load_test_config():
+    if not load_test_config(args):
         sys.exit(1)
 
     # Check environment
@@ -620,7 +713,7 @@ def main():
     # Create output directory for reports
     OUTPUT_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M-%S")
     geo_suffix = "_geo_comparison" if TEST_GEO_BOOST else ""
     output_csv = OUTPUT_REPORTS_DIR / f"prompt_comparison_{timestamp}{geo_suffix}.csv"
 

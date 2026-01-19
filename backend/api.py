@@ -802,6 +802,7 @@ async def get_available_providers():
     })
     current_config['alt_text_max_chars'] = CONFIG.get('alt_text_max_chars', 125)
     current_config['geo_boost_increase_percent'] = CONFIG.get('geo_boost_increase_percent', 20)
+    current_config['time_estimation'] = CONFIG.get('time_estimation', {})
 
     return {
         'providers': available_providers,
@@ -1305,8 +1306,8 @@ async def generate_report_endpoint(request: Request, clear_after: bool = True):
         # Get session-specific folders
         session_folders = get_session_folders(session_id)
 
-        # Generate timestamp for filename
-        timestamp = datetime.now().strftime('%Y-%m-%d-%H%M%S')
+        # Generate timestamp for filename (match other report formats)
+        timestamp = datetime.now().strftime('%Y%m%d-%H%M-%S')
         output_filename = f"webmaster-report-{timestamp}.html"
 
         # Use session-specific alt-text folder
@@ -2656,7 +2657,7 @@ async def get_alt_text_length_config():
     Get current alt-text length configuration.
 
     Returns:
-        Dictionary with min_alt_text_length, max_alt_text_length, and geo_boost_increase_percent values
+        Dictionary with max_alt_text_length and geo_boost_increase_percent values
     """
     from app import CONFIG
 
@@ -2665,19 +2666,16 @@ async def get_alt_text_length_config():
         from app import CONFIG
 
     # Get values from config, with defaults
-    min_length = CONFIG.get('min_alt_text_length', 125)
     max_length = CONFIG.get('max_alt_text_length', CONFIG.get('alt_text_max_chars', 125))
     geo_boost_increase_percent = CONFIG.get('geo_boost_increase_percent', 20)
 
     return {
-        'min_alt_text_length': min_length,
         'max_alt_text_length': max_length,
         'geo_boost_increase_percent': geo_boost_increase_percent
     }
 
 
 class AltTextLengthConfig(BaseModel):
-    min_alt_text_length: int
     max_alt_text_length: int
     geo_boost_increase_percent: int = 20
 
@@ -2691,7 +2689,7 @@ async def update_alt_text_length_config(config: AltTextLengthConfig):
     and will be lost when the application restarts.
 
     Args:
-        config: AltTextLengthConfig with min, max, and geo_boost_increase_percent values
+        config: AltTextLengthConfig with max and geo_boost_increase_percent values
 
     Returns:
         Updated configuration values
@@ -2703,17 +2701,13 @@ async def update_alt_text_length_config(config: AltTextLengthConfig):
         from app import CONFIG
 
     # Validate values
-    if config.min_alt_text_length < 1:
-        raise HTTPException(status_code=400, detail="min_alt_text_length must be at least 1")
-
-    if config.max_alt_text_length < config.min_alt_text_length:
-        raise HTTPException(status_code=400, detail="max_alt_text_length must be greater than or equal to min_alt_text_length")
+    if config.max_alt_text_length < 1:
+        raise HTTPException(status_code=400, detail="max_alt_text_length must be at least 1")
 
     if config.geo_boost_increase_percent < 0 or config.geo_boost_increase_percent > 100:
         raise HTTPException(status_code=400, detail="geo_boost_increase_percent must be between 0 and 100")
 
     # Update CONFIG in memory
-    CONFIG['min_alt_text_length'] = config.min_alt_text_length
     CONFIG['max_alt_text_length'] = config.max_alt_text_length
     CONFIG['alt_text_max_chars'] = config.max_alt_text_length  # Keep in sync
     CONFIG['geo_boost_increase_percent'] = config.geo_boost_increase_percent
@@ -2721,10 +2715,9 @@ async def update_alt_text_length_config(config: AltTextLengthConfig):
     # Calculate GEO boost limit for logging
     geo_boost_limit = int(config.max_alt_text_length * (1 + config.geo_boost_increase_percent / 100))
 
-    log_message("INFO", f"Alt-text length configuration updated: min={config.min_alt_text_length}, max={config.max_alt_text_length}, geo_boost_increase={config.geo_boost_increase_percent}% (GEO limit={geo_boost_limit})")
+    log_message("INFO", f"Alt-text length configuration updated: max={config.max_alt_text_length}, geo_boost_increase={config.geo_boost_increase_percent}% (GEO limit={geo_boost_limit})")
 
     return {
-        'min_alt_text_length': config.min_alt_text_length,
         'max_alt_text_length': config.max_alt_text_length,
         'geo_boost_increase_percent': config.geo_boost_increase_percent,
         'geo_boost_limit': geo_boost_limit,
