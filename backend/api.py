@@ -90,7 +90,7 @@ class ProxyHeadersMiddleware(BaseHTTPMiddleware):
 app = FastAPI(
     title="MyAccessibilityBuddy API",
     description="WCAG 2.2 compliant alt-text generation API",
-    version="5.0.0",
+    version="5.0.1",
     docs_url="/api/docs",
     redoc_url="/api/redoc"
 )
@@ -750,7 +750,7 @@ async def health_check():
 
     return HealthResponse(
         status="healthy",
-        version="5.0.0",
+        version="5.0.1",
         llm_provider=settings.get("llm_provider", "OpenAI"),
         service="MyAccessibilityBuddy"
     )
@@ -803,6 +803,14 @@ async def get_available_providers():
     current_config['alt_text_max_chars'] = CONFIG.get('alt_text_max_chars', 125)
     current_config['geo_boost_increase_percent'] = CONFIG.get('geo_boost_increase_percent', 20)
     current_config['time_estimation'] = CONFIG.get('time_estimation', {})
+    current_config['pages_visibility'] = CONFIG.get('pages_visibility', {
+        'home': True,
+        'webmaster': True,
+        'accessibility_compliance': True,
+        'prompt_optimization': True,
+        'remediation': True,
+        'admin': True
+    })
 
     return {
         'providers': available_providers,
@@ -2567,8 +2575,7 @@ async def batch_compare_prompts(request: Request):
         cmd.append('--prompts')
         cmd.extend(prompts)
 
-        # Add report flag
-        cmd.append('--report')
+        # Note: Report is generated automatically by the script, no --report flag needed
 
         # Add advanced options
         if vision_provider:
@@ -2731,7 +2738,7 @@ async def root():
     """Redirect to API documentation."""
     return {
         "message": "AutoAltText API",
-        "version": "5.0.0",
+        "version": "5.0.1",
         "docs": "/api/docs",
         "health": "/api/health"
     }

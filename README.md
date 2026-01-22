@@ -346,5 +346,5 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR I
 ## Project Information
 
 **Created for**: Innovate for Inclusion Hackathon
-**Version**: 1.0.0
-**Last Updated**: January 2025
+**Version**: 5.0.0 (see [CHANGELOG.md](CHANGELOG.md) for details)
+**Last Updated**: January 2026

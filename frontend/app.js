@@ -577,12 +577,12 @@
 
     function updateProgressEstimate() {
         const seconds = estimateGenerationSeconds();
-        const formatted = `Estimated time: ~${formatDuration(seconds)}`;
+        const duration = formatDuration(seconds);
         if (progressEstimate) {
-            progressEstimate.textContent = formatted;
+            progressEstimate.textContent = `Estimated time: ~${duration}`;
         }
         if (estimatePreview) {
-            estimatePreview.textContent = formatted;
+            estimatePreview.textContent = `(~${duration})`;
         }
     }
 
@@ -938,7 +938,14 @@
 
                 const data = await response.json();
 
-                if (data.success) {
+                // Check HTTP status first, then check response body
+                if (!response.ok) {
+                    errorCount++;
+                    const langName = languageNames[lang] || lang;
+                    // Handle FastAPI HTTPException format (detail field) or custom error format
+                    const errorMsg = data.detail || data.error || `HTTP ${response.status}`;
+                    errors.push(`${langName}: ${errorMsg}`);
+                } else if (data.success) {
                     savedCount++;
                 } else {
                     errorCount++;

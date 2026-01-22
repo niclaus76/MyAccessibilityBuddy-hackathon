@@ -81,3 +81,8 @@
 2026-01-19 01:32:44 [SUCCESS] Service update initiated
 2026-01-19 01:32:44 [INFO] Monitoring deployment progress...
 2026-01-19 01:32:44 [WARNING] This may take 2-5 minutes. Press Ctrl+C to skip monitoring.
+2026-01-19 01:41:26 [SUCCESS] Deployment completed successfully!
+2026-01-19 01:41:27 [INFO] Fetching service endpoint...
+2026-01-19 01:41:36 [SUCCESS] All parallel deployments completed successfully!
+2026-01-19 01:41:36 [WARNING] CloudFront cache clearing takes 5-15 minutes
+2026-01-19 01:41:36 [SUCCESS] Done!

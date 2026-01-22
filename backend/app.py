@@ -1099,6 +1099,16 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         else:
             geo_boost_status_text = "Unknown"
 
+        # Get display settings from config.advanced.json
+        display_settings = CONFIG.get('html_report_display', {})
+        display_geo_boost = display_settings.get('display_geo_boost', True)
+
+        # Generate GEO Boost HTML line conditionally based on display_geo_boost setting
+        if display_geo_boost:
+            geo_boost_html = f'<p><strong>GEO Boost:</strong> {geo_boost_status_text}</p>'
+        else:
+            geo_boost_html = ""
+
         prompt_details_html = ""
         prompt_display_settings = CONFIG.get('html_report_display', {})
         show_vision_prompt = prompt_display_settings.get('display_vision_prompt', False)
@@ -1484,7 +1494,7 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         html_content = html_content.replace('{TRANSLATION_PROVIDER}', translation_provider)
         html_content = html_content.replace('{AI_TRANSLATION_MODEL}', ai_translation_model)
         html_content = html_content.replace('{TRANSLATION_METHOD_TEXT}', translation_method_text)
-        html_content = html_content.replace('{GEO_BOOST_STATUS}', geo_boost_status_text)
+        html_content = html_content.replace('{GEO_BOOST_HTML}', geo_boost_html)
         html_content = html_content.replace('{TOTAL_IMAGES}', str(len(image_data)))
         html_content = html_content.replace('{TOTAL_PROCESSING_TIME}', f"{total_processing_time:.2f}")
         html_content = html_content.replace('{GENERATION_TIMESTAMP}', get_cet_time().strftime('%Y-%m-%d %H:%M:%S CET'))

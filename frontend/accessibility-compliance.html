@@ -316,7 +316,7 @@
                 <div class="col-12 col-md-8">
                     <button
                         type="button"
-                        class="btn btn-primary btn-lg w-100 mb-2"
+                        class="btn btn-primary btn-lg w-100 mb-2 d-flex align-items-center justify-content-center"
                         id="generateBtn"
                         disabled>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="me-2" aria-hidden="true">
@@ -324,8 +324,8 @@
                         </svg>
                         <span id="btnText">Generate</span>
                         <span id="btnSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true"></span>
+                        <small id="estimatePreview" class="text-white-50 ms-2" style="font-size: 0.75rem;">(~--)</small>
                     </button>
-                    <div id="estimatePreview" class="text-muted text-center mb-2">Estimated time: --</div>
                     <button
                         type="button"
                         class="btn btn-outline-warning btn-lg w-100 mb-2"
@@ -484,5 +484,6 @@
 
     <!-- App JavaScript -->
     <script src="accessibility-compliance.js"></script>
+    <script src="navigation.js"></script>
 </body>
 </html>

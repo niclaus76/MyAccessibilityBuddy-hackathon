@@ -834,12 +834,12 @@
 
     function updateProgressEstimate() {
         const seconds = estimateComparisonSeconds();
-        const formatted = `Estimated time: ~${formatDuration(seconds)}`;
+        const duration = formatDuration(seconds);
         if (progressEstimate) {
-            progressEstimate.textContent = formatted;
+            progressEstimate.textContent = `Estimated time: ~${duration}`;
         }
         if (estimatePreview) {
-            estimatePreview.textContent = formatted;
+            estimatePreview.textContent = `(~${duration})`;
         }
     }
 

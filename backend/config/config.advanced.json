@@ -35,6 +35,16 @@
     "merge_separator": "\n\n---\n\n"
   },
 
+  "_comment_pages_visibility": "Control which pages are visible in the navigation menu. Set to false to hide a page from the burger menu and home page links. The page file remains on the server but is not reachable through navigation.",
+  "pages_visibility": {
+    "home": true,
+    "webmaster": true,
+    "accessibility_compliance": true,
+    "prompt_optimization": true,
+    "remediation": false,
+    "admin": true
+  },
+
   "_comment_html_report_display": "HTML report display settings: control which fields are shown in the generated HTML report",
   "html_report_display": {
     "display_image_analysis_overview": true,
@@ -49,9 +59,9 @@
     "display_reasoning": true,
     "display_context": true,
     "display_vision_prompt": false,
-    "display_processing_prompt": true,
+    "display_processing_prompt": false,
     "display_translation_prompt": false,
-    "display_geotag": true
+    "display_geo_boost": true
   },
 
   "_comment_download": "Web scraping download settings",
