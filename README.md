@@ -41,7 +41,7 @@ docker compose up -d
 docker compose ps
 
 # 4. Open in browser
-# Web UI: http://localhost:8080/home.html
+# Web UI: http://localhost:8000/home.html
 # API Docs: http://localhost:8000/api/docs
 
 # 5. Stop, build and restart after conf update
@@ -83,7 +83,7 @@ Generate compliant alt-text for single images using the web interface or API. Pe
 
 ```bash
 # For web masters, using Web UI:
-Open http://localhost:8080/home.html
+Open http://localhost:8000/home.html
 1. Upload image (drag & drop or browse)
 2. Select language(s)
 3. Click "Generate"

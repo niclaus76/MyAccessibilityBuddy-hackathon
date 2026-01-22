@@ -502,19 +502,13 @@
     }
 
     function formatDuration(seconds) {
-        if (!Number.isFinite(seconds) || seconds <= 0) return '--';
+        if (!Number.isFinite(seconds) || seconds <= 0) return '--:--';
         const rounded = Math.round(seconds);
         const mins = Math.floor(rounded / 60);
         const secs = rounded % 60;
-        if (mins >= 60) {
-            const hours = Math.floor(mins / 60);
-            const remMins = mins % 60;
-            return `${hours}h ${remMins}m`;
-        }
-        if (mins > 0) {
-            return `${mins}m ${secs}s`;
-        }
-        return `${secs}s`;
+        const mm = String(mins).padStart(2, '0');
+        const ss = String(secs).padStart(2, '0');
+        return `${mm}:${ss}`;
     }
 
     function getProviderCategory(provider) {
@@ -582,7 +576,7 @@
             progressEstimate.textContent = `Estimated time: ~${duration}`;
         }
         if (estimatePreview) {
-            estimatePreview.textContent = `(~${duration})`;
+            estimatePreview.textContent = `(time: ${duration})`;
         }
     }
 
@@ -801,8 +795,12 @@
         const altTextDisplay = altText === "" ? '(Empty alt text for decorative image)' : altText;
         const maxChars = getAltTextLimit();
 
-        // Build descriptive label with processing and translation mode context
-        const labelText = `Generated alternative text for ${langName}`;
+        // Build descriptive label with image name and all languages
+        // Format: "Generated alternative text for image.png in English" or "Generated alternative text for image.png in English, Spanish"
+        const allLanguageNames = selectedLanguages.map(code => languageNames[code] || code).join(', ');
+        const labelText = selectedLanguages.length > 1
+            ? `Generated alternative text for ${imageId} in ${allLanguageNames}`
+            : `Generated alternative text for ${imageId} in ${langName}`;
 
         const card = document.createElement('div');
         card.className = 'card shadow-sm mb-3';
@@ -1269,27 +1267,20 @@
         contextDragdrop.classList.remove('d-none');
         generateBtn.disabled = true;
         resultSection.classList.add('d-none');
+
+        // Reset duration timer
+        if (estimatePreview) {
+            estimatePreview.textContent = '(time: --:--)';
+        }
+        if (progressEstimate) {
+            progressEstimate.textContent = 'Estimated time: --:--';
+        }
+
         uploadArea.focus();
     }
 
-    // API Configuration - dynamically determine backend URL
-    // In Docker/AWS: frontend on :8080, backend on :8000
-    // Use current hostname but with port 8000 for API calls
-    const currentHost = window.location.hostname;
-    const currentPort = window.location.port;
-    const currentProtocol = window.location.protocol;
-
-    let API_BASE_URL;
-    if (currentPort === '8080') {
-        // Frontend is on 8080, backend is on 8000
-        API_BASE_URL = `${currentProtocol}//${currentHost}:8000/api`;
-    } else if (currentPort === '8000') {
-        // Accessing backend directly
-        API_BASE_URL = '/api';
-    } else {
-        // Production with reverse proxy - use relative path
-        API_BASE_URL = '/api';
-    }
+    // API Configuration - use relative path (frontend and API served from same origin)
+    const API_BASE_URL = '/api';
 
     // Screen reader announcement utility
     function announceToScreenReader(message, assertive = false) {
@@ -1336,6 +1327,25 @@
                 </div>
             `;
             // Move focus to error message
+            const alertElement = errorDiv.querySelector('.alert');
+            if (alertElement) {
+                alertElement.setAttribute('tabindex', '-1');
+                alertElement.focus();
+            }
+        }
+    }
+
+    // Show accessible info message
+    function showInfoMessage(message) {
+        const errorDiv = document.getElementById('errorMessages');
+        if (errorDiv) {
+            errorDiv.innerHTML = `
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <strong>Info:</strong> ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close info message"></button>
+                </div>
+            `;
+            // Move focus to info message
             const alertElement = errorDiv.querySelector('.alert');
             if (alertElement) {
                 alertElement.setAttribute('tabindex', '-1');
@@ -1512,7 +1522,7 @@
 
                 // Update progress before API call
                 const sendingPercent = Math.round(10 + ((i + 0.3) / totalLanguages) * 80);
-                updateProgress(sendingPercent, `Sending request for ${langName}...`);
+                updateProgress(sendingPercent, `Processing ${selectedFile.name} for ${langName}...`);
 
                 // API Call
                 const response = await fetch(`${API_BASE_URL}/generate-alt-text`, {
@@ -1524,7 +1534,7 @@
 
                 // Update progress while processing response
                 const processingPercent = Math.round(10 + ((i + 0.7) / totalLanguages) * 80);
-                updateProgress(processingPercent, `Processing response for ${langName}...`);
+                updateProgress(processingPercent, `Processing response for ${selectedFile.name} in ${langName}...`);
 
                 const data = await response.json();
 
@@ -1656,13 +1666,22 @@
 
     // Stop generation function
     async function stopGeneration() {
+        // Show spinner on stop button
+        const stopIcon = document.getElementById('stopIcon');
+        const stopSpinner = document.getElementById('stopSpinner');
+        const stopBtnText = document.getElementById('stopBtnText');
+        if (stopIcon) stopIcon.classList.add('d-none');
+        if (stopSpinner) stopSpinner.classList.remove('d-none');
+        if (stopBtnText) stopBtnText.textContent = 'Stopping...';
+        if (stopGenerationBtn) stopGenerationBtn.disabled = true;
+
         // Update progress to show stopping
-        updateProgress(0, 'Stopping generation...');
+        updateProgress(10, 'Stopping generation...');
         announceToScreenReader('Stopping generation and clearing session data');
 
         if (currentAbortController) {
             currentAbortController.abort();
-            updateProgress(30, 'Request aborted');
+            updateProgress(30, 'Aborting current request...');
         }
 
         // Small delay for visual feedback
@@ -1672,10 +1691,10 @@
         // Clear session data to start from a clean state
         try {
             await clearSessionData();
-            updateProgress(90, 'Session data cleared');
+            updateProgress(80, 'Session data cleared');
         } catch (error) {
             console.error('[WEBMASTER] Failed to clear session data:', error);
-            updateProgress(90, 'Session cleanup attempted');
+            updateProgress(80, 'Session cleanup attempted');
         }
 
         currentAbortController = null;
@@ -1683,13 +1702,13 @@
         resultsContainer.innerHTML = '';
         resultSection.classList.add('d-none');
 
-        updateProgress(100, 'Stop complete');
+        updateProgress(100, 'Generation stopped');
 
         // Small delay before hiding progress
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 500));
         showProgress(false);
 
-        showErrorMessage('Generation stopped and session data cleared');
+        showInfoMessage('Generation stopped and session data cleared');
         announceToScreenReader('Generation stopped and session data cleared');
 
         // Reset button states
@@ -1698,6 +1717,11 @@
         if (btnText) btnText.textContent = 'Generate';
         if (btnSpinner) btnSpinner.classList.add('d-none');
         generateBtn.disabled = false;
+
+        // Reset stop button
+        if (stopIcon) stopIcon.classList.remove('d-none');
+        if (stopSpinner) stopSpinner.classList.add('d-none');
+        if (stopBtnText) stopBtnText.textContent = 'Stop';
         if (stopGenerationBtn) stopGenerationBtn.disabled = true;
     }
 
@@ -1759,24 +1783,15 @@
             contextTextbox.value = '';
         }
 
-        // Reset all provider and model selections to default
-        visionProviderSelect.value = '';
-        visionModelSelect.value = '';
-        visionModelSelect.disabled = true;
-        visionProvider = '';
-        visionModel = '';
+        // Reset advanced processing mode toggle (must be done before setDefaultProviders)
+        const processingModeToggle = document.getElementById('processingModeToggle');
+        if (processingModeToggle) {
+            processingModeToggle.checked = false;
+        }
+        handleProcessingModeChange();
 
-        processingProviderSelect.value = '';
-        processingModelSelect.value = '';
-        processingModelSelect.disabled = true;
-        processingProvider = '';
-        processingModel = '';
-
-        translationProviderSelect.value = '';
-        translationModelSelect.value = '';
-        translationModelSelect.disabled = true;
-        translationProvider = '';
-        translationModel = '';
+        // Reset all provider and model selections to default values from config
+        setDefaultProviders();
 
         // Reset language selection
         langSelect.selectedIndex = -1; // Deselect all

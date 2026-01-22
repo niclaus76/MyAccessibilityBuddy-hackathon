@@ -49,7 +49,7 @@ AutoAltText/
 ├── test/                       # Test images and context files
 ├── tools/
 │   └── batch_compare_prompts.py   # Batch prompt comparison tool
-└── start_MyAccessibilityBuddy.sh  # Start servers (ports 8080, 8000)
+└── start_MyAccessibilityBuddy.sh  # Start servers (ports 8000, 8000)
 ```
 
 ### Core Application Flow
@@ -111,7 +111,7 @@ cp backend/.env.example backend/.env
 docker-compose up -d
 
 # Access the application
-# Frontend: http://localhost:8080/home.html
+# Frontend: http://localhost:8000/home.html
 # API Docs: http://localhost:8000/api/docs
 
 # View logs
@@ -149,7 +149,7 @@ cp .env.example .env
 # Start all services
 docker-compose up -d
 
-# Frontend: http://localhost:8080/home.html
+# Frontend: http://localhost:8000/home.html
 # API docs: http://localhost:8000/api/docs
 # OAuth (ECB-LLM): Port 3001 automatically used when needed
 
@@ -162,18 +162,18 @@ docker-compose --profile test run myaccessibilitybuddy-test
 
 **Local Mode:**
 ```bash
-# Start servers (8080 for frontend, 8000 for API)
+# Start servers (8000 for frontend, 8000 for API)
 ./start_MyAccessibilityBuddy.sh
 
-# Opens browser automatically to http://localhost:8080/home.html
-# Frontend: http://localhost:8080/home.html
+# Opens browser automatically to http://localhost:8000/home.html
+# Frontend: http://localhost:8000/home.html
 # API docs: http://localhost:8000/api/docs
 
-# Important: Access via http://localhost:8080, NOT file:// (CORS issue)
+# Important: Access via http://localhost:8000, NOT file:// (CORS issue)
 # Note: Port 3001 is used automatically by ecb_llm_client for OAuth when needed
 
 # Stop servers
-lsof -ti:8080,8000 | xargs kill
+lsof -ti:8000,8000 | xargs kill
 ```
 
 **CLI Mode:**
@@ -622,7 +622,7 @@ All functions are in the monolithic `app.py` file:
 
 **Solution:** Access the frontend via HTTP server:
 ```bash
-# Make sure you're accessing http://localhost:8080/home.html
+# Make sure you're accessing http://localhost:8000/home.html
 # NOT file:///home/developer/AutoAltText/frontend/home.html
 
 # The startup script automatically opens the correct URL
@@ -647,7 +647,7 @@ cat backend/config/config.json | grep llm_provider
 curl http://localhost:8000/api/auth/status | python3 -m json.tool
 
 # Verify only main API server is running (ecb_llm_client manages port 3001)
-lsof -ti:8000,8080
+lsof -ti:8000,8000
 ```
 
 **Port 3001 conflict**: If you see "Address already in use" on port 3001, stop any manual OAuth servers. The `ecb_llm_client` library manages this port automatically.
@@ -736,7 +736,7 @@ docker-compose up -d
 
 The Docker setup includes:
 - **Dockerfile**: Multi-stage Python 3.12 slim image with all dependencies
-- **docker-compose.yml**: Orchestrates frontend (8080) and backend (8000) services
+- **docker-compose.yml**: Orchestrates frontend (8000) and backend (8000) services
 - **docker-entrypoint.sh**: Startup script managing both servers
 - **Volumes**: Persistent data for input/, output/, logs/, config.json, and .env
 

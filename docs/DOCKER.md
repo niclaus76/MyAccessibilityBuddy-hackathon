@@ -62,7 +62,7 @@ docker-compose logs -f
 
 ### 4. Access the Application
 
-- **Web UI**: http://localhost:8080/home.html
+- **Web UI**: http://localhost:8000/home.html
 - **API Documentation**: http://localhost:8000/api/docs
 - **API Alternative Docs**: http://localhost:8000/api/redoc
 
@@ -80,7 +80,7 @@ docker-compose down -v
 
 ### Web UI Workflow
 
-1. Open http://localhost:8080/home.html
+1. Open http://localhost:8000/home.html
 2. Upload an image from `test/images/` folder
 3. Optionally upload corresponding context file from `test/context/`
 4. Select target language (e.g., English)
@@ -132,8 +132,7 @@ docker-compose --profile test run myaccessibilitybuddy-test
 
 ```
 myaccessibilitybuddy container
-├── Frontend server (port 8080) - Serves static HTML/CSS/JS
-├── Backend API (port 8000) - FastAPI application
+├── FastAPI backend (port 8000) - Serves both API and frontend
 └── OAuth callback (port 3001) - For ECB-LLM authentication
 ```
 
@@ -214,7 +213,7 @@ sudo chown -R $USER:$USER input/ output/ logs/
 ### "Failed to fetch" in Web UI
 
 Make sure you're accessing via HTTP, not file://
-- **Correct**: http://localhost:8080/home.html
+- **Correct**: http://localhost:8000/home.html
 - **Wrong**: file:///path/to/frontend/home.html
 
 ### OAuth not working (ECB-LLM)
@@ -334,7 +333,7 @@ server {
     server_name myaccessibilitybuddy.example.com;
 
     location / {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://localhost:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }

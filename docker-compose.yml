@@ -5,8 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: myaccessibilitybuddy
     ports:
-      - "8000:8000"  # FastAPI backend
-      - "8080:8080"  # Frontend HTTP server
+      - "8000:8000"  # FastAPI backend (serves both API and frontend)
       - "3001:3001"  # ECB-LLM OAuth callback (if using ECB-LLM)
     volumes:
       # Mount input/output directories for persistent data

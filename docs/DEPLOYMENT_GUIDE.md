@@ -898,7 +898,7 @@ Code is on VM?
 Want to preview first?
   └─ Add --test to any command
 
-Ports 8000/8080 busy?
+Port 8000 busy?
   └─ Add --fast to any command
 
 Need specific version?

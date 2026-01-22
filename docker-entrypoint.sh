@@ -32,8 +32,7 @@ fi
 
 echo ""
 echo "Starting services..."
-echo "  - Frontend server on port 8080"
-echo "  - FastAPI backend on port 8000"
+echo "  - FastAPI backend on port 8000 (serves both API and frontend)"
 if [ "$LLM_PROVIDER" = "ECB-LLM" ]; then
     echo "  - OAuth callback on port 3001 (managed by ecb_llm_client)"
 fi
@@ -44,21 +43,13 @@ mkdir -p /app/input/images /app/input/context
 mkdir -p /app/output/alt-text /app/output/reports
 mkdir -p /app/logs
 
-# Start frontend server in background
-python3 /app/backend/serve_frontend.py &
-FRONTEND_PID=$!
-echo "✓ Frontend server started (PID: $FRONTEND_PID)"
-
-# Give frontend server time to start
-sleep 2
-
-# Start FastAPI backend
+# Start FastAPI backend (serves both API and frontend on same origin for reliable cookies)
 cd /app/backend
 echo "✓ Starting FastAPI backend..."
 echo ""
 echo "=========================================="
 echo "Access the application at:"
-echo "  Frontend: http://localhost:8080/home.html"
+echo "  http://localhost:8000/home.html"
 echo "  API Docs: http://localhost:8000/api/docs"
 echo "=========================================="
 echo ""

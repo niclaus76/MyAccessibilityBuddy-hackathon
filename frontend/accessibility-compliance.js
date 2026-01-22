@@ -9,22 +9,8 @@
 (function() {
     'use strict';
 
-    // API Configuration
-    const currentProtocol = window.location.protocol;
-    const currentHost = window.location.hostname;
-    const currentPort = window.location.port;
-
-    let API_BASE_URL;
-    if (currentPort === '8080') {
-        // Frontend is on 8080, backend is on 8000
-        API_BASE_URL = `${currentProtocol}//${currentHost}:8000/api`;
-    } else if (currentPort === '8000') {
-        // Accessing backend directly
-        API_BASE_URL = '/api';
-    } else {
-        // Production with reverse proxy - use relative path
-        API_BASE_URL = '/api';
-    }
+    // API Configuration - use relative path (frontend and API served from same origin)
+    const API_BASE_URL = '/api';
 
     // DOM Elements
     const pageUrlInput = document.getElementById('pageUrl');
@@ -538,7 +524,8 @@
         resultsSection.style.display = 'none';
 
         currentAbortController = new AbortController();
-        currentSessionId = `cli-${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 10)}`;
+        const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15).replace(/(\d{8})(\d{6})/, '$1-$2');
+        currentSessionId = `${timestamp}-${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 10)}`;
 
         try {
             announceToScreenReader('Checking if URL is reachable');
@@ -736,19 +723,13 @@
     }
 
     function formatDuration(seconds) {
-        if (!Number.isFinite(seconds) || seconds <= 0) return '--';
+        if (!Number.isFinite(seconds) || seconds <= 0) return '--:--';
         const rounded = Math.round(seconds);
         const mins = Math.floor(rounded / 60);
         const secs = rounded % 60;
-        if (mins >= 60) {
-            const hours = Math.floor(mins / 60);
-            const remMins = mins % 60;
-            return `${hours}h ${remMins}m`;
-        }
-        if (mins > 0) {
-            return `${mins}m ${secs}s`;
-        }
-        return `${secs}s`;
+        const mm = String(mins).padStart(2, '0');
+        const ss = String(secs).padStart(2, '0');
+        return `${mm}:${ss}`;
     }
 
     function getProviderCategory(provider) {
@@ -824,7 +805,7 @@
             progressEstimate.textContent = `Estimated time: ~${duration}`;
         }
         if (estimatePreview) {
-            estimatePreview.textContent = `(~${duration})`;
+            estimatePreview.textContent = `(time: ${duration})`;
         }
     }
 
@@ -907,6 +888,14 @@
         currentReportData = null;
         currentSessionId = null;
 
+        // Reset duration timer
+        if (estimatePreview) {
+            estimatePreview.textContent = '(time: --:--)';
+        }
+        if (progressEstimate) {
+            progressEstimate.textContent = 'Estimated time: --:--';
+        }
+
         announceToScreenReader('Form cleared');
     }
 
@@ -914,14 +903,23 @@
         console.log('[COMPLIANCE] stopAnalysis() called');
         console.log('[COMPLIANCE] currentAbortController:', currentAbortController);
 
+        // Show spinner on stop button
+        const stopIcon = document.getElementById('stopIcon');
+        const stopSpinner = document.getElementById('stopSpinner');
+        const stopBtnText = document.getElementById('stopBtnText');
+        if (stopIcon) stopIcon.classList.add('d-none');
+        if (stopSpinner) stopSpinner.classList.remove('d-none');
+        if (stopBtnText) stopBtnText.textContent = 'Stopping...';
+        if (stopAnalysisBtn) stopAnalysisBtn.disabled = true;
+
         // Update progress to show stopping
-        updateProgress(0, 'Stopping analysis...');
+        updateProgress(10, 'Stopping analysis...');
         announceToScreenReader('Stopping analysis and clearing session data');
 
         if (currentAbortController) {
             currentAbortController.abort();
             console.log('[COMPLIANCE] Aborted current request');
-            updateProgress(30, 'Request aborted');
+            updateProgress(30, 'Aborting current request...');
         }
 
         // Small delay for visual feedback
@@ -932,10 +930,10 @@
         try {
             await clearSessionData();
             console.log('[COMPLIANCE] Session data cleared after stop');
-            updateProgress(90, 'Session data cleared');
+            updateProgress(80, 'Session data cleared');
         } catch (error) {
             console.error('[COMPLIANCE] Failed to clear session data:', error);
-            updateProgress(90, 'Session cleanup attempted');
+            updateProgress(80, 'Session cleanup attempted');
         }
 
         currentAbortController = null;
@@ -943,16 +941,23 @@
         currentReportPath = null;
         currentReportData = null;
 
-        updateProgress(100, 'Stop complete');
+        updateProgress(100, 'Analysis stopped');
 
         // Small delay before hiding progress
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 500));
 
         showProgress(false);
         resultsSection.style.display = 'none';
         showInfo('Analysis stopped. Session data has been cleared.');
         setFormState(true);
         announceToScreenReader('Analysis stopped. Session data has been cleared.');
+
+        // Reset stop button
+        if (stopIcon) stopIcon.classList.remove('d-none');
+        if (stopSpinner) stopSpinner.classList.add('d-none');
+        if (stopBtnText) stopBtnText.textContent = 'Stop';
+        if (stopAnalysisBtn) stopAnalysisBtn.disabled = true;
+
         console.log('[COMPLIANCE] Analysis stopped successfully');
     }
 

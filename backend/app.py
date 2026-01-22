@@ -593,14 +593,12 @@ def get_cli_session_folders(session_id=None, shared=False, legacy=False, require
             with open(session_file, 'r') as f:
                 session_id = f.read().strip()
         else:
-            # Create new session
-            session_id = f"cli-{uuid.uuid4()}"
+            # Create new session with datetime prefix
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            session_id = f"{timestamp}-{uuid.uuid4()}"
             with open(session_file, 'w') as f:
                 f.write(session_id)
-
-    # Ensure session_id has cli- prefix
-    if not session_id.startswith('cli-') and session_id != 'shared':
-        session_id = f"cli-{session_id}"
 
     # Get base folders
     base_images = get_absolute_folder_path('images')
@@ -1057,22 +1055,15 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         # Ensure reports folder exists
         os.makedirs(reports_folder, exist_ok=True)
 
-        # Load HTML template from external file (prefer session folder, fallback to base)
-        template_path = os.path.join(reports_folder, 'report_template.html')
-        base_template_path = os.path.join(base_reports_folder, 'report_template.html')
+        # Load HTML template from base reports folder
+        template_path = os.path.join(base_reports_folder, 'report_template.html')
 
         try:
             with open(template_path, 'r', encoding='utf-8') as f:
                 html_template = f.read()
         except FileNotFoundError:
-            # Fallback to base template
-            try:
-                with open(base_template_path, 'r', encoding='utf-8') as f:
-                    html_template = f.read()
-                debug_log(f"Template not found in session folder; used base template at {base_template_path}", "WARNING")
-            except FileNotFoundError:
-                debug_log(f"Template file not found at {template_path} or {base_template_path}", "ERROR")
-                return None
+            debug_log(f"Template file not found at {template_path}", "ERROR")
+            return None
 
         # Prepare template variables
         logo_html = f"<img src='data:image/png;base64,{logo_base64}' alt='My Accessibility Buddy logo.' class='logo'>" if logo_base64 else ""
@@ -1266,7 +1257,12 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
             image_url = data.get('image_URL', '')
             image_context = data.get('image_context', '')
             current_alt_text = data.get('current_alt_text', '')
-            proposed_alt_text_raw = data.get('proposed_alt_text', '')
+            # Use human-reviewed alt text if present (even if empty), otherwise fall back to proposed alt text
+            human_reviewed_alt_text = data.get('human_reviewed_alt_text')
+            has_human_reviewed = 'human_reviewed_alt_text' in data and not (
+                isinstance(human_reviewed_alt_text, list) and len(human_reviewed_alt_text) == 0
+            )
+            proposed_alt_text_raw = human_reviewed_alt_text if has_human_reviewed else data.get('proposed_alt_text', '')
             reasoning = data.get('reasoning', '')
 
             # Get display settings from config.json
@@ -1398,9 +1394,11 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
 
             # Conditionally add Proposed Alt Text field
             if display_settings.get('display_proposed_alt_text', True):
-                image_cards_html += """
+                # Use different label if showing human-reviewed text
+                alt_text_label = "Reviewed Alt Text:" if has_human_reviewed else "Proposed Alt Text:"
+                image_cards_html += f"""
         <div class="field">
-            <span class="field-label">Proposed Alt Text:</span>
+            <span class="field-label">{alt_text_label}</span>
             <div class="field-value alt-text">"""
 
                 # Generate HTML for proposed alt text (single or multilingual)
@@ -3328,7 +3326,9 @@ def clear_folders(folders=None):
 
 def clear_session_subfolders(base_folders=None):
     """
-    Removes session subfolders (web-*, cli-*) under the given base folders.
+    Removes session subfolders under the given base folders.
+    Session folders have the format: YYYYMMDD-HHMMSS-uuid
+    Also supports legacy web-* and cli-* prefixed folders for backward compatibility.
 
     Args:
         base_folders (list): List of base folder paths to scan for session subfolders
@@ -3342,6 +3342,15 @@ def clear_session_subfolders(base_folders=None):
     if base_folders is None:
         base_folders = []
 
+    def is_session_folder(name):
+        """Check if folder name matches session pattern (YYYYMMDD-HHMMSS-uuid or legacy web-/cli- prefix)"""
+        if name.startswith("web-") or name.startswith("cli-"):
+            return True
+        # Check for timestamp-uuid format: YYYYMMDD-HHMMSS-uuid
+        if len(name) > 15 and name[8] == '-' and name[0:8].isdigit():
+            return True
+        return False
+
     deleted = {}
     try:
         import shutil
@@ -3349,7 +3358,7 @@ def clear_session_subfolders(base_folders=None):
             count = 0
             if os.path.exists(base):
                 for name in os.listdir(base):
-                    if name.startswith("web-") or name.startswith("cli-"):
+                    if is_session_folder(name):
                         path = os.path.join(base, name)
                         if os.path.isdir(path):
                             try:
@@ -3890,7 +3899,7 @@ When GEO boost is enabled, apply these additional constraints to alt-text genera
         return (None, False)
 
 
-def process_all_images(images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, language=None, url=None, image_metadata=None, page_title=None, languages=None, max_images=None, use_geo_boost=False):
+def process_all_images(images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, language=None, url=None, image_metadata=None, page_title=None, languages=None, max_images=None, use_geo_boost=False, image_files_list=None):
     """
     Processes all images in the images folder, looks for corresponding context files,
     and generates JSON files for each image in the alt-text folder.
@@ -3907,6 +3916,7 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
         languages (list): List of ISO language codes for multilingual alt-text (overrides language if provided)
         max_images (int): Optional limit on number of images to process
         use_geo_boost (bool): Enable GEO (Generative Engine Optimization) boost for AI-friendly alt-text
+        image_files_list (list): Optional list of image filenames to process (skips folder scan if provided)
 
     Returns:
         dict: Results summary with counts of processed, successful, and failed images
@@ -3933,31 +3943,37 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
             error_msg = f"Images folder '{images_folder}' does not exist"
             debug_log(error_msg, "ERROR")
             return {"processed": 0, "successful": 0, "failed": 0, "error": error_msg}
-        
-        # Get all image files from images folder
-        try:
-            all_files = os.listdir(images_folder)
-            # Filter for common image extensions
-            image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.bmp', '.tiff'}
-            image_files = [f for f in all_files 
-                          if os.path.isfile(os.path.join(images_folder, f)) and 
-                          os.path.splitext(f.lower())[1] in image_extensions]
-            
-            debug_log(f"Found {len(image_files)} image files in {images_folder}")
 
-            # Apply max_images limit if provided
-            if max_images is not None:
-                image_files = image_files[:max_images]
-                debug_log(f"Limiting processing to first {len(image_files)} images (max_images={max_images})")
-            
-            if len(image_files) == 0:
-                warning_msg = f"No image files found in '{images_folder}' folder"
-                debug_log(warning_msg, "WARNING")
-                return {"processed": 0, "successful": 0, "failed": 0, "warning": warning_msg}
-            
-        except OSError as e:
-            handle_exception(func_name, e, f"accessing images folder '{images_folder}'")
-            return {"processed": 0, "successful": 0, "failed": 0, "error": str(e)}
+        # Get image files - either from provided list or by scanning folder
+        if image_files_list is not None:
+            # Use the provided list of image files (e.g., from download_results)
+            image_files = image_files_list
+            debug_log(f"Using provided image list with {len(image_files)} files")
+        else:
+            # Scan folder for image files
+            try:
+                all_files = os.listdir(images_folder)
+                # Filter for common image extensions
+                image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.bmp', '.tiff'}
+                image_files = [f for f in all_files
+                              if os.path.isfile(os.path.join(images_folder, f)) and
+                              os.path.splitext(f.lower())[1] in image_extensions]
+
+                debug_log(f"Found {len(image_files)} image files in {images_folder}")
+
+                # Apply max_images limit if provided (only when scanning folder)
+                if max_images is not None:
+                    image_files = image_files[:max_images]
+                    debug_log(f"Limiting processing to first {len(image_files)} images (max_images={max_images})")
+
+            except OSError as e:
+                handle_exception(func_name, e, f"accessing images folder '{images_folder}'")
+                return {"processed": 0, "successful": 0, "failed": 0, "error": str(e)}
+
+        if len(image_files) == 0:
+            warning_msg = f"No image files found in '{images_folder}' folder"
+            debug_log(warning_msg, "WARNING")
+            return {"processed": 0, "successful": 0, "failed": 0, "warning": warning_msg}
         
         # Process each image
         results = {
@@ -4077,9 +4093,9 @@ def process_all_images(images_folder=None, context_folder=None, prompt_folder=No
         return {"processed": 0, "successful": 0, "failed": 0, "error": str(e)}
 
 
-def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, clear_all=False, max_images=None, languages=None, use_geo_boost=False):
+def MyAccessibilityBuddy(url, images_folder=None, context_folder=None, prompt_folder=None, alt_text_folder=None, clear_all=False, max_images=None, languages=None, use_geo_boost=False):
     """
-    Complete AutoAltText workflow: downloads images, extracts context, and generates JSON files.
+    Complete MyAccessibilityBuddy workflow: downloads images, extracts context, and generates JSON files.
 
     Args:
         url (str): The URL to download images from and extract context
@@ -4291,7 +4307,7 @@ def AutoAltText(url, images_folder=None, context_folder=None, prompt_folder=None
             print(f"\nStep 3/3: Generating JSON files for all images...")
 
         debug_log("Starting JSON generation step")
-        json_results = process_all_images(images_folder, context_folder, prompt_folder, alt_text_folder, None, url, image_metadata, page_title, languages, max_images, use_geo_boost)
+        json_results = process_all_images(images_folder, context_folder, prompt_folder, alt_text_folder, None, url, image_metadata, page_title, languages, max_images, use_geo_boost, image_files_list=download_results)
 
         workflow_results["steps"]["json_generation"] = json_results
         debug_log(f"JSON generation complete: {json_results.get('successful', 0)} successful, {json_results.get('failed', 0)} failed")
@@ -4582,7 +4598,9 @@ def main():
     elif getattr(args, 'session', None):
         if args.session == "__SESSION_NEW__":
             import uuid
-            new_session_id = f"cli-{uuid.uuid4()}"
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            new_session_id = f"{timestamp}-{uuid.uuid4()}"
             session_folders = get_cli_session_folders(session_id=new_session_id)
             print(f"Created new session: {new_session_id}")
         else:
@@ -4836,7 +4854,7 @@ OUTPUT:
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 DESCRIPTION:
-    AutoAltText supports generating alt-text in 24 EU official languages.
+    MyAccessibilityBuddy supports generating alt-text in 24 EU official languages.
     The --language flag works with -g, -p, and -w actions and supports multiple languages.
 
 SUPPORTED LANGUAGES:
@@ -4922,7 +4940,7 @@ For detailed help on actions: python3 app.py --help-topic <topic>
             # General help
             print("""
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                         AutoAltText - ECB Accessibility Tool                 ║
+║                         MyAccessibilityBuddy - ECB Accessibility Tool                 ║
 ║                                   v1.2.0                                      ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -4972,8 +4990,6 @@ CONFIGURATION:
     - Image extraction settings
     - Language preferences
     - Folder paths
-
-For more information, see AutoAltText.md
             """)
 
     elif args.all_languages:
@@ -5118,9 +5134,9 @@ For more information, see AutoAltText.md
             sys.exit(1)
 
         if args.num_images:
-            log_message(f"Starting AutoAltText complete workflow (max {args.num_images} images)...", "INFORMATION")
+            log_message(f"Starting MyAccessibilityBuddy complete workflow (max {args.num_images} images)...", "INFORMATION")
         else:
-            log_message("Starting AutoAltText complete workflow...", "INFORMATION")
+            log_message("Starting MyAccessibilityBuddy complete workflow...", "INFORMATION")
 
         # Display language info
         if args.language:
@@ -5134,7 +5150,7 @@ For more information, see AutoAltText.md
         auto_context = args.context_folder or (session_folders.get('context') if session_folders else None)
         auto_alt_text = args.alt_text_folder or (session_folders.get('alt_text') if session_folders else None)
 
-        results = AutoAltText(
+        results = MyAccessibilityBuddy(
             url=args.url,
             images_folder=auto_images,
             context_folder=auto_context,

@@ -60,10 +60,9 @@ RUN useradd -m -u 1000 appuser && \
 USER appuser
 
 # Expose ports
-# 8000: FastAPI backend
-# 8080: Frontend HTTP server
+# 8000: FastAPI backend (serves both API and frontend)
 # 3001: ECB-LLM OAuth callback (if using ECB-LLM)
-EXPOSE 8000 8080 3001
+EXPOSE 8000 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

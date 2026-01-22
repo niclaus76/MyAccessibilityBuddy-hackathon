@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Start FastAPI server for MyAccessibilityBuddy
-# This script starts the API server on port 8000
+# This script starts the API server on port 8000 (serves both API and frontend)
 
 echo "Starting MyAccessibilityBuddy FastAPI server..."
 echo "================================================"
@@ -15,16 +15,8 @@ fi
 
 # Check for existing instances and stop them
 echo "Checking for existing instances..."
-EXISTING_PIDS_8080=$(lsof -ti:8080)
 EXISTING_PIDS_8000=$(lsof -ti:8000)
 EXISTING_PIDS_3001=$(lsof -ti:3001)
-
-if [ ! -z "$EXISTING_PIDS_8080" ]; then
-    echo "Found existing server process(es) on port 8080: $EXISTING_PIDS_8080"
-    echo "Stopping existing instances on port 8080..."
-    kill $EXISTING_PIDS_8080 2>/dev/null
-    sleep 1
-fi
 
 if [ ! -z "$EXISTING_PIDS_8000" ]; then
     echo "Found existing server process(es) on port 8000: $EXISTING_PIDS_8000"
@@ -41,15 +33,8 @@ if [ ! -z "$EXISTING_PIDS_3001" ]; then
 fi
 
 # Force kill if still running
-STILL_RUNNING_8080=$(lsof -ti:8080)
 STILL_RUNNING_8000=$(lsof -ti:8000)
 STILL_RUNNING_3001=$(lsof -ti:3001)
-
-if [ ! -z "$STILL_RUNNING_8080" ]; then
-    echo "Force stopping remaining processes on port 8080..."
-    kill -9 $STILL_RUNNING_8080 2>/dev/null
-    sleep 1
-fi
 
 if [ ! -z "$STILL_RUNNING_8000" ]; then
     echo "Force stopping remaining processes on port 8000..."
@@ -89,37 +74,28 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Starting MyAccessibilityBuddy..."
-echo "API Server: http://localhost:8000"
+echo "Application: http://localhost:8000/home.html"
 echo "API Documentation: http://localhost:8000/api/docs"
 echo "Note: ECB-LLM OAuth will use port 3001 automatically when needed"
-echo "Opening frontend in browser..."
-echo "Press Ctrl+C to stop all servers"
+echo "Opening application in browser..."
+echo "Press Ctrl+C to stop the server"
 echo ""
 
-# Start frontend HTTP server on port 8080 (to avoid CORS issues with file://)
-python3 backend/serve_frontend.py &
-PID_8080=$!
-sleep 1
+# Open frontend in default browser
+xdg-open "http://localhost:8000/home.html" 2>/dev/null &
 
-# Open frontend in default browser via HTTP
-xdg-open "http://localhost:8080/home.html" 2>/dev/null &
-
-# Start uvicorn server on port 8000 (main API)
+# Start uvicorn server on port 8000 (serves both API and frontend)
 cd backend
 python3 -m uvicorn api:app --host 0.0.0.0 --port 8000 --reload &
 PID_8000=$!
 
 echo ""
-echo "Servers started:"
-echo "  - Frontend on port 8080 (PID: $PID_8080)"
-echo "  - Main API on port 8000 (PID: $PID_8000)"
+echo "Server started:"
+echo "  - FastAPI on port 8000 (PID: $PID_8000)"
 echo ""
 
-# Wait for either process to exit
-wait -n
+# Kill background job when script exits
+trap "kill $PID_8000 2>/dev/null" EXIT
 
-# Kill all background jobs when script exits
-trap "kill $PID_8080 $PID_8000 2>/dev/null" EXIT
-
-# Wait for all processes
-wait
+# Wait for process
+wait $PID_8000

@@ -65,7 +65,7 @@ Wait for: `✓ Starting FastAPI backend...`
 ## Step 3: Use the Application (30 seconds)
 
 Open in your browser:
-- **Web UI**: http://localhost:8080/home.html
+- **Web UI**: http://localhost:8000/home.html
 - **API Docs**: http://localhost:8000/api/docs
 
 ### Try the Web UI:
@@ -95,7 +95,7 @@ docker compose down
 ## Common Issues
 
 **"Failed to fetch" error in browser?**
-- Use http://localhost:8080/home.html (NOT file://)
+- Use http://localhost:8000/home.html (NOT file://)
 
 **"No .env file found" in logs?**
 - For OpenAI/ECB-LLM: Make sure you created `backend/.env` with credentials

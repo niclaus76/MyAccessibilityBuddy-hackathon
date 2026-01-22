@@ -88,7 +88,7 @@ def resolve_project_path(path: Path) -> Path:
 # These will be loaded from config.json
 PROMPTS = []
 TEST_IMAGES = []
-TEST_LANGUAGE = "en"
+TEST_LANGUAGES = ["en"]  # Support multiple languages
 TEST_GEO_BOOST = False  # If true, test BOTH GEO and non-GEO modes
 
 # Paths that will be set from config.advanced.json
@@ -128,7 +128,7 @@ def print_warning(text: str):
 
 def load_test_config(args=None):
     """Load test configuration from config.json and config.advanced.json."""
-    global PROMPTS, TEST_IMAGES, TEST_LANGUAGE, TEST_GEO_BOOST
+    global PROMPTS, TEST_IMAGES, TEST_LANGUAGES, TEST_GEO_BOOST
     global IMAGES_DIR, CONTEXT_DIR, OUTPUT_DIR, OUTPUT_REPORTS_DIR
     global OVERRIDE_VISION_PROVIDER, OVERRIDE_VISION_MODEL
     global OVERRIDE_PROCESSING_PROVIDER, OVERRIDE_PROCESSING_MODEL
@@ -149,7 +149,9 @@ def load_test_config(args=None):
 
         PROMPTS = batch_comparison.get('prompts', [])
         TEST_IMAGES = batch_comparison.get('test_images', [])
-        TEST_LANGUAGE = batch_comparison.get('language', 'en')
+        # Support both 'language' (single) and 'languages' (array) in config
+        config_lang = batch_comparison.get('languages', batch_comparison.get('language', 'en'))
+        TEST_LANGUAGES = config_lang if isinstance(config_lang, list) else [config_lang]
         TEST_GEO_BOOST = batch_comparison.get('test_geo_boost', False)
 
         # Load advanced config for folder paths
@@ -187,9 +189,7 @@ def load_test_config(args=None):
                         "description": ""
                     })
             if args.language:
-                TEST_LANGUAGE = args.language[0]
-                if len(args.language) > 1:
-                    print_warning("Multiple languages provided; using first for batch comparison.")
+                TEST_LANGUAGES = args.language  # Use all provided languages
             if args.geo_boost:
                 TEST_GEO_BOOST = True
 
@@ -206,7 +206,7 @@ def load_test_config(args=None):
 
         print_success("Loaded batch comparison configuration from config.json")
         print_info(f"Test mode: {'GEO Boost Comparison (both modes)' if TEST_GEO_BOOST else 'Standard WCAG only'}")
-        print_info(f"Language: {TEST_LANGUAGE}")
+        print_info(f"Languages: {', '.join(TEST_LANGUAGES)}")
         print_info(f"Prompts to test: {len(PROMPTS)}")
         print_info(f"Test images: {len(TEST_IMAGES)} images")
         print_info(f"Test images folder: {IMAGES_DIR}")
@@ -325,9 +325,28 @@ def run_batch_processing(use_geo=False):
         # Build command with test folders (without --legacy to use session-based folders)
         cmd = [
             "python3", "app.py", "-p",
-            "--images-folder", str(IMAGES_DIR),
-            "--language", TEST_LANGUAGE
+            "--images-folder", str(IMAGES_DIR)
         ]
+
+        # If images folder contains a session ID (web- or cli-), also set alt-text-folder
+        # to prevent creating a new CLI session
+        images_folder_str = str(IMAGES_DIR)
+        if '/web-' in images_folder_str or '/cli-' in images_folder_str:
+            # Extract session ID from path like /path/to/input/images/web-xxx or /path/to/input/images/cli-xxx
+            import re
+            session_match = re.search(r'/(web-[^/]+|cli-[^/]+)', images_folder_str)
+            if session_match:
+                session_id = session_match.group(1)
+                # Construct alt-text folder path for the same session
+                alt_text_folder = images_folder_str.replace('/input/images/', '/output/alt-text/')
+                cmd.extend(["--alt-text-folder", alt_text_folder])
+                print_info(f"Using session folders for: {session_id}")
+
+        # Add all languages in a single --language argument
+        # Note: app.py expects --language en it (not --language en --language it)
+        if TEST_LANGUAGES:
+            cmd.append("--language")
+            cmd.extend(TEST_LANGUAGES)
 
         if CONTEXT_DIR and CONTEXT_DIR.exists():
             cmd.extend(["--context-folder", str(CONTEXT_DIR)])
@@ -386,8 +405,8 @@ def run_batch_processing(use_geo=False):
         print_error(f"Error running batch processing: {e}")
         return None
 
-def extract_results(session_id=None) -> Dict[str, str]:
-    """Extract alt-text results from JSON files.
+def extract_results(session_id=None) -> Dict[str, Dict[str, str]]:
+    """Extract alt-text results from JSON files, supporting multilingual output.
 
     Args:
         session_id (str, optional): CLI session ID to extract results from.
@@ -395,7 +414,8 @@ def extract_results(session_id=None) -> Dict[str, str]:
                                    If None, looks directly in output/alt-text/
 
     Returns:
-        Dict[str, str]: Mapping of image filename to alt-text
+        Dict[str, Dict[str, str]]: Mapping of image filename to {language: alt-text}
+        Example: {"image1.png": {"EN": "alt text in English", "IT": "alt text in Italian"}}
     """
     results = {}
 
@@ -415,15 +435,35 @@ def extract_results(session_id=None) -> Dict[str, str]:
                 # Use image_id from JSON, or fallback to filename
                 image_file = data.get('image_id', json_file.stem)
                 # The field is 'proposed_alt_text' not 'alt_text'
-                alt_text = data.get('proposed_alt_text', data.get('alt_text', ''))
-                results[image_file] = alt_text
+                alt_text_raw = data.get('proposed_alt_text', data.get('alt_text', ''))
+                language_raw = data.get('language', 'en')
+
+                # Handle multilingual output (array of [lang, text] pairs)
+                if isinstance(alt_text_raw, list):
+                    # Multilingual: [["EN", "text"], ["IT", "testo"]]
+                    lang_texts = {}
+                    for item in alt_text_raw:
+                        if isinstance(item, (list, tuple)) and len(item) >= 2:
+                            lang_code = item[0].upper()
+                            text = item[1]
+                            lang_texts[lang_code] = text
+                    results[image_file] = lang_texts
+                else:
+                    # Single language: string
+                    lang_code = language_raw.upper() if isinstance(language_raw, str) else 'EN'
+                    results[image_file] = {lang_code: alt_text_raw}
         except Exception as e:
             print_warning(f"Error reading {json_file.name}: {e}")
 
     return results
 
-def generate_csv(all_results: Dict[str, Dict[str, str]], output_path: Path):
-    """Generate CSV comparison file."""
+def generate_csv(all_results: Dict[str, Dict[str, Dict[str, str]]], output_path: Path):
+    """Generate CSV comparison file with multilingual support.
+
+    Args:
+        all_results: Dict[prompt_label, Dict[image_filename, Dict[language, alt_text]]]
+        output_path: Path to write the CSV file
+    """
     print_header("Generating CSV Report")
 
     # Get all unique image filenames
@@ -437,41 +477,55 @@ def generate_csv(all_results: Dict[str, Dict[str, str]], output_path: Path):
     with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
 
-        # Write header - handle dual-mode testing
+        # Build header with language columns
         header = ['Image Filename']
         if TEST_GEO_BOOST:
-            # Dual-mode: create columns for both standard and GEO for each prompt
+            # Dual-mode: create columns for both standard and GEO for each prompt and language
             for prompt in PROMPTS:
-                header.append(f"{prompt['label']} (Standard)")
-                header.append(f"{prompt['label']} (GEO)")
+                for lang in TEST_LANGUAGES:
+                    header.append(f"{prompt['label']} ({lang.upper()}) Standard")
+                    header.append(f"{prompt['label']} ({lang.upper()}) GEO")
         else:
-            # Standard mode: one column per prompt
+            # Standard mode: one column per prompt per language
             for prompt in PROMPTS:
-                header.append(f"Alt Text ({prompt['label']})")
+                for lang in TEST_LANGUAGES:
+                    header.append(f"{prompt['label']} ({lang.upper()})")
         writer.writerow(header)
 
         # Write data rows
         for image in sorted_images:
             row = [image]
             if TEST_GEO_BOOST:
-                # Dual-mode: add both standard and GEO results
+                # Dual-mode: add both standard and GEO results for each language
                 for prompt in PROMPTS:
-                    standard_alt = all_results.get(prompt['label'], {}).get(image, '')
-                    geo_alt = all_results.get(f"{prompt['label']} (GEO)", {}).get(image, '')
-                    row.append(standard_alt)
-                    row.append(geo_alt)
+                    for lang in TEST_LANGUAGES:
+                        lang_upper = lang.upper()
+                        standard_result = all_results.get(prompt['label'], {}).get(image, {})
+                        geo_result = all_results.get(f"{prompt['label']} (GEO)", {}).get(image, {})
+                        standard_alt = standard_result.get(lang_upper, '') if isinstance(standard_result, dict) else standard_result
+                        geo_alt = geo_result.get(lang_upper, '') if isinstance(geo_result, dict) else geo_result
+                        row.append(standard_alt)
+                        row.append(geo_alt)
             else:
-                # Standard mode: single result per prompt
+                # Standard mode: one result per prompt per language
                 for prompt in PROMPTS:
-                    alt_text = all_results.get(prompt['label'], {}).get(image, '')
-                    row.append(alt_text)
+                    for lang in TEST_LANGUAGES:
+                        lang_upper = lang.upper()
+                        result = all_results.get(prompt['label'], {}).get(image, {})
+                        alt_text = result.get(lang_upper, '') if isinstance(result, dict) else result
+                        row.append(alt_text)
             writer.writerow(row)
 
     print_success(f"CSV file created: {output_path}")
     print_success(f"Total images: {len(sorted_images)}")
 
-def generate_html_report(all_results: Dict[str, Dict[str, str]], output_path: Path):
-    """Generate HTML comparison report using the same style as the webmaster report."""
+def generate_html_report(all_results: Dict[str, Dict[str, Dict[str, str]]], output_path: Path):
+    """Generate HTML comparison report with multilingual support.
+
+    Args:
+        all_results: Dict[prompt_label, Dict[image_filename, Dict[language, alt_text]]]
+        output_path: Path to write the HTML file
+    """
     print_header("Generating HTML Report")
 
     # Get all unique image filenames
@@ -723,8 +777,12 @@ def generate_html_report(all_results: Dict[str, Dict[str, str]], output_path: Pa
                     <span class="stat-value">{len(PROMPTS)}</span>
                 </div>
                 <div class="stat-item">
+                    <span class="stat-label">Languages</span>
+                    <span class="stat-value">{len(TEST_LANGUAGES)}</span>
+                </div>
+                <div class="stat-item">
                     <span class="stat-label">Alt-Texts Generated</span>
-                    <span class="stat-value">{len(sorted_images) * len(PROMPTS) * (2 if TEST_GEO_BOOST else 1)}</span>
+                    <span class="stat-value">{len(sorted_images) * len(PROMPTS) * len(TEST_LANGUAGES) * (2 if TEST_GEO_BOOST else 1)}</span>
                 </div>
                 <div class="stat-item">
                     <span class="stat-label">Testing Mode</span>
@@ -733,7 +791,7 @@ def generate_html_report(all_results: Dict[str, Dict[str, str]], output_path: Pa
             </div>
         </div>
 
-        <p><strong>Language:</strong> {TEST_LANGUAGE}</p>
+        <p><strong>Languages:</strong> {', '.join(TEST_LANGUAGES)}</p>
         <p><strong>Test Images:</strong> {', '.join(TEST_IMAGES)}</p>
         <p><strong>GEO Boost Testing:</strong> {'Enabled (both modes tested)' if TEST_GEO_BOOST else 'Disabled (standard only)'}</p>
         <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
@@ -773,6 +831,7 @@ def generate_html_report(all_results: Dict[str, Dict[str, str]], output_path: Pa
                 <tr>
                     <th scope="col">Prompt Version</th>
                     <th scope="col">Prompt File</th>
+                    <th scope="col">Language</th>
 """
 
         if TEST_GEO_BOOST:
@@ -789,23 +848,46 @@ def generate_html_report(all_results: Dict[str, Dict[str, str]], output_path: Pa
 """
 
         for prompt in PROMPTS:
-            if TEST_GEO_BOOST:
-                # Dual-mode: show both standard and GEO results
-                standard_alt = all_results.get(prompt['label'], {}).get(image, '')
-                geo_alt = all_results.get(f"{prompt['label']} (GEO)", {}).get(image, '')
+            # Get the results for this prompt and image
+            prompt_results = all_results.get(prompt['label'], {}).get(image, {})
+            geo_results = all_results.get(f"{prompt['label']} (GEO)", {}).get(image, {}) if TEST_GEO_BOOST else {}
 
-                standard_count = len(standard_alt) if standard_alt else 0
-                geo_count = len(geo_alt) if geo_alt else 0
+            # Ensure we have a dict (handle legacy single-string format)
+            if isinstance(prompt_results, str):
+                prompt_results = {'EN': prompt_results}
+            if isinstance(geo_results, str):
+                geo_results = {'EN': geo_results}
 
-                standard_class = "char-ok" if 0 < standard_count <= 125 else ("char-warning" if standard_count > 125 else "char-error")
-                geo_class = "char-ok" if 0 < geo_count <= 125 else ("char-warning" if geo_count > 125 else "char-error")
+            # Get all languages to display (from config or from results)
+            languages_to_show = [lang.upper() for lang in TEST_LANGUAGES]
+            # Also include any languages found in results that weren't in config
+            for lang in prompt_results.keys():
+                if lang.upper() not in languages_to_show:
+                    languages_to_show.append(lang.upper())
 
-                standard_status = "✓" if 0 < standard_count <= 125 else ("⚠" if standard_count > 125 else "✗")
-                geo_status = "✓" if 0 < geo_count <= 125 else ("⚠" if geo_count > 125 else "✗")
+            first_row = True
+            for lang in languages_to_show:
+                lang_upper = lang.upper()
 
-                html_content += f"""                <tr>
-                    <td><strong>{prompt['label']}</strong></td>
-                    <td><code>{prompt['file']}</code></td>
+                if TEST_GEO_BOOST:
+                    # Dual-mode: show both standard and GEO results
+                    standard_alt = prompt_results.get(lang_upper, '')
+                    geo_alt = geo_results.get(lang_upper, '')
+
+                    standard_count = len(standard_alt) if standard_alt else 0
+                    geo_count = len(geo_alt) if geo_alt else 0
+
+                    standard_class = "char-ok" if 0 < standard_count <= 125 else ("char-warning" if standard_count > 125 else "char-error")
+                    geo_class = "char-ok" if 0 < geo_count <= 125 else ("char-warning" if geo_count > 125 else "char-error")
+
+                    standard_status = "✓" if 0 < standard_count <= 125 else ("⚠" if standard_count > 125 else "✗")
+                    geo_status = "✓" if 0 < geo_count <= 125 else ("⚠" if geo_count > 125 else "✗")
+
+                    if first_row:
+                        html_content += f"""                <tr>
+                    <td rowspan="{len(languages_to_show)}"><strong>{prompt['label']}</strong></td>
+                    <td rowspan="{len(languages_to_show)}"><code>{prompt['file']}</code></td>
+                    <td><strong>{lang_upper}</strong></td>
                     <td class="alt-text-cell">
                         {standard_alt if standard_alt else '<em style="color: #999;">No alt-text generated</em>'}
                         <div class="char-count {standard_class}">{standard_status} {standard_count} characters</div>
@@ -816,22 +898,47 @@ def generate_html_report(all_results: Dict[str, Dict[str, str]], output_path: Pa
                     </td>
                 </tr>
 """
-            else:
-                # Standard mode: show single result
-                alt_text = all_results.get(prompt['label'], {}).get(image, '')
-                char_count = len(alt_text) if alt_text else 0
-                char_class = "char-ok" if 0 < char_count <= 125 else ("char-warning" if char_count > 125 else "char-error")
-                char_status = "✓" if 0 < char_count <= 125 else ("⚠" if char_count > 125 else "✗")
+                    else:
+                        html_content += f"""                <tr>
+                    <td><strong>{lang_upper}</strong></td>
+                    <td class="alt-text-cell">
+                        {standard_alt if standard_alt else '<em style="color: #999;">No alt-text generated</em>'}
+                        <div class="char-count {standard_class}">{standard_status} {standard_count} characters</div>
+                    </td>
+                    <td class="alt-text-cell">
+                        {geo_alt if geo_alt else '<em style="color: #999;">No alt-text generated</em>'}
+                        <div class="char-count {geo_class}">{geo_status} {geo_count} characters</div>
+                    </td>
+                </tr>
+"""
+                else:
+                    # Standard mode: show single result per language
+                    alt_text = prompt_results.get(lang_upper, '')
+                    char_count = len(alt_text) if alt_text else 0
+                    char_class = "char-ok" if 0 < char_count <= 125 else ("char-warning" if char_count > 125 else "char-error")
+                    char_status = "✓" if 0 < char_count <= 125 else ("⚠" if char_count > 125 else "✗")
 
-                html_content += f"""                <tr>
-                    <td><strong>{prompt['label']}</strong></td>
-                    <td><code>{prompt['file']}</code></td>
+                    if first_row:
+                        html_content += f"""                <tr>
+                    <td rowspan="{len(languages_to_show)}"><strong>{prompt['label']}</strong></td>
+                    <td rowspan="{len(languages_to_show)}"><code>{prompt['file']}</code></td>
+                    <td><strong>{lang_upper}</strong></td>
                     <td class="alt-text-cell">
                         {alt_text if alt_text else '<em style="color: #999;">No alt-text generated</em>'}
                         <div class="char-count {char_class}">{char_status} {char_count} characters</div>
                     </td>
                 </tr>
 """
+                    else:
+                        html_content += f"""                <tr>
+                    <td><strong>{lang_upper}</strong></td>
+                    <td class="alt-text-cell">
+                        {alt_text if alt_text else '<em style="color: #999;">No alt-text generated</em>'}
+                        <div class="char-count {char_class}">{char_status} {char_count} characters</div>
+                    </td>
+                </tr>
+"""
+                first_row = False
 
         html_content += """            </tbody>
         </table>
@@ -841,11 +948,11 @@ def generate_html_report(all_results: Dict[str, Dict[str, str]], output_path: Pa
     html_content += """
     </main>
 
-    <footer style="margin-top: 40px; padding: 20px; border-top: 2px solid #0066cc;">
-        <p style="text-align: left; max-width: 800px; margin: 20px auto; line-height: 1.6;">
+    <footer style="margin-top: 40px; padding: 20px; border-top: 2px solid #0066cc; width: 100%;">
+        <p style="text-align: left; line-height: 1.6;">
             MyAccessibilityBuddy is an AI-powered tool for generating WCAG 2.2 compliant alternative text for web images. It supports 24 EU languages with enterprise LLM (ECB-LLM with GPT-4o and GPT-5.1), commercial LLMs (OpenAI GPT-4o/5.1/5.2 and Claude Sonnet/Opus/Haiku), or local models from Ollama.
         </p>
-        <p style="text-align: left; max-width: 800px; margin: 20px auto; padding: 10px; background-color: #fff3cd; border-left: 4px solid #ffc107; line-height: 1.6;">
+        <p style="text-align: left; padding: 10px; background-color: #fff3cd; border-left: 4px solid #ffc107; line-height: 1.6;">
             ⚠️ <strong>For testing purposes only:</strong> Use with non confidential images. Avoid uploading personal or sensitive data. AI suggestions require human review before use. ⚠️
         </p>
     </footer>

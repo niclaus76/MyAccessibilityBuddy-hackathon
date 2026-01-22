@@ -206,8 +206,9 @@ def get_or_create_session_id(request: Request) -> str:
 
             return session_id
 
-    # No valid session found, create new one
-    session_id = f"web-{uuid.uuid4()}"
+    # No valid session found, create new one with datetime prefix
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    session_id = f"{timestamp}-{uuid.uuid4()}"
     WEB_APP_SESSIONS[session_id] = {
         "created": datetime.now(),
         "last_accessed": datetime.now(),
@@ -218,20 +219,18 @@ def get_or_create_session_id(request: Request) -> str:
 
 def get_session_type(session_id: str) -> str:
     """
-    Determine session type from session ID prefix.
+    Determine session type from session ID.
 
     Args:
-        session_id: Session ID (e.g., 'web-abc123' or 'cli-def456')
+        session_id: Session ID (e.g., '20260122-143052-abc123')
 
     Returns:
-        str: Session type ('web', 'cli', or 'unknown')
+        str: Session type ('session' or 'shared')
     """
-    if session_id.startswith('web-'):
-        return 'web'
-    elif session_id.startswith('cli-'):
-        return 'cli'
+    if session_id == 'shared':
+        return 'shared'
     else:
-        return 'unknown'
+        return 'session'
 
 def clear_session_data(session_id: str) -> dict:
     """
@@ -1572,6 +1571,124 @@ async def clear_session(request: Request):
     log_message(f"Cleared session data for {session_id}", "INFORMATION")
     return result
 
+
+@app.post("/api/clear-all-sessions")
+async def clear_all_sessions(request: Request):
+    """
+    Clear ALL session data from images, context, alt-text, reports, and logs folders.
+
+    This is a destructive operation that requires the 'force' flag to be set.
+
+    Request body:
+    {
+        "force": true  # Required - must be true to confirm deletion
+    }
+
+    Returns:
+    {
+        "success": true,
+        "message": "All session data cleared",
+        "sessions_cleared": 5,
+        "files_deleted": 123,
+        "folders_deleted": 25
+    }
+    """
+    import shutil
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    force = body.get("force", False) if isinstance(body, dict) else False
+
+    if not force:
+        raise HTTPException(
+            status_code=400,
+            detail="This operation requires 'force: true' to confirm deletion of all session data"
+        )
+
+    sessions_cleared = 0
+    files_deleted = 0
+    folders_deleted = 0
+    errors = []
+
+    try:
+        base_images = get_absolute_folder_path('images')
+        base_context = get_absolute_folder_path('context')
+        base_alt_text = get_absolute_folder_path('alt_text')
+        base_reports = get_absolute_folder_path('reports')
+        base_logs = get_absolute_folder_path('logs')
+
+        base_folders = {
+            "images": base_images,
+            "context": base_context,
+            "alt_text": base_alt_text,
+            "reports": base_reports,
+            "logs": base_logs
+        }
+
+        # Track unique session IDs found
+        session_ids_found = set()
+
+        for folder_type, base_path in base_folders.items():
+            if not os.path.exists(base_path):
+                continue
+
+            try:
+                for item in os.listdir(base_path):
+                    item_path = os.path.join(base_path, item)
+
+                    # Only delete session folders (timestamp-uuid format: YYYYMMDD-HHMMSS-uuid)
+                    # Also support legacy web- or cli- prefixed folders for backward compatibility
+                    is_session_folder = (
+                        item.startswith('web-') or
+                        item.startswith('cli-') or
+                        (len(item) > 15 and item[8] == '-' and item[0:8].isdigit())
+                    )
+                    if os.path.isdir(item_path) and is_session_folder:
+                        session_ids_found.add(item)
+
+                        try:
+                            # Count files before deletion
+                            for root, dirs, files in os.walk(item_path):
+                                files_deleted += len(files)
+
+                            # Remove the entire folder
+                            shutil.rmtree(item_path)
+                            folders_deleted += 1
+                            log_message(f"Cleared {folder_type}/{item}", "INFORMATION")
+                        except Exception as e:
+                            errors.append(f"Failed to clear {folder_type}/{item}: {str(e)}")
+                            log_message(f"Failed to clear {folder_type}/{item}: {e}", "WARNING")
+
+            except Exception as e:
+                errors.append(f"Error scanning {folder_type}: {str(e)}")
+                log_message(f"Error scanning {folder_type}: {e}", "WARNING")
+
+        sessions_cleared = len(session_ids_found)
+
+        # Clear in-memory session tracking
+        WEB_APP_SESSIONS.clear()
+
+        log_message(f"Cleared all session data: {sessions_cleared} sessions, {files_deleted} files, {folders_deleted} folders", "INFORMATION")
+
+        return {
+            "success": True,
+            "message": f"All session data cleared successfully",
+            "sessions_cleared": sessions_cleared,
+            "files_deleted": files_deleted,
+            "folders_deleted": folders_deleted,
+            "errors": errors if errors else None
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_message(f"Clear all sessions error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/analyze-page")
 async def analyze_page(request: Request):
     """
@@ -2504,9 +2621,10 @@ async def available_test_folders():
 @app.post("/api/batch-compare-prompts")
 async def batch_compare_prompts(request: Request):
     """
-    Execute batch prompt comparison tool.
+    Start async batch prompt comparison and return a job_id for polling progress.
 
-    Runs: python3 /app/backend/tools/batch_compare_prompts.py
+    This endpoint starts the comparison in a background thread and returns immediately
+    with a job_id that can be used to poll for progress via /api/job-status/{job_id}.
 
     Request body:
     {
@@ -2523,24 +2641,21 @@ async def batch_compare_prompts(request: Request):
         "advanced_translation": false,
         "geo_boost": false
     }
+
+    Returns:
+    {
+        "job_id": "job-abc123",
+        "status": "started",
+        "message": "Batch comparison started"
+    }
     """
+    import threading
+
     try:
         data = await request.json()
 
         prompts = data.get('prompts', [])
         images_folder = data.get('images_folder')
-        context_folder = data.get('context_folder', '')
-        languages = data.get('languages', ['en'])
-
-        # Advanced options
-        vision_provider = data.get('vision_provider')
-        vision_model = data.get('vision_model')
-        processing_provider = data.get('processing_provider')
-        processing_model = data.get('processing_model')
-        translation_provider = data.get('translation_provider')
-        translation_model = data.get('translation_model')
-        advanced_translation = data.get('advanced_translation', False)
-        geo_boost = data.get('geo_boost', False)
 
         # Validation
         if not prompts or len(prompts) < 2:
@@ -2549,73 +2664,197 @@ async def batch_compare_prompts(request: Request):
         if not images_folder:
             raise HTTPException(status_code=400, detail="Images folder is required")
 
-        # Build command
-        import subprocess
-        import sys
+        # Generate unique job ID
+        job_id = f"job-{uuid.uuid4().hex[:12]}"
+
+        # Count images for progress tracking
         from pathlib import Path
+        images_path = Path(images_folder)
+        image_count = 0
+        if images_path.exists():
+            image_count = len(list(images_path.glob('*.jpg')) + list(images_path.glob('*.png')) +
+                             list(images_path.glob('*.gif')) + list(images_path.glob('*.webp')) +
+                             list(images_path.glob('*.jpeg')))
 
-        script_path = Path(__file__).parent.parent / 'tools' / 'batch_compare_prompts.py'
+        # Initialize job status
+        JOB_STATUS[job_id] = {
+            "status": "starting",
+            "percent": 0,
+            "message": "Initializing batch comparison...",
+            "created": datetime.now().isoformat(),
+            "result": None,
+            "error": None,
+            "total_images": image_count,
+            "prompts_count": len(prompts)
+        }
 
-        if not script_path.exists():
-            raise HTTPException(status_code=404, detail="Batch compare tool not found")
+        # Start background thread to run comparison
+        def run_comparison():
+            try:
+                _run_batch_compare_with_progress(job_id, data)
+            except Exception as e:
+                JOB_STATUS[job_id]["status"] = "error"
+                JOB_STATUS[job_id]["error"] = str(e)
+                JOB_STATUS[job_id]["message"] = f"Error: {str(e)}"
+                log_message(f"Background batch comparison error for job {job_id}: {e}", "ERROR")
 
-        cmd = [sys.executable, str(script_path)]
+        thread = threading.Thread(target=run_comparison, daemon=True)
+        thread.start()
 
-        # Add arguments
-        cmd.extend(['--images-folder', images_folder])
+        return {
+            "job_id": job_id,
+            "status": "started",
+            "message": "Batch comparison started"
+        }
 
-        if context_folder:
-            cmd.extend(['--context-folder', context_folder])
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_message(f"Batch compare error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
 
-        # Add languages
-        for lang in languages:
-            cmd.extend(['--language', lang])
 
-        # Add prompts
-        cmd.append('--prompts')
-        cmd.extend(prompts)
+def _run_batch_compare_with_progress(job_id: str, data: dict):
+    """
+    Run the batch comparison CLI and update job status with progress.
+    """
+    import subprocess
+    import sys
+    import re
+    import time
+    from pathlib import Path
 
-        # Note: Report is generated automatically by the script, no --report flag needed
+    prompts = data.get('prompts', [])
+    images_folder = data.get('images_folder')
+    context_folder = data.get('context_folder', '')
+    languages = data.get('languages', ['en'])
 
-        # Add advanced options
-        if vision_provider:
-            cmd.extend(['--vision-provider', vision_provider])
-        if vision_model:
-            cmd.extend(['--vision-model', vision_model])
-        if processing_provider:
-            cmd.extend(['--processing-provider', processing_provider])
-        if processing_model:
-            cmd.extend(['--processing-model', processing_model])
-        if translation_provider:
-            cmd.extend(['--translation-provider', translation_provider])
-        if translation_model:
-            cmd.extend(['--translation-model', translation_model])
-        if advanced_translation:
-            cmd.append('--advanced-translation')
-        if geo_boost:
-            cmd.append('--geo-boost')
+    # Advanced options
+    vision_provider = data.get('vision_provider')
+    vision_model = data.get('vision_model')
+    processing_provider = data.get('processing_provider')
+    processing_model = data.get('processing_model')
+    translation_provider = data.get('translation_provider')
+    translation_model = data.get('translation_model')
+    advanced_translation = data.get('advanced_translation', False)
+    geo_boost = data.get('geo_boost', False)
 
-        log_message(f"Executing: {' '.join(cmd)}", "INFORMATION")
+    # Update status
+    JOB_STATUS[job_id]["status"] = "running"
+    JOB_STATUS[job_id]["percent"] = 5
+    JOB_STATUS[job_id]["message"] = "Preparing batch comparison..."
 
-        # Execute
-        result = subprocess.run(
+    script_path = Path(__file__).parent.parent / 'tools' / 'batch_compare_prompts.py'
+
+    if not script_path.exists():
+        JOB_STATUS[job_id]["status"] = "error"
+        JOB_STATUS[job_id]["error"] = "Batch compare tool not found"
+        JOB_STATUS[job_id]["message"] = "Error: Batch compare tool not found"
+        return
+
+    cmd = [sys.executable, str(script_path)]
+
+    # Add arguments
+    cmd.extend(['--images-folder', images_folder])
+
+    if context_folder:
+        cmd.extend(['--context-folder', context_folder])
+
+    # Add languages
+    for lang in languages:
+        cmd.extend(['--language', lang])
+
+    # Add prompts
+    cmd.append('--prompts')
+    cmd.extend(prompts)
+
+    # Add advanced options
+    if vision_provider:
+        cmd.extend(['--vision-provider', vision_provider])
+    if vision_model:
+        cmd.extend(['--vision-model', vision_model])
+    if processing_provider:
+        cmd.extend(['--processing-provider', processing_provider])
+    if processing_model:
+        cmd.extend(['--processing-model', processing_model])
+    if translation_provider:
+        cmd.extend(['--translation-provider', translation_provider])
+    if translation_model:
+        cmd.extend(['--translation-model', translation_model])
+    if advanced_translation:
+        cmd.append('--advanced-translation')
+    if geo_boost:
+        cmd.append('--geo-boost')
+
+    log_message(f"[Job {job_id}] Executing: {' '.join(cmd)}", "INFORMATION")
+
+    JOB_STATUS[job_id]["percent"] = 10
+    JOB_STATUS[job_id]["message"] = "Starting batch comparison..."
+
+    try:
+        # Use Popen to read output in real-time for progress updates
+        process = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=600  # 10 minute timeout for batch processing
+            bufsize=1
         )
 
-        if result.returncode != 0:
-            error_msg = result.stderr or result.stdout or "Unknown error"
-            log_message(f"Batch compare failed: {error_msg}", "ERROR")
-            raise HTTPException(status_code=500, detail=f"Batch comparison failed: {error_msg}")
+        output_lines = []
+        total_images = JOB_STATUS[job_id].get("total_images", 1)
+        prompts_count = JOB_STATUS[job_id].get("prompts_count", 1)
+        total_operations = total_images * prompts_count
+        completed_operations = 0
+
+        # Read output line by line to track progress
+        while True:
+            line = process.stdout.readline()
+            if not line and process.poll() is not None:
+                break
+
+            if line:
+                output_lines.append(line)
+                line_lower = line.lower()
+
+                # Parse progress from output
+                if 'processing' in line_lower or 'image' in line_lower:
+                    # Try to extract image number from output
+                    match = re.search(r'(?:image|processing)\s*(\d+)', line_lower)
+                    if match:
+                        current_image = int(match.group(1))
+                        completed_operations = current_image
+                        percent = min(10 + int((completed_operations / max(total_operations, 1)) * 80), 90)
+                        JOB_STATUS[job_id]["percent"] = percent
+                        JOB_STATUS[job_id]["message"] = f"Processing image {current_image} of {total_images}..."
+                        JOB_STATUS[job_id]["current_image"] = current_image
+
+                elif 'prompt' in line_lower:
+                    # Extract prompt being processed
+                    match = re.search(r'prompt[:\s]+(\w+)', line_lower)
+                    if match:
+                        current_prompt = match.group(1)
+                        JOB_STATUS[job_id]["message"] = f"Processing with prompt: {current_prompt}"
+
+                elif 'generating' in line_lower and 'report' in line_lower:
+                    JOB_STATUS[job_id]["percent"] = 90
+                    JOB_STATUS[job_id]["message"] = "Generating comparison report..."
+
+        # Get any remaining stderr
+        stderr_output = process.stderr.read()
+        output = ''.join(output_lines)
+
+        if process.returncode != 0:
+            error_msg = stderr_output or output or "Unknown error"
+            log_message(f"[Job {job_id}] Batch compare failed: {error_msg}", "ERROR")
+            JOB_STATUS[job_id]["status"] = "error"
+            JOB_STATUS[job_id]["error"] = f"Batch comparison failed: {error_msg}"
+            JOB_STATUS[job_id]["message"] = f"Error: Batch comparison failed"
+            return
 
         # Parse output to find report paths
-        output = result.stdout
         report_path = None
         csv_path = None
-
-        import re
 
         for line in output.split('\n'):
             if '.html' in line and 'prompt_comparison' in line:
@@ -2627,36 +2866,36 @@ async def batch_compare_prompts(request: Request):
                 if match:
                     csv_path = match.group(1)
 
-        # Count images processed
-        from pathlib import Path
-        images_path = Path(images_folder)
-        image_count = 0
-        if images_path.exists():
-            image_count = len(list(images_path.glob('*.jpg')) + list(images_path.glob('*.png')) +
-                             list(images_path.glob('*.gif')) + list(images_path.glob('*.webp')))
-
-        return {
+        # Mark as complete
+        JOB_STATUS[job_id]["status"] = "complete"
+        JOB_STATUS[job_id]["percent"] = 100
+        JOB_STATUS[job_id]["message"] = "Batch comparison complete!"
+        JOB_STATUS[job_id]["result"] = {
             "success": True,
             "report_path": report_path,
             "csv_path": csv_path,
             "summary": {
-                "total_images": image_count,
-                "prompts_compared": len(prompts),
+                "total_images": total_images,
+                "prompts_compared": prompts_count,
                 "languages": len(languages),
-                "processing_time_seconds": 0,  # Could parse from output
+                "processing_time_seconds": 0,
                 "success_rate": 100
             },
             "output": output
         }
 
-    except HTTPException:
-        raise
+        log_message(f"[Job {job_id}] Batch comparison complete. Report: {report_path}", "INFORMATION")
+
     except subprocess.TimeoutExpired:
-        log_message("Batch comparison timeout", "ERROR")
-        raise HTTPException(status_code=504, detail="Batch comparison timed out after 10 minutes")
+        log_message(f"[Job {job_id}] Batch comparison timeout", "ERROR")
+        JOB_STATUS[job_id]["status"] = "error"
+        JOB_STATUS[job_id]["error"] = "Batch comparison timed out"
+        JOB_STATUS[job_id]["message"] = "Error: Batch comparison timed out"
     except Exception as e:
-        log_message(f"Batch compare error: {str(e)}", "ERROR")
-        raise HTTPException(status_code=500, detail=str(e))
+        log_message(f"[Job {job_id}] Batch compare error: {str(e)}", "ERROR")
+        JOB_STATUS[job_id]["status"] = "error"
+        JOB_STATUS[job_id]["error"] = str(e)
+        JOB_STATUS[job_id]["message"] = f"Error: {str(e)}"
 
 @app.get("/api/alt-text-length-config")
 async def get_alt_text_length_config():
@@ -2732,16 +2971,62 @@ async def update_alt_text_length_config(config: AltTextLengthConfig):
     }
 
 
-# Root redirect to docs
-@app.get("/")
-async def root():
-    """Redirect to API documentation."""
-    return {
-        "message": "AutoAltText API",
-        "version": "5.0.1",
-        "docs": "/api/docs",
-        "health": "/api/health"
-    }
+# Serve static frontend files from FastAPI (same-origin for cookies to work)
+# This allows accessing the app on port 8000 where cookies are set
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Determine frontend directory
+frontend_dir = Path(__file__).parent.parent / 'frontend'
+if frontend_dir.exists():
+    # Mount assets directory for images, icons, and SVGs
+    assets_dir = frontend_dir / 'assets'
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    # Serve index.html at root and specific HTML pages
+    @app.get("/")
+    async def serve_root():
+        """Redirect root to home page."""
+        return RedirectResponse(url="/home.html")
+
+    @app.get("/{filename}.html")
+    async def serve_html(filename: str):
+        """Serve HTML files from frontend directory."""
+        file_path = frontend_dir / f"{filename}.html"
+        if file_path.exists():
+            return FileResponse(str(file_path), media_type="text/html")
+        return {"error": f"Page {filename}.html not found"}
+
+    @app.get("/{filename}.js")
+    async def serve_js(filename: str):
+        """Serve JavaScript files from frontend directory."""
+        file_path = frontend_dir / f"{filename}.js"
+        if file_path.exists():
+            return FileResponse(str(file_path), media_type="application/javascript")
+        return {"error": f"Script {filename}.js not found"}
+
+    @app.get("/{filename}.css")
+    async def serve_css(filename: str):
+        """Serve CSS files from frontend directory."""
+        file_path = frontend_dir / f"{filename}.css"
+        if file_path.exists():
+            return FileResponse(str(file_path), media_type="text/css")
+        return {"error": f"Style {filename}.css not found"}
+
+    print(f"[API] Frontend served from: {frontend_dir}")
+    print(f"[API] Access application at: http://localhost:8000/home.html (same-origin, cookies work)")
+else:
+    # Fallback: show API info at root
+    @app.get("/")
+    async def root():
+        """Redirect to API documentation."""
+        return {
+            "message": "AutoAltText API",
+            "version": "5.0.1",
+            "docs": "/api/docs",
+            "health": "/api/health"
+        }
 
 
 if __name__ == "__main__":

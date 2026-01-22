@@ -71,3 +71,21 @@ textarea:focus-visible,
     border-color: #6a6a6a !important;
     opacity: 0.6;
 }
+
+/* Burger menu - ensure it stays fixed in top right corner */
+.nav-fab,
+#menuToggle {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    z-index: 1080 !important;
+}
+
+/* Error messages container - ensure it doesn't overlap with burger menu */
+#errorMessages {
+    padding-right: 70px; /* Space for the fixed burger menu button */
+}
+
+#errorMessages .alert {
+    margin-right: 0;
+}

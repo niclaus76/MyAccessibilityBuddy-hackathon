@@ -9,22 +9,8 @@
 (function() {
     'use strict';
 
-    // API Configuration
-    const currentProtocol = window.location.protocol;
-    const currentHost = window.location.hostname;
-    const currentPort = window.location.port;
-
-    let API_BASE_URL;
-    if (currentPort === '8080') {
-        // Frontend is on 8080, backend is on 8000
-        API_BASE_URL = `${currentProtocol}//${currentHost}:8000/api`;
-    } else if (currentPort === '8000') {
-        // Accessing backend directly
-        API_BASE_URL = '/api';
-    } else {
-        // Production with reverse proxy - use relative path
-        API_BASE_URL = '/api';
-    }
+    // API Configuration - use relative path (frontend and API served from same origin)
+    const API_BASE_URL = '/api';
 
     // DOM Elements
     const promptSelect = document.getElementById('promptSelect');
@@ -79,6 +65,8 @@
     let configDefaults = {};
     let timeEstimation = {};
     let currentAbortController = null;
+    let currentJobId = null;
+    let pollInterval = null;
 
     // Initialize
     function init() {
@@ -516,6 +504,14 @@
 
         generateBtn.disabled = true;
 
+        // Reset duration timer
+        if (estimatePreview) {
+            estimatePreview.textContent = '(time: --:--)';
+        }
+        if (progressEstimate) {
+            progressEstimate.textContent = 'Estimated time: --:--';
+        }
+
         announceToScreenReader('Form cleared');
     }
 
@@ -577,9 +573,9 @@
             const uploadData = await uploadResponse.json();
             console.log('[PROMPT-OPT] Upload response:', uploadData);
 
-            updateProgress(15, 'Initializing batch comparison...');
+            updateProgress(10, 'Starting batch comparison...');
 
-            // Step 2: Call batch compare API with uploaded folder paths
+            // Step 2: Call batch compare API (now async with polling)
             const requestData = {
                 prompts: selectedPrompts,
                 images_folder: uploadData.images_folder,
@@ -609,39 +605,44 @@
                 signal: currentAbortController.signal
             });
 
-            updateProgress(30, 'Processing images with each prompt...');
-
             if (!response.ok) {
-                // Clone the response so we can read it multiple times if needed
                 const responseClone = response.clone();
                 let errorData;
                 try {
                     errorData = await response.json();
                 } catch (jsonError) {
-                    // Response is not JSON, try to get text from the clone
                     const errorText = await responseClone.text();
                     throw new Error(errorText || `Server error: ${response.status}`);
                 }
                 throw new Error(errorData.detail || errorData.error || `Server error: ${response.status}`);
             }
 
-            updateProgress(60, 'Generating comparison metrics...');
+            const startData = await response.json();
+            console.log('[PROMPT-OPT] Job started:', startData);
 
-            const data = await response.json();
-            console.log('[PROMPT-OPT] Comparison response:', data);
+            if (!startData.job_id) {
+                throw new Error('No job ID returned from server');
+            }
 
-            updateProgress(80, 'Compiling HTML report...');
+            currentJobId = startData.job_id;
+            updateProgress(15, 'Processing images with each prompt...');
 
-            // Simulate progress for user feedback
-            await new Promise(resolve => setTimeout(resolve, 500));
-            updateProgress(100, 'Comparison complete!');
+            // Step 3: Poll for job status
+            const result = await pollJobStatus(currentJobId);
+
+            if (result.status === 'error') {
+                throw new Error(result.error || 'Batch comparison failed');
+            }
+
+            // Extract result data
+            const data = result.result || result;
+            console.log('[PROMPT-OPT] Comparison complete:', data);
 
             // Store report data
             currentReportPath = data.report_path || null;
             currentCsvPath = data.csv_path || null;
 
             // Show results
-            await new Promise(resolve => setTimeout(resolve, 500));
             showResults(data);
 
             announceToScreenReader('Comparison completed successfully. Report is ready.');
@@ -658,9 +659,69 @@
             }
         } finally {
             currentAbortController = null;
+            currentJobId = null;
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
             setFormState(true);
             showProgress(false);
         }
+    }
+
+    // Poll for job status until complete or error
+    async function pollJobStatus(jobId) {
+        return new Promise((resolve, reject) => {
+            const poll = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/job-status/${jobId}`, {
+                        signal: currentAbortController?.signal
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to get job status: ${response.status}`);
+                    }
+
+                    const status = await response.json();
+                    console.log('[PROMPT-OPT] Job status:', status);
+
+                    // Update progress bar
+                    const percent = status.percent || 0;
+                    const message = status.message || 'Processing...';
+                    updateProgress(percent, message);
+
+                    if (status.status === 'complete') {
+                        if (pollInterval) {
+                            clearInterval(pollInterval);
+                            pollInterval = null;
+                        }
+                        resolve(status);
+                    } else if (status.status === 'error') {
+                        if (pollInterval) {
+                            clearInterval(pollInterval);
+                            pollInterval = null;
+                        }
+                        reject(new Error(status.error || 'Job failed'));
+                    }
+                    // Otherwise continue polling
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        if (pollInterval) {
+                            clearInterval(pollInterval);
+                            pollInterval = null;
+                        }
+                        reject(error);
+                    } else {
+                        console.error('[PROMPT-OPT] Poll error:', error);
+                        // Continue polling on transient errors
+                    }
+                }
+            };
+
+            // Poll immediately, then every 2 seconds
+            poll();
+            pollInterval = setInterval(poll, 2000);
+        });
     }
 
     // Get Selected Languages
@@ -730,19 +791,13 @@
     }
 
     function formatDuration(seconds) {
-        if (!Number.isFinite(seconds) || seconds <= 0) return '--';
+        if (!Number.isFinite(seconds) || seconds <= 0) return '--:--';
         const rounded = Math.round(seconds);
         const mins = Math.floor(rounded / 60);
         const secs = rounded % 60;
-        if (mins >= 60) {
-            const hours = Math.floor(mins / 60);
-            const remMins = mins % 60;
-            return `${hours}h ${remMins}m`;
-        }
-        if (mins > 0) {
-            return `${mins}m ${secs}s`;
-        }
-        return `${secs}s`;
+        const mm = String(mins).padStart(2, '0');
+        const ss = String(secs).padStart(2, '0');
+        return `${mm}:${ss}`;
     }
 
     function getProviderCategory(provider) {
@@ -839,7 +894,7 @@
             progressEstimate.textContent = `Estimated time: ~${duration}`;
         }
         if (estimatePreview) {
-            estimatePreview.textContent = `(~${duration})`;
+            estimatePreview.textContent = `(duration: ${duration})`;
         }
     }
 
@@ -856,30 +911,82 @@
         }
 
         if (!enabled) {
-            // Show "Generate..." with spinner during processing
+            // Show "Generate..." with spinner during processing, hide duration estimate
             btnText.textContent = 'Generate...';
             btnSpinner.classList.remove('d-none');
+            if (estimatePreview) {
+                estimatePreview.classList.add('d-none');
+            }
         } else {
             btnText.textContent = 'Generate';
             btnSpinner.classList.add('d-none');
+            if (estimatePreview) {
+                estimatePreview.classList.remove('d-none');
+            }
             validateSelections(); // Re-validate after re-enabling
         }
     }
 
     // Stop comparison and clear session data for a clean state
     async function stopComparison() {
+        // Show spinner on stop button
+        const stopIcon = document.getElementById('stopIcon');
+        const stopSpinner = document.getElementById('stopSpinner');
+        const stopBtnText = document.getElementById('stopBtnText');
+        if (stopIcon) stopIcon.classList.add('d-none');
+        if (stopSpinner) stopSpinner.classList.remove('d-none');
+        if (stopBtnText) stopBtnText.textContent = 'Stopping...';
+        if (stopComparisonBtn) stopComparisonBtn.disabled = true;
+
+        // Update progress to show stopping
+        updateProgress(10, 'Stopping comparison...');
+        announceToScreenReader('Stopping comparison and clearing session data');
+
+        // Clear polling interval first
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+
         if (currentAbortController) {
             currentAbortController.abort();
             currentAbortController = null;
+            updateProgress(30, 'Aborting current request...');
         }
+
+        currentJobId = null;
+
+        // Small delay for visual feedback
+        await new Promise(resolve => setTimeout(resolve, 200));
+        updateProgress(50, 'Clearing session data...');
+
         // Clear session data to start from a clean state
-        await clearSessionData();
+        try {
+            await clearSessionData();
+            updateProgress(80, 'Session data cleared');
+        } catch (error) {
+            console.error('[PROMPT-OPT] Failed to clear session data:', error);
+            updateProgress(80, 'Session cleanup attempted');
+        }
+
         currentReportPath = null;
+
+        updateProgress(100, 'Comparison stopped');
+
+        // Small delay before hiding progress
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         showProgress(false);
         resultsSection.style.display = 'none';
         showError('Comparison stopped and session data cleared');
         setFormState(true);
         announceToScreenReader('Comparison stopped and session data cleared');
+
+        // Reset stop button
+        if (stopIcon) stopIcon.classList.remove('d-none');
+        if (stopSpinner) stopSpinner.classList.add('d-none');
+        if (stopBtnText) stopBtnText.textContent = 'Stop';
+        if (stopComparisonBtn) stopComparisonBtn.disabled = true;
     }
 
     // View Report in New Tab
