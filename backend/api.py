@@ -1759,10 +1759,10 @@ async def analyze_page(request: Request):
         # Build command line arguments
         cmd_args = ['-w', '--url', url, '--report']
 
-        # Add languages
+        # Add languages - use single --language flag with multiple values (argparse nargs='+')
         if languages and isinstance(languages, list):
-            for lang in languages:
-                cmd_args.extend(['--language', lang])
+            cmd_args.append('--language')
+            cmd_args.extend(languages)
 
         # Add num_images if specified
         if num_images is not None:
@@ -2102,6 +2102,7 @@ def _run_analysis_with_progress(job_id: str, data: dict):
     import json
     import re
     import time
+    import threading
 
     url = data.get('url')
     languages = data.get('languages', ['en'])
@@ -2143,10 +2144,10 @@ def _run_analysis_with_progress(job_id: str, data: dict):
     # Add progress file argument
     cmd_args.extend(['--progress-file', str(progress_file)])
 
-    # Add languages
+    # Add languages - use single --language flag with multiple values (argparse nargs='+')
     if languages and isinstance(languages, list):
-        for lang in languages:
-            cmd_args.extend(['--language', lang])
+        cmd_args.append('--language')
+        cmd_args.extend(languages)
 
     # Add num_images if specified
     if num_images is not None:
@@ -2188,7 +2189,7 @@ def _run_analysis_with_progress(job_id: str, data: dict):
     JOB_STATUS[job_id]["percent"] = 10
     JOB_STATUS[job_id]["message"] = "Fetching web page..."
 
-    # Start subprocess
+    # Start subprocess with pipes
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -2196,8 +2197,25 @@ def _run_analysis_with_progress(job_id: str, data: dict):
         text=True
     )
 
+    # Use threads to consume stdout/stderr to prevent buffer deadlock
+    # (subprocess can block if pipe buffers fill up)
+    stdout_lines = []
+    stderr_lines = []
+
+    def read_stdout():
+        for line in process.stdout:
+            stdout_lines.append(line)
+
+    def read_stderr():
+        for line in process.stderr:
+            stderr_lines.append(line)
+
+    stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+    stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+
     # Poll for progress while process runs
-    last_progress_check = 0
     while process.poll() is None:
         time.sleep(0.5)  # Check every 500ms
 
@@ -2222,11 +2240,14 @@ def _run_analysis_with_progress(job_id: str, data: dict):
             except (json.JSONDecodeError, IOError):
                 pass  # Progress file might be being written
 
-    # Process completed - get output
-    stdout, stderr = process.communicate()
-    output = stdout
-    if stderr:
-        output = f"{output}\n{stderr}"
+    # Wait for reader threads to finish
+    stdout_thread.join(timeout=5)
+    stderr_thread.join(timeout=5)
+
+    # Get collected output
+    output = ''.join(stdout_lines)
+    if stderr_lines:
+        output = f"{output}\n{''.join(stderr_lines)}"
 
     # Clean up progress file
     try:
@@ -2760,9 +2781,9 @@ def _run_batch_compare_with_progress(job_id: str, data: dict):
     if context_folder:
         cmd.extend(['--context-folder', context_folder])
 
-    # Add languages
-    for lang in languages:
-        cmd.extend(['--language', lang])
+    # Add languages - use single --language flag with multiple values (argparse nargs='+')
+    cmd.append('--language')
+    cmd.extend(languages)
 
     # Add prompts
     cmd.append('--prompts')
@@ -2829,11 +2850,11 @@ def _run_batch_compare_with_progress(job_id: str, data: dict):
                         JOB_STATUS[job_id]["message"] = f"Processing image {current_image} of {total_images}..."
                         JOB_STATUS[job_id]["current_image"] = current_image
 
-                elif 'prompt' in line_lower:
-                    # Extract prompt being processed
-                    match = re.search(r'prompt[:\s]+(\w+)', line_lower)
+                elif 'processing with:' in line_lower:
+                    # Extract prompt label being processed (format: "Processing with: prompt_name (x/y)")
+                    match = re.search(r'processing with:\s*([^\(]+)', line, re.IGNORECASE)
                     if match:
-                        current_prompt = match.group(1)
+                        current_prompt = match.group(1).strip()
                         JOB_STATUS[job_id]["message"] = f"Processing with prompt: {current_prompt}"
 
                 elif 'generating' in line_lower and 'report' in line_lower:

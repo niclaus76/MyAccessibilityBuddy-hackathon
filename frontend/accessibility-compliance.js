@@ -524,7 +524,13 @@
         resultsSection.style.display = 'none';
 
         currentAbortController = new AbortController();
-        const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15).replace(/(\d{8})(\d{6})/, '$1-$2');
+        const now = new Date();
+        const timestamp = now.getFullYear().toString() +
+            String(now.getMonth() + 1).padStart(2, '0') +
+            String(now.getDate()).padStart(2, '0') + '-' +
+            String(now.getHours()).padStart(2, '0') +
+            String(now.getMinutes()).padStart(2, '0') +
+            String(now.getSeconds()).padStart(2, '0');
         currentSessionId = `${timestamp}-${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 10)}`;
 
         try {

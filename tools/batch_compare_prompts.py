@@ -815,15 +815,32 @@ def generate_html_report(all_results: Dict[str, Dict[str, Dict[str, str]]], outp
 
     # Generate comparison for each image
     for image in sorted_images:
-        # Construct image path for display (relative to report location)
-        image_path = f"../../input/images/{image}"
+        # Try to embed image as base64 for self-contained report
+        image_html = ""
+        image_file_path = IMAGES_DIR / image
+        if image_file_path.exists():
+            try:
+                import base64
+                import mimetypes
+                mime_type, _ = mimetypes.guess_type(str(image_file_path))
+                if mime_type and mime_type.startswith('image/'):
+                    with open(image_file_path, 'rb') as img_file:
+                        img_base64 = base64.b64encode(img_file.read()).decode('utf-8')
+                        image_html = f'<img src="data:{mime_type};base64,{img_base64}" alt="Test image: {image}" class="image-preview">'
+            except Exception as e:
+                print(f"Warning: Could not embed image {image}: {e}")
+                # Fallback to relative path
+                image_html = f'<img src="../../input/images/{image}" alt="Test image: {image}" class="image-preview" onerror="this.style.display=\'none\'">'
+        else:
+            # Fallback to relative path if file not found
+            image_html = f'<img src="../../input/images/{image}" alt="Test image: {image}" class="image-preview" onerror="this.style.display=\'none\'">'
 
         html_content += f"""
     <article class="image-card" role="article" aria-labelledby="image-{image.replace('.', '-')}">
         <h3 id="image-{image.replace('.', '-')}">{image}</h3>
 
         <div class="field">
-            <img src="{image_path}" alt="Test image: {image}" class="image-preview" onerror="this.style.display='none'">
+            {image_html}
         </div>
 
         <table class="comparison-table">

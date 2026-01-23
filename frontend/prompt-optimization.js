@@ -365,10 +365,10 @@
             // Update helper text with first folder hint
             const firstFolder = availableTestFolders[0];
             if (firstFolder && imageHelp) {
-                imageHelp.textContent = `Choose one or more image files to load test images (e.g., ${firstFolder.path}).`;
+                imageHelp.textContent = `Choose one or more image files to load test images.`;
             }
             if (firstFolder && contextHelp) {
-                contextHelp.textContent = `Select context .txt files (usually in ${firstFolder.context_folder || 'test/input/context'}). They are matched by filename automatically.`;
+                contextHelp.textContent = `Select context .txt files. They are matched by filename automatically.`;
             }
         } catch (error) {
             console.error('[PROMPT-OPT] Error loading test folders:', error);
@@ -488,6 +488,25 @@
         Array.from(languageSelect.options).forEach(option => {
             option.selected = (option.value === 'en');
         });
+
+        // Reset all checkboxes/toggles
+        if (advancedOptionsToggle) {
+            advancedOptionsToggle.checked = false;
+            advancedOptionsToggle.setAttribute('aria-checked', 'false');
+        }
+        if (translationModeToggle) {
+            translationModeToggle.checked = false;
+            translationModeToggle.setAttribute('aria-checked', 'false');
+        }
+        if (geoBoostToggle) {
+            geoBoostToggle.checked = false;
+            geoBoostToggle.setAttribute('aria-checked', 'false');
+        }
+
+        // Collapse advanced options section
+        if (advancedOptionsDiv) {
+            advancedOptionsDiv.style.display = 'none';
+        }
 
         imageCount.style.display = 'none';
         imageCount.classList.remove('bg-warning');
