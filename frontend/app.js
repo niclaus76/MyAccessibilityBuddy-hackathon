@@ -982,7 +982,7 @@
                     // Create download link
                     const url = window.URL.createObjectURL(blob);
                     const timestamp = new Date().toISOString().slice(0,19).replace(/:/g,'-');
-                    const filename = `webmaster-report-${timestamp}.html`;
+                    const filename = `${timestamp}-webmaster-report.html`;
 
                     const a = document.createElement('a');
                     a.href = url;

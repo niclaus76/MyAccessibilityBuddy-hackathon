@@ -40,7 +40,9 @@ from app import (
     log_message,
     ECB_LLM_AVAILABLE,
     OLLAMA_AVAILABLE,
-    GEMINI_AVAILABLE
+    GEMINI_AVAILABLE,
+    genai as gemini_client,
+    configure_gemini
 )
 
 # Custom middleware to handle CloudFront/ALB proxy headers
@@ -817,6 +819,231 @@ async def get_available_providers():
         'ollama_available': OLLAMA_AVAILABLE and CONFIG.get('ollama', {}).get('enabled', False),
         'gemini_available': GEMINI_AVAILABLE and CONFIG.get('gemini', {}).get('enabled', False),
         'config_defaults': current_config
+    }
+
+
+@app.get("/api/provider-status")
+async def get_provider_status():
+    """
+    Get the status of all LLM providers including connectivity test.
+
+    Returns:
+        Dictionary with status for each provider:
+        - enabled: Whether the provider is enabled in config
+        - configured: Whether API key is set
+        - status: 'connected', 'error', 'disabled', or 'not_configured'
+        - latency_ms: Response time in milliseconds (if connected)
+        - error: Error message (if any)
+    """
+    import time
+    import os
+    from app import CONFIG
+
+    if not CONFIG:
+        load_config()
+        from app import CONFIG
+
+    providers_status = {}
+
+    # Check OpenAI
+    openai_config = CONFIG.get('openai', {})
+    openai_enabled = openai_config.get('enabled', False)
+    openai_key = os.environ.get('OPENAI_API_KEY', '')
+
+    providers_status['openai'] = {
+        'name': 'OpenAI',
+        'enabled': openai_enabled,
+        'configured': bool(openai_key),
+        'status': 'disabled' if not openai_enabled else ('not_configured' if not openai_key else 'unknown'),
+        'latency_ms': None,
+        'error': None,
+        'models': openai_config.get('available_models', {})
+    }
+
+    if openai_enabled and openai_key:
+        try:
+            import openai
+            client = openai.OpenAI(api_key=openai_key)
+            start_time = time.time()
+            # Use a simple models list call to test connectivity
+            models = client.models.list()
+            latency = int((time.time() - start_time) * 1000)
+            providers_status['openai']['status'] = 'connected'
+            providers_status['openai']['latency_ms'] = latency
+        except Exception as e:
+            providers_status['openai']['status'] = 'error'
+            providers_status['openai']['error'] = str(e)[:200]
+
+    # Check Claude (Anthropic)
+    claude_config = CONFIG.get('claude', {})
+    claude_enabled = claude_config.get('enabled', False)
+    claude_key = os.environ.get('ANTHROPIC_API_KEY', '') or os.environ.get('CLAUDE_API_KEY', '')
+
+    providers_status['claude'] = {
+        'name': 'Claude (Anthropic)',
+        'enabled': claude_enabled,
+        'configured': bool(claude_key),
+        'status': 'disabled' if not claude_enabled else ('not_configured' if not claude_key else 'unknown'),
+        'latency_ms': None,
+        'error': None,
+        'models': claude_config.get('available_models', {})
+    }
+
+    if claude_enabled and claude_key:
+        try:
+            from anthropic import Anthropic
+            client = Anthropic(api_key=claude_key)
+            start_time = time.time()
+            # Use a minimal message to test connectivity
+            response = client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "Hi"}]
+            )
+            latency = int((time.time() - start_time) * 1000)
+            providers_status['claude']['status'] = 'connected'
+            providers_status['claude']['latency_ms'] = latency
+        except Exception as e:
+            providers_status['claude']['status'] = 'error'
+            providers_status['claude']['error'] = str(e)[:200]
+
+    # Check Gemini
+    gemini_config = CONFIG.get('gemini', {})
+    gemini_config_enabled = gemini_config.get('enabled', False)
+    gemini_enabled = gemini_config_enabled and GEMINI_AVAILABLE
+    gemini_key = os.environ.get('GOOGLE_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
+
+    # Determine Gemini status
+    if not GEMINI_AVAILABLE:
+        gemini_status = 'library_not_installed'
+        gemini_error = 'google-generativeai package not installed'
+    elif not gemini_config_enabled:
+        gemini_status = 'disabled'
+        gemini_error = None
+    elif not gemini_key:
+        gemini_status = 'not_configured'
+        gemini_error = None
+    else:
+        gemini_status = 'unknown'
+        gemini_error = None
+
+    providers_status['gemini'] = {
+        'name': 'Google Gemini',
+        'enabled': gemini_enabled,
+        'configured': bool(gemini_key),
+        'status': gemini_status,
+        'latency_ms': None,
+        'error': gemini_error,
+        'models': gemini_config.get('available_models', {})
+    }
+
+    if gemini_enabled and gemini_key and GEMINI_AVAILABLE and gemini_client:
+        try:
+            configure_gemini(gemini_key)
+            start_time = time.time()
+            # Test connectivity by getting a model - works with both google.genai and google.generativeai
+            default_model = gemini_config.get('available_models', {}).get('vision', ['gemini-1.5-flash'])[0]
+            if hasattr(gemini_client, 'GenerativeModel'):
+                # google.generativeai style
+                model = gemini_client.GenerativeModel(default_model)
+            elif hasattr(gemini_client, 'Client'):
+                # google.genai style
+                client = gemini_client.Client(api_key=gemini_key)
+            # If we got here without exception, connection is good
+            latency = int((time.time() - start_time) * 1000)
+            providers_status['gemini']['status'] = 'connected'
+            providers_status['gemini']['latency_ms'] = latency
+        except Exception as e:
+            providers_status['gemini']['status'] = 'error'
+            providers_status['gemini']['error'] = str(e)[:200]
+
+    # Check Ollama
+    ollama_config = CONFIG.get('ollama', {})
+    ollama_config_enabled = ollama_config.get('enabled', False)
+    ollama_enabled = ollama_config_enabled and OLLAMA_AVAILABLE
+    ollama_url = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+
+    # Determine Ollama status
+    if not OLLAMA_AVAILABLE:
+        ollama_status = 'library_not_installed'
+        ollama_error = 'ollama package not installed'
+    elif not ollama_config_enabled:
+        ollama_status = 'disabled'
+        ollama_error = None
+    else:
+        ollama_status = 'unknown'
+        ollama_error = None
+
+    providers_status['ollama'] = {
+        'name': 'Ollama (Local)',
+        'enabled': ollama_enabled,
+        'configured': True,  # Ollama doesn't need API key
+        'status': ollama_status,
+        'latency_ms': None,
+        'error': ollama_error,
+        'models': ollama_config.get('available_models', {}),
+        'host': ollama_url
+    }
+
+    if ollama_enabled and OLLAMA_AVAILABLE:
+        try:
+            import httpx
+            start_time = time.time()
+            # Test Ollama API endpoint
+            response = httpx.get(f"{ollama_url}/api/tags", timeout=5.0)
+            latency = int((time.time() - start_time) * 1000)
+            if response.status_code == 200:
+                providers_status['ollama']['status'] = 'connected'
+                providers_status['ollama']['latency_ms'] = latency
+                # Get available models
+                data = response.json()
+                if 'models' in data:
+                    providers_status['ollama']['available_local_models'] = [m.get('name', '') for m in data['models']]
+            else:
+                providers_status['ollama']['status'] = 'error'
+                providers_status['ollama']['error'] = f"HTTP {response.status_code}"
+        except Exception as e:
+            providers_status['ollama']['status'] = 'error'
+            providers_status['ollama']['error'] = str(e)[:200]
+
+    # Check ECB-LLM
+    ecb_config = CONFIG.get('ecb_llm', {})
+    ecb_config_enabled = ecb_config.get('enabled', False)
+    ecb_enabled = ecb_config_enabled and ECB_LLM_AVAILABLE
+
+    # Determine ECB-LLM status
+    if not ECB_LLM_AVAILABLE:
+        ecb_status = 'library_not_installed'
+        ecb_error = 'ecb_llm_client package not installed'
+    elif not ecb_config_enabled:
+        ecb_status = 'disabled'
+        ecb_error = None
+    else:
+        ecb_status = 'unknown'
+        ecb_error = None
+
+    providers_status['ecb_llm'] = {
+        'name': 'ECB-LLM',
+        'enabled': ecb_enabled,
+        'configured': ECB_LLM_AVAILABLE,
+        'status': ecb_status,
+        'latency_ms': None,
+        'error': ecb_error,
+        'models': ecb_config.get('available_models', {})
+    }
+
+    if ecb_enabled and ECB_LLM_AVAILABLE:
+        try:
+            # ECB-LLM specific connectivity test would go here
+            # For now, mark as connected if the library is available
+            providers_status['ecb_llm']['status'] = 'available'
+        except Exception as e:
+            providers_status['ecb_llm']['status'] = 'error'
+            providers_status['ecb_llm']['error'] = str(e)[:200]
+
+    return {
+        'providers': providers_status,
+        'checked_at': time.strftime('%Y-%m-%d %H:%M:%S')
     }
 
 

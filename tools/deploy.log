@@ -1,88 +1,88 @@
-2026-01-24 08:39:54 [INFO] DEBUG MODE - Detailed progress messages
-2026-01-24 08:39:54 [INFO] Mode: FULL DEPLOYMENT (Backend + Frontend)
-2026-01-24 08:39:54 [INFO] Docker image tag: latest
-2026-01-24 08:40:01 [INFO] Starting parallel deployment: Backend + Frontend
-2026-01-24 08:40:01 [DEBUG] ECR registry: 514201995752.dkr.ecr.eu-central-1.amazonaws.com
-2026-01-24 08:40:01 [DEBUG] Frontend directory: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy/frontend
-2026-01-24 08:40:01 [DEBUG] ECR repository: myaccessibilitybuddy-api
-2026-01-24 08:40:01 [DEBUG] S3 bucket: myaccessibilitybuddy-frontend-1
-2026-01-24 08:40:01 [DEBUG] Image tag: latest
-2026-01-24 08:40:01 [INFO] Checking prerequisites...
-2026-01-24 08:40:01 [DEBUG] AWS region: eu-central-1
-2026-01-24 08:40:01 [DEBUG] Checking for required tools: docker, aws, jq
-2026-01-24 08:40:01 [INFO] Analyzing changes...
-2026-01-24 08:40:01 [DEBUG] Running S3 sync --dryrun to detect changes...
-2026-01-24 08:40:01 [DEBUG] Docker: found (Docker version 29.1.3, build f52814d)
-2026-01-24 08:40:02 [DEBUG] AWS CLI: found (aws-cli/2.32.26 Python/3.13.11 Linux/6.14.0-37-generic exe/aarch64.ubuntu.24)
-2026-01-24 08:40:02 [DEBUG] jq: found (jq-1.7)
-2026-01-24 08:40:03 [DEBUG] S3 dryrun completed
-2026-01-24 08:40:03 [DEBUG] Counting file changes...
-2026-01-24 08:40:03 [DEBUG] Upload count: 8, Delete count: 1
-2026-01-24 08:40:03 [INFO] Frontend changes detected:
-2026-01-24 08:40:03 [INFO] Syncing to S3...
-2026-01-24 08:40:03 [DEBUG] Uploading 8 files, deleting 1 files...
-2026-01-24 08:40:04 [SUCCESS] All prerequisites satisfied
-2026-01-24 08:40:04 [DEBUG] Build directory: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy
-2026-01-24 08:40:04 [DEBUG] Changing to build directory...
-2026-01-24 08:40:04 [DEBUG] Found backend/.env file
-2026-01-24 08:40:04 [INFO] Building Docker image...
-2026-01-24 08:40:04 [INFO] Build context: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy
-2026-01-24 08:40:04 [DEBUG] Docker build command: docker build -t myaccessibilitybuddy-api:latest .
-2026-01-24 08:40:06 [SUCCESS] Frontend synced to S3
-2026-01-24 08:40:06 [DEBUG] S3 sync completed successfully
-2026-01-24 08:40:06 [DEBUG] CloudFront distribution ID: E1INLYHYA11V49
-2026-01-24 08:40:06 [INFO] Creating targeted invalidation for 9 file(s)
-2026-01-24 08:40:06 [DEBUG] Invalidation paths: /*
-2026-01-24 08:40:06 [DEBUG] Creating CloudFront invalidation...
-2026-01-24 08:40:08 [SUCCESS] CloudFront invalidation created: I1283SGL3FZBX0NOQ9JJ7A87U
-2026-01-24 08:40:08 [DEBUG] Invalidation ID: I1283SGL3FZBX0NOQ9JJ7A87U
-2026-01-24 08:40:08 [WARNING] Cache clearing takes 5-15 minutes to complete
-2026-01-24 08:40:08 [INFO] Checking invalidation status...
-2026-01-24 08:40:08 [INFO] Distribution: E1INLYHYA11V49
-2026-01-24 08:40:08 [INFO] Fetching invalidations...
-2026-01-24 08:40:09 [SUCCESS] Found 51 invalidation(s)
-2026-01-24 08:40:12 [WARNING] Latest invalidation is still in progress
-2026-01-24 08:40:12 [INFO] This typically takes 5-15 minutes
-2026-01-24 08:40:12 [INFO] Monitor again with:
-2026-01-24 08:40:14 [SUCCESS] Docker image built successfully
-2026-01-24 08:40:14 [DEBUG] Image: myaccessibilitybuddy-api:latest
-2026-01-24 08:40:14 [INFO] Testing container locally...
-2026-01-24 08:40:14 [DEBUG] Cleaning up any existing test container...
-2026-01-24 08:40:14 [DEBUG] Checking if port 8000 is available...
-2026-01-24 08:40:15 [INFO] Starting test container...
-2026-01-24 08:40:15 [DEBUG] Running: docker run -d --name mab-test -p 8000:8000 myaccessibilitybuddy-api:latest
-2026-01-24 08:40:16 [WARNING] Could not start test container
-2026-01-24 08:40:16 [INFO] Port 8000 is in use (race condition)
-2026-01-24 08:40:16 [INFO] Continuing with deployment...
-2026-01-24 08:40:16 [INFO] Logging into AWS ECR...
-2026-01-24 08:40:16 [DEBUG] ECR registry: 514201995752.dkr.ecr.eu-central-1.amazonaws.com, Region: eu-central-1
-2026-01-24 08:40:17 [SUCCESS] ECR login successful
-2026-01-24 08:40:17 [INFO] Tagging image for ECR...
-2026-01-24 08:40:17 [DEBUG] Tagging: myaccessibilitybuddy-api:latest → 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
-2026-01-24 08:40:17 [INFO] Pushing image to ECR...
-2026-01-24 08:40:17 [DEBUG] Pushing: 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
-2026-01-24 08:40:29 [SUCCESS] Image pushed to ECR successfully
-2026-01-24 08:40:29 [DEBUG] Image available at: 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
-2026-01-24 08:40:29 [INFO] Cluster: myaccessibilitybuddy-cluster
-2026-01-24 08:40:29 [INFO] Service: myaccessibilitybuddy-service
-2026-01-24 08:40:29 [INFO] Image:   514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
-2026-01-24 08:40:29 [DEBUG] Task family: myaccessibilitybuddy-task
-2026-01-24 08:40:29 [DEBUG] AWS region: eu-central-1
-2026-01-24 08:40:29 [INFO] Retrieving current task definition...
-2026-01-24 08:40:29 [DEBUG] Running: aws ecs describe-services --cluster myaccessibilitybuddy-cluster --services myaccessibilitybuddy-service
-2026-01-24 08:40:30 [SUCCESS] Current task: arn:aws:ecs:eu-central-1:514201995752:task-definition/myaccessibilitybuddy-task:47
-2026-01-24 08:40:30 [DEBUG] Fetching full task definition details...
-2026-01-24 08:40:31 [DEBUG] Task definition retrieved successfully
-2026-01-24 08:40:31 [INFO] Creating new task definition with updated image...
-2026-01-24 08:40:31 [DEBUG] Updating container image to: 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
-2026-01-24 08:40:31 [INFO] Registering new task definition...
-2026-01-24 08:40:32 [SUCCESS] New task definition registered: revision 48
-2026-01-24 08:40:32 [INFO] Updating ECS service...
-2026-01-24 08:40:33 [SUCCESS] Service update initiated
-2026-01-24 08:40:33 [INFO] Monitoring deployment progress...
-2026-01-24 08:40:33 [WARNING] This may take 2-5 minutes. Press Ctrl+C to skip monitoring.
-2026-01-24 08:43:27 [SUCCESS] Deployment completed successfully!
-2026-01-24 08:43:27 [INFO] Fetching service endpoint...
-2026-01-24 08:43:31 [SUCCESS] All parallel deployments completed successfully!
-2026-01-24 08:43:31 [WARNING] CloudFront cache clearing takes 5-15 minutes
-2026-01-24 08:43:31 [SUCCESS] Done!
+2026-01-24 17:31:01 [INFO] DEBUG MODE - Detailed progress messages
+2026-01-24 17:31:01 [INFO] Mode: FULL DEPLOYMENT (Backend + Frontend)
+2026-01-24 17:31:01 [INFO] Docker image tag: latest
+2026-01-24 17:31:03 [INFO] Starting parallel deployment: Backend + Frontend
+2026-01-24 17:31:03 [DEBUG] ECR registry: 514201995752.dkr.ecr.eu-central-1.amazonaws.com
+2026-01-24 17:31:03 [DEBUG] ECR repository: myaccessibilitybuddy-api
+2026-01-24 17:31:03 [DEBUG] Image tag: latest
+2026-01-24 17:31:03 [DEBUG] Frontend directory: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy/frontend
+2026-01-24 17:31:03 [DEBUG] S3 bucket: myaccessibilitybuddy-frontend-1
+2026-01-24 17:31:03 [INFO] Checking prerequisites...
+2026-01-24 17:31:03 [DEBUG] Checking for required tools: docker, aws, jq
+2026-01-24 17:31:03 [DEBUG] AWS region: eu-central-1
+2026-01-24 17:31:03 [INFO] Analyzing changes...
+2026-01-24 17:31:03 [DEBUG] Running S3 sync --dryrun to detect changes...
+2026-01-24 17:31:03 [DEBUG] Docker: found (Docker version 29.1.3, build f52814d)
+2026-01-24 17:31:04 [DEBUG] AWS CLI: found (aws-cli/2.32.26 Python/3.13.11 Linux/6.14.0-37-generic exe/aarch64.ubuntu.24)
+2026-01-24 17:31:04 [DEBUG] jq: found (jq-1.7)
+2026-01-24 17:31:06 [DEBUG] S3 dryrun completed
+2026-01-24 17:31:06 [DEBUG] Counting file changes...
+2026-01-24 17:31:06 [DEBUG] Upload count: 2, Delete count: 0
+2026-01-24 17:31:06 [INFO] Frontend changes detected:
+2026-01-24 17:31:06 [INFO] Syncing to S3...
+2026-01-24 17:31:06 [DEBUG] Uploading 2 files, deleting 0 files...
+2026-01-24 17:31:07 [SUCCESS] All prerequisites satisfied
+2026-01-24 17:31:07 [DEBUG] Build directory: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy
+2026-01-24 17:31:07 [DEBUG] Changing to build directory...
+2026-01-24 17:31:07 [DEBUG] Found backend/.env file
+2026-01-24 17:31:07 [INFO] Building Docker image...
+2026-01-24 17:31:07 [INFO] Build context: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy
+2026-01-24 17:31:07 [DEBUG] Docker build command: docker build -t myaccessibilitybuddy-api:latest .
+2026-01-24 17:31:09 [SUCCESS] Frontend synced to S3
+2026-01-24 17:31:09 [DEBUG] S3 sync completed successfully
+2026-01-24 17:31:09 [DEBUG] CloudFront distribution ID: E1INLYHYA11V49
+2026-01-24 17:31:09 [INFO] Creating targeted invalidation for 2 file(s)
+2026-01-24 17:31:09 [DEBUG] Invalidation paths: /*
+2026-01-24 17:31:09 [DEBUG] Creating CloudFront invalidation...
+2026-01-24 17:31:11 [SUCCESS] CloudFront invalidation created: IDT30YFZHJHQI92TC9OH4V0PZ8
+2026-01-24 17:31:11 [DEBUG] Invalidation ID: IDT30YFZHJHQI92TC9OH4V0PZ8
+2026-01-24 17:31:11 [WARNING] Cache clearing takes 5-15 minutes to complete
+2026-01-24 17:31:11 [INFO] Checking invalidation status...
+2026-01-24 17:31:11 [INFO] Distribution: E1INLYHYA11V49
+2026-01-24 17:31:11 [INFO] Fetching invalidations...
+2026-01-24 17:31:13 [SUCCESS] Found 53 invalidation(s)
+2026-01-24 17:31:17 [WARNING] Latest invalidation is still in progress
+2026-01-24 17:31:17 [INFO] This typically takes 5-15 minutes
+2026-01-24 17:31:17 [INFO] Monitor again with:
+2026-01-24 17:31:18 [SUCCESS] Docker image built successfully
+2026-01-24 17:31:18 [DEBUG] Image: myaccessibilitybuddy-api:latest
+2026-01-24 17:31:18 [INFO] Testing container locally...
+2026-01-24 17:31:18 [DEBUG] Cleaning up any existing test container...
+2026-01-24 17:31:18 [DEBUG] Checking if port 8000 is available...
+2026-01-24 17:31:18 [INFO] Starting test container...
+2026-01-24 17:31:18 [DEBUG] Running: docker run -d --name mab-test -p 8000:8000 myaccessibilitybuddy-api:latest
+2026-01-24 17:31:19 [WARNING] Could not start test container
+2026-01-24 17:31:19 [INFO] Port 8000 is in use (race condition)
+2026-01-24 17:31:20 [INFO] Continuing with deployment...
+2026-01-24 17:31:20 [INFO] Logging into AWS ECR...
+2026-01-24 17:31:20 [DEBUG] ECR registry: 514201995752.dkr.ecr.eu-central-1.amazonaws.com, Region: eu-central-1
+2026-01-24 17:31:25 [SUCCESS] ECR login successful
+2026-01-24 17:31:25 [INFO] Tagging image for ECR...
+2026-01-24 17:31:25 [DEBUG] Tagging: myaccessibilitybuddy-api:latest → 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
+2026-01-24 17:31:25 [INFO] Pushing image to ECR...
+2026-01-24 17:31:25 [DEBUG] Pushing: 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
+2026-01-24 17:31:59 [SUCCESS] Image pushed to ECR successfully
+2026-01-24 17:31:59 [DEBUG] Image available at: 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
+2026-01-24 17:31:59 [INFO] Cluster: myaccessibilitybuddy-cluster
+2026-01-24 17:31:59 [INFO] Service: myaccessibilitybuddy-service
+2026-01-24 17:31:59 [INFO] Image:   514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
+2026-01-24 17:31:59 [DEBUG] Task family: myaccessibilitybuddy-task
+2026-01-24 17:31:59 [DEBUG] AWS region: eu-central-1
+2026-01-24 17:31:59 [INFO] Retrieving current task definition...
+2026-01-24 17:31:59 [DEBUG] Running: aws ecs describe-services --cluster myaccessibilitybuddy-cluster --services myaccessibilitybuddy-service
+2026-01-24 17:32:01 [SUCCESS] Current task: arn:aws:ecs:eu-central-1:514201995752:task-definition/myaccessibilitybuddy-task:49
+2026-01-24 17:32:01 [DEBUG] Fetching full task definition details...
+2026-01-24 17:32:03 [DEBUG] Task definition retrieved successfully
+2026-01-24 17:32:03 [INFO] Creating new task definition with updated image...
+2026-01-24 17:32:03 [DEBUG] Updating container image to: 514201995752.dkr.ecr.eu-central-1.amazonaws.com/myaccessibilitybuddy-api:latest
+2026-01-24 17:32:03 [INFO] Registering new task definition...
+2026-01-24 17:32:05 [SUCCESS] New task definition registered: revision 50
+2026-01-24 17:32:05 [INFO] Updating ECS service...
+2026-01-24 17:32:08 [SUCCESS] Service update initiated
+2026-01-24 17:32:08 [INFO] Monitoring deployment progress...
+2026-01-24 17:32:08 [WARNING] This may take 2-5 minutes. Press Ctrl+C to skip monitoring.
+2026-01-24 17:44:10 [SUCCESS] Deployment completed successfully!
+2026-01-24 17:44:10 [INFO] Fetching service endpoint...
+2026-01-24 17:44:15 [SUCCESS] All parallel deployments completed successfully!
+2026-01-24 17:44:15 [WARNING] CloudFront cache clearing takes 5-15 minutes
+2026-01-24 17:44:15 [SUCCESS] Done!

@@ -56,6 +56,37 @@
 
   <main id="main-content" class="pb-5">
     <div class="container">
+      <!-- LLM Provider Status -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h5 text-primary mb-0">LLM Provider Status</h2>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="refreshProvidersBtn">
+              <span class="spinner-border spinner-border-sm d-none me-1" id="refreshSpinner" role="status" aria-hidden="true"></span>
+              <svg id="refreshIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-1">
+                <path d="M21 2v6h-6"></path>
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                <path d="M3 22v-6h6"></path>
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <p class="mb-3">Real-time connectivity status for configured AI providers.</p>
+          <p class="text-muted small mb-3" id="lastCheckedTime">Last checked: --</p>
+
+          <div class="row g-3" id="providersGrid">
+            <!-- Provider cards will be dynamically inserted here -->
+            <div class="col-12 text-center py-4">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading provider status...</span>
+              </div>
+              <p class="text-muted mt-2">Loading provider status...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Alt-Text Length Configuration -->
       <div class="card shadow-sm border-0 mb-4">
         <div class="card-body">
@@ -283,6 +314,129 @@
           setMenu(false);
         }
       });
+    })();
+
+    // LLM Provider Status Management
+    (function() {
+      const API_BASE = window.location.origin;
+      const providersGrid = document.getElementById('providersGrid');
+      const refreshBtn = document.getElementById('refreshProvidersBtn');
+      const refreshSpinner = document.getElementById('refreshSpinner');
+      const refreshIcon = document.getElementById('refreshIcon');
+      const lastCheckedTime = document.getElementById('lastCheckedTime');
+
+      // Status badge styling
+      const statusStyles = {
+        connected: { bg: 'bg-success', text: 'Connected', icon: '🟢' },
+        error: { bg: 'bg-danger', text: 'Error', icon: '🔴' },
+        disabled: { bg: 'bg-secondary', text: 'Disabled', icon: '⚪' },
+        not_configured: { bg: 'bg-warning', text: 'Not Configured', icon: '🟠' },
+        not_available: { bg: 'bg-secondary', text: 'Not Available', icon: '⚪' },
+        library_not_installed: { bg: 'bg-warning', text: 'Library Missing', icon: '🟠' },
+        available: { bg: 'bg-info', text: 'Available', icon: '🔵' },
+        unknown: { bg: 'bg-secondary', text: 'Unknown', icon: '⚪' }
+      };
+
+      // Create provider card HTML
+      function createProviderCard(providerId, provider) {
+        const style = statusStyles[provider.status] || statusStyles.unknown;
+        const latencyText = provider.latency_ms ? `${provider.latency_ms}ms` : '--';
+        // Show library not installed as info, other errors as danger
+        const isLibraryMissing = provider.status === 'library_not_installed';
+        const errorText = provider.error ? `<p class="${isLibraryMissing ? 'text-warning' : 'text-danger'} small mb-0 mt-2"><strong>${isLibraryMissing ? 'Info:' : 'Error:'}</strong> ${escapeHtml(provider.error)}</p>` : '';
+
+        // Count available models
+        let modelCount = 0;
+        if (provider.models) {
+          Object.values(provider.models).forEach(models => {
+            if (Array.isArray(models)) modelCount += models.length;
+          });
+        }
+
+        return `
+          <div class="col-md-6 col-lg-4">
+            <div class="card h-100 ${provider.status === 'connected' ? 'border-success' : (provider.status === 'error' ? 'border-danger' : '')}">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <h3 class="h6 mb-0">${escapeHtml(provider.name)}</h3>
+                  <span class="badge ${style.bg}">${style.icon} ${style.text}</span>
+                </div>
+
+                <div class="small text-muted">
+                  <p class="mb-1"><strong>Enabled:</strong> ${provider.enabled ? 'Yes' : 'No'}</p>
+                  <p class="mb-1"><strong>API Key:</strong> ${provider.configured ? '✓ Configured' : '✗ Missing'}</p>
+                  ${provider.status === 'connected' ? `<p class="mb-1"><strong>Latency:</strong> ${latencyText}</p>` : ''}
+                  ${modelCount > 0 ? `<p class="mb-1"><strong>Models:</strong> ${modelCount} available</p>` : ''}
+                  ${provider.host ? `<p class="mb-1"><strong>Host:</strong> ${escapeHtml(provider.host)}</p>` : ''}
+                  ${provider.available_local_models ? `<p class="mb-1"><strong>Local Models:</strong> ${provider.available_local_models.length}</p>` : ''}
+                </div>
+
+                ${errorText}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Escape HTML to prevent XSS
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Load provider status from API
+      async function loadProviderStatus() {
+        // Show loading state
+        refreshBtn.disabled = true;
+        refreshSpinner.classList.remove('d-none');
+        refreshIcon.classList.add('d-none');
+
+        try {
+          const response = await fetch(`${API_BASE}/api/provider-status`);
+          if (!response.ok) {
+            throw new Error('Failed to load provider status');
+          }
+
+          const data = await response.json();
+
+          // Update last checked time
+          lastCheckedTime.textContent = `Last checked: ${data.checked_at}`;
+
+          // Build provider cards
+          let cardsHtml = '';
+          const providerOrder = ['openai', 'claude', 'gemini', 'ollama', 'ecb_llm'];
+
+          for (const providerId of providerOrder) {
+            if (data.providers[providerId]) {
+              cardsHtml += createProviderCard(providerId, data.providers[providerId]);
+            }
+          }
+
+          providersGrid.innerHTML = cardsHtml || '<div class="col-12"><p class="text-muted">No providers configured.</p></div>';
+
+        } catch (error) {
+          console.error('Error loading provider status:', error);
+          providersGrid.innerHTML = `
+            <div class="col-12">
+              <div class="alert alert-danger" role="alert">
+                <strong>Error:</strong> Failed to load provider status. ${escapeHtml(error.message)}
+              </div>
+            </div>
+          `;
+        } finally {
+          // Hide loading state
+          refreshBtn.disabled = false;
+          refreshSpinner.classList.add('d-none');
+          refreshIcon.classList.remove('d-none');
+        }
+      }
+
+      // Event listener for refresh button
+      refreshBtn.addEventListener('click', loadProviderStatus);
+
+      // Load provider status on page load
+      loadProviderStatus();
     })();
 
     // Alt-Text Length Configuration Management
