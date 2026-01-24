@@ -28,7 +28,7 @@ AutoAltText/
 │   ├── services/               # Reserved for future modularization
 │   └── requirements.txt        # Python dependencies
 ├── frontend/
-│   └── home.html               # Bootstrap Italia single-page web UI
+│   └── index.html               # Bootstrap Italia single-page web UI
 ├── input/
 │   ├── images/                 # Place images here for processing
 │   └── context/                # Optional context files (image_name.txt)
@@ -111,7 +111,7 @@ cp backend/.env.example backend/.env
 docker-compose up -d
 
 # Access the application
-# Frontend: http://localhost:8000/home.html
+# Frontend: http://localhost:8000/index.html
 # API Docs: http://localhost:8000/api/docs
 
 # View logs
@@ -149,7 +149,7 @@ cp .env.example .env
 # Start all services
 docker-compose up -d
 
-# Frontend: http://localhost:8000/home.html
+# Frontend: http://localhost:8000/index.html
 # API docs: http://localhost:8000/api/docs
 # OAuth (ECB-LLM): Port 3001 automatically used when needed
 
@@ -165,8 +165,8 @@ docker-compose --profile test run myaccessibilitybuddy-test
 # Start servers (8000 for frontend, 8000 for API)
 ./start_MyAccessibilityBuddy.sh
 
-# Opens browser automatically to http://localhost:8000/home.html
-# Frontend: http://localhost:8000/home.html
+# Opens browser automatically to http://localhost:8000/index.html
+# Frontend: http://localhost:8000/index.html
 # API docs: http://localhost:8000/api/docs
 
 # Important: Access via http://localhost:8000, NOT file:// (CORS issue)
@@ -622,8 +622,8 @@ All functions are in the monolithic `app.py` file:
 
 **Solution:** Access the frontend via HTTP server:
 ```bash
-# Make sure you're accessing http://localhost:8000/home.html
-# NOT file:///home/developer/AutoAltText/frontend/home.html
+# Make sure you're accessing http://localhost:8000/index.html
+# NOT file:///home/developer/AutoAltText/frontend/index.html
 
 # The startup script automatically opens the correct URL
 ./start_MyAccessibilityBuddy.sh

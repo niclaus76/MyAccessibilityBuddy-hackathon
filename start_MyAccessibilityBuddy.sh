@@ -74,7 +74,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Starting MyAccessibilityBuddy..."
-echo "Application: http://localhost:8000/home.html"
+echo "Application: http://localhost:8000/index.html"
 echo "API Documentation: http://localhost:8000/api/docs"
 echo "Note: ECB-LLM OAuth will use port 3001 automatically when needed"
 echo "Opening application in browser..."
@@ -82,7 +82,7 @@ echo "Press Ctrl+C to stop the server"
 echo ""
 
 # Open frontend in default browser
-xdg-open "http://localhost:8000/home.html" 2>/dev/null &
+xdg-open "http://localhost:8000/index.html" 2>/dev/null &
 
 # Start uvicorn server on port 8000 (serves both API and frontend)
 cd backend

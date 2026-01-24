@@ -1198,25 +1198,25 @@ verify_frontend_assets() {
     echo ""
     print_info "Checking HTML configuration..."
 
-    local html_file="$FRONTEND_DIR/home.html"
+    local html_file="$FRONTEND_DIR/index.html"
 
     if [ ! -f "$html_file" ]; then
-        print_error "home.html not found"
+        print_error "index.html not found"
         all_good=false
     else
         # Check for favicon links
         if grep -q 'rel="icon"' "$html_file"; then
-            print_success "Favicon links present in home.html"
+            print_success "Favicon links present in index.html"
         else
-            print_error "Favicon links missing in home.html"
+            print_error "Favicon links missing in index.html"
             all_good=false
         fi
 
         # Check for manifest link
         if grep -q 'rel="manifest"' "$html_file"; then
-            print_success "Manifest link present in home.html"
+            print_success "Manifest link present in index.html"
         else
-            print_error "Manifest link missing in home.html"
+            print_error "Manifest link missing in index.html"
             all_good=false
         fi
 
@@ -1241,9 +1241,9 @@ verify_frontend_assets() {
 
     # Check if sprites.svg uses CDN
     if grep -q 'cdn.jsdelivr.net.*sprites.svg' "$html_file"; then
-        print_success "SVG sprites using CDN in home.html"
+        print_success "SVG sprites using CDN in index.html"
     else
-        print_error "SVG sprites not using CDN in home.html"
+        print_error "SVG sprites not using CDN in index.html"
         all_good=false
     fi
 
@@ -1651,7 +1651,7 @@ check_cloudfront_invalidation() {
         print_info "Your CloudFront cache has been cleared"
         echo ""
         print_info "You can now test your CloudFront URL:"
-        echo "  https://d2nuwzlynr0xpz.cloudfront.net/home.html"
+        echo "  https://d2nuwzlynr0xpz.cloudfront.net/index.html"
     else
         print_warning "Latest invalidation is still in progress"
         print_info "This typically takes 5-15 minutes"
@@ -2038,7 +2038,7 @@ else
             echo "Frontend deployed:"
             echo "  S3 Bucket:    $S3_BUCKET"
             echo "  CloudFront:   $CLOUDFRONT_DIST_ID"
-            echo "  URL:          https://d2nuwzlynr0xpz.cloudfront.net/home.html"
+            echo "  URL:          https://d2nuwzlynr0xpz.cloudfront.net/index.html"
             if [ "$SKIP_INVALIDATION" = false ]; then
                 echo ""
                 print_warning "CloudFront cache clearing takes 5-15 minutes"
@@ -2064,7 +2064,7 @@ else
             echo "  Frontend:"
             echo "    S3 Bucket:    $S3_BUCKET"
             echo "    CloudFront:   $CLOUDFRONT_DIST_ID"
-            echo "    URL:          https://d2nuwzlynr0xpz.cloudfront.net/home.html"
+            echo "    URL:          https://d2nuwzlynr0xpz.cloudfront.net/index.html"
 
             if [ "$SKIP_INVALIDATION" = false ]; then
                 echo ""

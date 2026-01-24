@@ -62,7 +62,7 @@ docker-compose logs -f
 
 ### 4. Access the Application
 
-- **Web UI**: http://localhost:8000/home.html
+- **Web UI**: http://localhost:8000/index.html
 - **API Documentation**: http://localhost:8000/api/docs
 - **API Alternative Docs**: http://localhost:8000/api/redoc
 
@@ -80,7 +80,7 @@ docker-compose down -v
 
 ### Web UI Workflow
 
-1. Open http://localhost:8000/home.html
+1. Open http://localhost:8000/index.html
 2. Upload an image from `test/images/` folder
 3. Optionally upload corresponding context file from `test/context/`
 4. Select target language (e.g., English)
@@ -213,8 +213,8 @@ sudo chown -R $USER:$USER input/ output/ logs/
 ### "Failed to fetch" in Web UI
 
 Make sure you're accessing via HTTP, not file://
-- **Correct**: http://localhost:8000/home.html
-- **Wrong**: file:///path/to/frontend/home.html
+- **Correct**: http://localhost:8000/index.html
+- **Wrong**: file:///path/to/frontend/index.html
 
 ### OAuth not working (ECB-LLM)
 

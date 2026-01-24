@@ -1441,9 +1441,13 @@
 
         updateProgress(10, 'Preparing generation...');
 
-        // Show "Generate..." with spinner during processing
+        // Show "Generate..." with spinner during processing, hide duration estimate
         btnText.textContent = 'Generate...';
         btnSpinner.classList.remove('d-none');
+        const estimatePreview = document.getElementById('estimatePreview');
+        if (estimatePreview) {
+            estimatePreview.classList.add('d-none');
+        }
         generateBtn.disabled = true;
         if (stopGenerationBtn) {
             stopGenerationBtn.disabled = false;
@@ -1654,6 +1658,10 @@
         } finally {
             btnText.textContent = 'Generate';
             btnSpinner.classList.add('d-none');
+            const estimatePreview = document.getElementById('estimatePreview');
+            if (estimatePreview) {
+                estimatePreview.classList.remove('d-none');
+            }
             generateBtn.disabled = false;
             if (stopGenerationBtn) {
                 stopGenerationBtn.disabled = true;
@@ -1714,8 +1722,10 @@
         // Reset button states
         const btnText = document.getElementById('btnText');
         const btnSpinner = document.getElementById('btnSpinner');
+        const estimatePreview = document.getElementById('estimatePreview');
         if (btnText) btnText.textContent = 'Generate';
         if (btnSpinner) btnSpinner.classList.add('d-none');
+        if (estimatePreview) estimatePreview.classList.remove('d-none');
         generateBtn.disabled = false;
 
         // Reset stop button

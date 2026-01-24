@@ -582,7 +582,7 @@ async def auth_callback(code: Optional[str] = None, state: Optional[str] = None,
             <body>
                 <h1>Authentication Failed</h1>
                 <p>Error: {error}</p>
-                <p><a href="file:///home/developer/AutoAltText/frontend/home.html">Return to application</a></p>
+                <p><a href="file:///home/developer/AutoAltText/frontend/index.html">Return to application</a></p>
             </body>
             </html>
             """,
@@ -647,7 +647,7 @@ async def auth_callback(code: Optional[str] = None, state: Optional[str] = None,
                     <h1>Token Exchange Failed</h1>
                     <p>Could not exchange authorization code for access token.</p>
                     <p>Status: {response.status_code}</p>
-                    <p><a href="file:///home/developer/AutoAltText/frontend/home.html">Return to application</a></p>
+                    <p><a href="file:///home/developer/AutoAltText/frontend/index.html">Return to application</a></p>
                 </body>
                 </html>
                 """,
@@ -683,14 +683,14 @@ async def auth_callback(code: Optional[str] = None, state: Optional[str] = None,
 
                 // Redirect to frontend
                 setTimeout(function() {{
-                    window.location.href = "file:///home/developer/AutoAltText/frontend/home.html";
+                    window.location.href = "file:///home/developer/AutoAltText/frontend/index.html";
                 }}, 1000);
             </script>
         </head>
         <body>
             <h1>Authentication Successful!</h1>
             <p>Redirecting to application...</p>
-            <p>If not redirected, <a href="file:///home/developer/AutoAltText/frontend/home.html">click here</a></p>
+            <p>If not redirected, <a href="file:///home/developer/AutoAltText/frontend/index.html">click here</a></p>
         </body>
         </html>
         """
@@ -715,7 +715,7 @@ async def auth_callback(code: Optional[str] = None, state: Optional[str] = None,
             <body>
                 <h1>Authentication Error</h1>
                 <p>Error communicating with authentication server: {str(e)}</p>
-                <p><a href="file:///home/developer/AutoAltText/frontend/home.html">Return to application</a></p>
+                <p><a href="file:///home/developer/AutoAltText/frontend/index.html">Return to application</a></p>
             </body>
             </html>
             """,
@@ -729,7 +729,7 @@ async def auth_callback(code: Optional[str] = None, state: Optional[str] = None,
             <body>
                 <h1>Unexpected Error</h1>
                 <p>An unexpected error occurred: {str(e)}</p>
-                <p><a href="file:///home/developer/AutoAltText/frontend/home.html">Return to application</a></p>
+                <p><a href="file:///home/developer/AutoAltText/frontend/index.html">Return to application</a></p>
             </body>
             </html>
             """,
@@ -1313,9 +1313,9 @@ async def generate_report_endpoint(request: Request, clear_after: bool = True):
         # Get session-specific folders
         session_folders = get_session_folders(session_id)
 
-        # Generate timestamp for filename (match other report formats)
+        # Generate timestamp for filename (match other report formats: date first, then type)
         timestamp = datetime.now().strftime('%Y%m%d-%H%M-%S')
-        output_filename = f"webmaster-report-{timestamp}.html"
+        output_filename = f"{timestamp}-webmaster-report.html"
 
         # Use session-specific alt-text folder
         alt_text_folder = session_folders['alt_text']
@@ -3009,7 +3009,7 @@ if frontend_dir.exists():
     @app.get("/")
     async def serve_root():
         """Redirect root to home page."""
-        return RedirectResponse(url="/home.html")
+        return RedirectResponse(url="/index.html")
 
     @app.get("/{filename}.html")
     async def serve_html(filename: str):
@@ -3036,7 +3036,7 @@ if frontend_dir.exists():
         return {"error": f"Style {filename}.css not found"}
 
     print(f"[API] Frontend served from: {frontend_dir}")
-    print(f"[API] Access application at: http://localhost:8000/home.html (same-origin, cookies work)")
+    print(f"[API] Access application at: http://localhost:8000/index.html (same-origin, cookies work)")
 else:
     # Fallback: show API info at root
     @app.get("/")

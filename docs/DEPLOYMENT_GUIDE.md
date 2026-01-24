@@ -522,7 +522,7 @@ curl http://<PUBLIC-IP>:8000/api/available-providers
 
 **Frontend:**
 ```
-https://d2nuwzlynr0xpz.cloudfront.net/home.html
+https://d2nuwzlynr0xpz.cloudfront.net/index.html
 ```
 
 ### 4. Monitor Logs
@@ -587,7 +587,7 @@ aws ecs describe-tasks \
 1. Wait 5-15 minutes for invalidation
 2. Check status: `./tools/deploy.sh --check-invalidation`
 3. Hard refresh browser: Ctrl+Shift+R (Windows/Linux) or Cmd+Shift+R (Mac)
-4. Test with curl: `curl -I https://d2nuwzlynr0xpz.cloudfront.net/home.html`
+4. Test with curl: `curl -I https://d2nuwzlynr0xpz.cloudfront.net/index.html`
 
 ---
 

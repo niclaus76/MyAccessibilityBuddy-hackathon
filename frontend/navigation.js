@@ -8,7 +8,7 @@
 
     // Map of page keys to their corresponding href patterns
     const pageHrefMap = {
-        'home': 'home.html',
+        'home': 'index.html',
         'webmaster': 'webmaster.html',
         'accessibility_compliance': 'accessibility-compliance.html',
         'prompt_optimization': 'prompt-optimization.html',
