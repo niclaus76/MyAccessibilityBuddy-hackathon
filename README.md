@@ -7,11 +7,16 @@ An AI-powered, context-aware alternative text generator that uses surrounding pa
 # [TRY ME!](https://icy-bay-0b3394d10.4.azurestaticapps.net/)
 
 ## Introduction
-Why does context matters? Are these two images the same?
-![Luna](frontend/assets/Luna_1.png)![Luna](frontend/assets/Luna_2.png)
-The slternative text for the first image is: "A golden retriever sitting on grass", while the second is "**Luna**, a **2-year-old** golden retriever **available for adoption**, sitting on grass."
+Why does **context matters**? Are these two images the same?
 
-Alt text is a translation of the image’s role in that page’s context
+![Luna](frontend/assets/Luna_1.png)
+**Alternative text** for the first image is: "A golden retriever sitting on grass"
+
+
+![Luna](frontend/assets/Luna_2.png)
+**Alternative text** for the second is: "**Luna**, a **2-year-old** golden retriever **available for adoption**, sitting on grass."
+
+**Alternative text is the translation of the image’s role in a given page**
 
 ## Features
 
