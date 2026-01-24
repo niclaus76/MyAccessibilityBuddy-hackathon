@@ -302,12 +302,37 @@ def update_config_prompt(prompt_file: str):
 
     print_info(f"Updated configuration to use: {prompt_file}")
 
-def clear_output_directory():
-    """Clear the output directory."""
+def clear_output_directory(session_id=None):
+    """Clear the output directory.
+
+    Args:
+        session_id (str, optional): If provided, clears only that session's folder.
+                                   If None, clears all session folders and base directory.
+    """
     if OUTPUT_DIR.exists():
-        for file in OUTPUT_DIR.glob("*.json"):
-            file.unlink()
-        print_success("Cleared output directory")
+        if session_id:
+            # Clear specific session folder
+            session_dir = OUTPUT_DIR / session_id
+            if session_dir.exists():
+                for file in session_dir.glob("*.json"):
+                    file.unlink()
+                print_success(f"Cleared session directory: {session_id}")
+        else:
+            # Clear all JSON files in base directory
+            for file in OUTPUT_DIR.glob("*.json"):
+                file.unlink()
+            # Clear all session-specific directories (cli-*, web-*)
+            for session_dir in OUTPUT_DIR.iterdir():
+                if session_dir.is_dir() and (session_dir.name.startswith('cli-') or session_dir.name.startswith('web-')):
+                    for file in session_dir.glob("*.json"):
+                        file.unlink()
+                    # Optionally remove empty session directories
+                    try:
+                        session_dir.rmdir()
+                    except OSError:
+                        # Directory not empty, that's okay
+                        pass
+            print_success("Cleared output directory and all session folders")
 
 def run_batch_processing(use_geo=False):
     """Run the batch processing command with optional GEO boost.
@@ -1018,7 +1043,11 @@ def main():
     # Create output directory for reports
     OUTPUT_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M-%S")
+    # Clear all previous session results at the start
+    print_info("Cleaning up previous test sessions...")
+    clear_output_directory()
+
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     geo_suffix = "_geo_comparison" if TEST_GEO_BOOST else ""
     output_csv = OUTPUT_REPORTS_DIR / f"prompt_comparison_{timestamp}{geo_suffix}.csv"
 
@@ -1050,7 +1079,8 @@ def main():
                 # Update configuration
                 update_config_prompt(prompt['file'])
 
-                # Clear previous output
+                # Clear previous output before processing
+                print_info(f"Clearing previous results before processing {mode_label}...")
                 clear_output_directory()
 
                 # Run batch processing with appropriate GEO flag
@@ -1064,6 +1094,10 @@ def main():
                 results = extract_results(session_id=session_id)
                 all_results[mode_label] = results
                 print_success(f"Extracted {len(results)} results for {mode_label}")
+
+                # Clean up this session's results after extraction to prevent accumulation
+                print_info(f"Cleaning up session {session_id} after extraction...")
+                clear_output_directory(session_id=session_id)
 
         # Generate CSV report
         generate_csv(all_results, output_csv)

@@ -5,6 +5,14 @@
 An AI-powered, context-aware alternative text generator that uses surrounding page content to produce WCAG 2.2–compliant descriptions humans and machines can understand.
 
 # [TRY ME!](https://icy-bay-0b3394d10.4.azurestaticapps.net/)
+
+## Introduction
+Why does context matters? Are these two images the same?
+![Luna](frontend/assets/Luna_1.png)![Luna](frontend/assets/Luna_2.png)
+The slternative text for the first image is: "A golden retriever sitting on grass", while the second is "**Luna**, a **2-year-old** golden retriever **available for adoption**, sitting on grass."
+
+Alt text is a translation of the image’s role in that page’s context
+
 ## Features
 
 ### Three Main Use Cases
@@ -21,6 +29,35 @@ An AI-powered, context-aware alternative text generator that uses surrounding pa
 - 🖼️ **Multi-format support**: JPG, PNG, GIF, WEBP, SVG, BMP, TIFF
 - 🌍 **24 EU languages**: Multilingual alt-text generation
 - 🔄 **Multiple interfaces**: CLI, Web UI, REST API
+
+## Overview
+
+### Technological innovation
+The system injects **page context** into the prompt to generate accessibility descriptions that preserve the meaning of the image.
+**GEO boost** adds to the standard prompt instruction that forces the model to produce Generative Engine Optimization–friendly wording, maximizing semantic density for AI consumption.
+**Privacy is by design**: The architecture allows descriptions to be generated using local, enterprise, or commercial models, keeping sensitive content within organizational boundaries
+
+### Technical feasibility
+**Already functional** on Azure and designed for real editorial workflows.
+**Runs anywhere via Docker**, with no dependency on a single cloud or vendor.
+Works with commercial and local AI models, supporting **privacy and compliance** needs.
+
+### Business model
+We estimated **85% time saved** to generate alt-text. 20% info are lost if you don't have alternative text on your page.
+Automating the decision of what is decorative vs. informative, **you save thousands of human hours in manual auditing**.
+
+Target users include **public institutions and large content publishers** subject to WCAG and European Accessibility Act requirements.  
+By automating repetitive accessibility tasks while preserving human oversight, the solution reduces editorial effort, lowers compliance costs, and supports sustainable adoption at scale.
+
+### Social impact
+Both **visually impaired users and AI** have the possibility to receive descriptions that explain context and intent, not just objects as part of the inclusivity goal.
+It allows the users to navigate (a telephone contract page freely), for example, which not only empowers the user but also reduces the cost without calling a human representative.
+
+### Social innovation
+Integrated at creation, turning accessibility from a task into a seamless standard.
+Real-time analysis that makes images meaningful to both humans and machines.
+**Accessibility becomes a normal practice rather than a compliance task**. 
+Inclusion scales without sacrificing quality or human oversight.
 
 ## Quick Start with Docker 🐳
 
@@ -228,28 +265,6 @@ Image Filename,Alt Text (v0: base prompt),Alt Text (v2: WCAG focused)
 When GEO boost testing is enabled (`test_geo_boost: true`), filenames include `_geo_comparison` suffix:
 - `prompt_comparison_20260124-1508-52_geo_comparison.csv`
 - `prompt_comparison_20260124-1508-52_geo_comparison.html`
-
-## Overview
-
-### Technological innovation
-The system injects **page context** into the prompt to generate accessibility descriptions that preserve the meaning of the image.
-**GEO boost** adds to the standard prompt instruction that forces the model to produce Generative Engine Optimization–friendly wording, maximizing semantic density for AI consumption.
-
-### Business model
-MyAccessibilityBuddy is designed to be delivered as:
-- a SaaS tool for editorial and communication teams  
-- an API for integration into CMSs, DAMs, and digital platforms  
-
-Target users include **public institutions and large content publishers** subject to WCAG and European Accessibility Act requirements.  
-By automating repetitive accessibility tasks while preserving human oversight, the solution reduces editorial effort, lowers compliance costs, and supports sustainable adoption at scale.
-
-### Social impact
-The tool reduces exclusion caused by missing or poor alternative text, improving access to digital content for people using assistive technologies.  
-By enabling accessibility at scale, it supports participation, autonomy, and equal access to information in digital communication.
-
-### Social innovation
-MyAccessibilityBuddy reframes accessibility from a compliance obligation to **shared digital infrastructure**.  
-By improving both human accessibility and machine interpretability, it aligns inclusive design with the future of AI-mediated information access.
 
 ## Report Formats
 ### 1. Accessibility Compliance Reports

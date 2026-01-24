@@ -209,7 +209,7 @@ def get_or_create_session_id(request: Request) -> str:
             return session_id
 
     # No valid session found, create new one with datetime prefix
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     session_id = f"{timestamp}-{uuid.uuid4()}"
     WEB_APP_SESSIONS[session_id] = {
         "created": datetime.now(),
@@ -1541,7 +1541,7 @@ async def generate_report_endpoint(request: Request, clear_after: bool = True):
         session_folders = get_session_folders(session_id)
 
         # Generate timestamp for filename (match other report formats: date first, then type)
-        timestamp = datetime.now().strftime('%Y%m%d-%H%M-%S')
+        timestamp = datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
         output_filename = f"{timestamp}-webmaster-report.html"
 
         # Use session-specific alt-text folder
