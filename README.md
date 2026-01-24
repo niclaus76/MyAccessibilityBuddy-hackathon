@@ -2,9 +2,7 @@
 
 ![MyAccessibilityBuddy logo](frontend/assets/banner.png)
 
-**AI-powered WCAG 2.2 compliant alternative text generator for web images**
-
-MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant content by automatically generating high-quality alternative text supporting more inclusive digital communication for everyone.
+An AI-powered, context-aware alternative text generator that uses surrounding page content to produce WCAG 2.2–compliant descriptions humans and machines can understand.
 
 # [TRY ME!](https://icy-bay-0b3394d10.4.azurestaticapps.net/)
 ## Features
@@ -234,9 +232,8 @@ When GEO boost testing is enabled (`test_geo_boost: true`), filenames include `_
 ## Overview
 
 ### Technological innovation
-The innovation lies in **rule-constrained AI orchestration** rather than model novelty.  
-Accessibility standards actively guide language generation and quality control, producing outputs that are both human-readable and machine-readable.  
-This approach improves consistency and quality compared to unstructured AI-generated descriptions.
+The system injects **page context** into the prompt to generate accessibility descriptions that preserve the meaning of the image.
+**GEO boost** adds to the standard prompt instruction that forces the model to produce Generative Engine Optimization–friendly wording, maximizing semantic density for AI consumption.
 
 ### Business model
 MyAccessibilityBuddy is designed to be delivered as:
