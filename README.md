@@ -6,8 +6,7 @@
 
 MyAccessibilityBuddy helps create clear, inclusive, and WCAG 2.2-compliant content by automatically generating high-quality alternative text supporting more inclusive digital communication for everyone.
 
-# TRY ME !(https://icy-bay-0b3394d10.4.azurestaticapps.net/) 
-
+# [TRY ME!](https://icy-bay-0b3394d10.4.azurestaticapps.net/)
 ## Features
 
 ### Three Main Use Cases
