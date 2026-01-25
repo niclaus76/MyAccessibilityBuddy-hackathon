@@ -595,7 +595,7 @@ def get_cli_session_folders(session_id=None, shared=False, legacy=False, require
         else:
             # Create new session with datetime prefix
             from datetime import datetime
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
             session_id = f"{timestamp}-{uuid.uuid4()}"
             with open(session_file, 'w') as f:
                 f.write(session_id)
@@ -1504,8 +1504,8 @@ def generate_html_report(alt_text_folder=None, images_folder=None, output_filena
         # Format: <date>-analysis-report-<url>.html
         from datetime import datetime
 
-        # Get current date/time in YYYYMMDD-HHMM-SS format (safe for filenames)
-        date_str = datetime.now().strftime('%Y%m%d-%H%M-%S')
+        # Get current date/time in YYYY-MM-DDTHH-MM-SS format (safe for filenames)
+        date_str = datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
 
         # Check if user provided custom filename (not the default)
         is_default_filename = output_filename in ["alt-text-report.html", "MyAccessibilityBuddy-AltTextReport.html"]
@@ -4599,7 +4599,7 @@ def main():
         if args.session == "__SESSION_NEW__":
             import uuid
             from datetime import datetime
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
             new_session_id = f"{timestamp}-{uuid.uuid4()}"
             session_folders = get_cli_session_folders(session_id=new_session_id)
             print(f"Created new session: {new_session_id}")

@@ -2,7 +2,7 @@
 
 ################################################################################
 # MyAccessibilityBuddy - Universal Deployment Script
-# All-in-one deployment tool for VM → AWS (ECR/ECS) + Frontend (S3/CloudFront)
+# All-in-one deployment tool for VM → AWS (ECR/ECS) + Azure (ACR) + Frontend (S3/CloudFront)
 ################################################################################
 
 set -e
@@ -10,10 +10,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE_DEFAULT="$SCRIPT_DIR/deploy.log"
 
-# Source configuration file if it exists
+# Source configuration file (required)
 if [ -f "$SCRIPT_DIR/deploy.conf" ]; then
     # shellcheck source=deploy.conf
     source "$SCRIPT_DIR/deploy.conf"
+else
+    echo "Error: deploy.conf not found in $SCRIPT_DIR"
+    exit 1
 fi
 
 # Logging defaults (can be overridden in deploy.conf)
@@ -37,26 +40,31 @@ BLUE=$'\033[0;34m'
 CYAN=$'\033[0;36m'
 NC=$'\033[0m'
 
-# Configuration (with defaults)
-# These can be overridden by creating a 'deploy.conf' file in the same directory.
-VM_USER="${VM_USER:-developer}"
-VM_HOST="${VM_HOST:-192.168.64.4}"
-VM_SOURCE_PATH="${VM_SOURCE_PATH:-/home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy}"
-LOCAL_DEST_PATH="${LOCAL_DEST_PATH:-$HOME/Documents/ECB/AWS-Caionen/}"
-AWS_REGION="${AWS_REGION:-eu-central-1}"
-ECR_REGISTRY="${ECR_REGISTRY:-514201995752.dkr.ecr.eu-central-1.amazonaws.com}"
-ECR_REPO="${ECR_REPO:-myaccessibilitybuddy-api}"
-IMAGE_TAG="${IMAGE_TAG:-latest}"
-S3_BUCKET="${S3_BUCKET:-myaccessibilitybuddy-frontend-1}"
-CLOUDFRONT_DIST_ID="${CLOUDFRONT_DIST_ID:-E1INLYHYA11V49}"
-ECS_CLUSTER="${ECS_CLUSTER:-myaccessibilitybuddy-cluster}"
-ECS_SERVICE="${ECS_SERVICE:-myaccessibilitybuddy-service}"
-TASK_FAMILY="${TASK_FAMILY:-myaccessibilitybuddy-task}"
-FRONTEND_DIR="${FRONTEND_DIR:-/home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy/frontend}"
+# Configuration (provided by deploy.conf)
+VM_USER="${VM_USER:-}"
+VM_HOST="${VM_HOST:-}"
+VM_SOURCE_PATH="${VM_SOURCE_PATH:-}"
+LOCAL_DEST_PATH="${LOCAL_DEST_PATH:-}"
+PROJECT_ROOT="${PROJECT_ROOT:-}"
+LOCAL_CONTAINER_NAME="${LOCAL_CONTAINER_NAME:-}"
+AWS_REGION="${AWS_REGION:-}"
+ECR_REGISTRY="${ECR_REGISTRY:-}"
+ECR_REPO="${ECR_REPO:-}"
+IMAGE_TAG="${IMAGE_TAG:-}"
+AZURE_ACR_REGISTRY="${AZURE_ACR_REGISTRY:-}"
+AZURE_IMAGE_REPO="${AZURE_IMAGE_REPO:-}"
+AZURE_PLATFORM="${AZURE_PLATFORM:-}"
+S3_BUCKET="${S3_BUCKET:-}"
+CLOUDFRONT_DIST_ID="${CLOUDFRONT_DIST_ID:-}"
+ECS_CLUSTER="${ECS_CLUSTER:-}"
+ECS_SERVICE="${ECS_SERVICE:-}"
+TASK_FAMILY="${TASK_FAMILY:-}"
+FRONTEND_DIR="${FRONTEND_DIR:-}"
 
 # Options
 MODE="full"  # full, frontend, backend, ecs, verify, check-invalidation, verify-ecs, run-tests
 DEPLOY_TARGET="remote" # remote, local
+DEPLOY_ENVIRONMENTS="azure" # aws, azure, both, aws,azure
 TEST_MODE=false
 FAST_MODE=false
 FROM_VM=false
@@ -64,6 +72,8 @@ SKIP_INVALIDATION=false
 MONITOR_DEPLOYMENT=true
 RUN_TESTS=false
 VERBOSITY_LEVEL=1  # 0=errors only, 1=normal (info+warnings+errors), 2=debug (all messages)
+AWS_ENABLED=true
+AZURE_ENABLED=false
 
 # Set verbosity based on config
 if [ "$LOGGING_SHOW_DEBUG" = true ]; then
@@ -156,6 +166,104 @@ print_header() {
     echo ""
 }
 
+set_deploy_environments() {
+    local raw="$1"
+    raw="${raw,,}"
+    AWS_ENABLED=false
+    AZURE_ENABLED=false
+
+    if [ -z "$raw" ]; then
+        raw="aws"
+    fi
+
+    IFS=',' read -ra envs <<< "$raw"
+    for env in "${envs[@]}"; do
+        case "$env" in
+            aws)
+                AWS_ENABLED=true
+                ;;
+            azure)
+                AZURE_ENABLED=true
+                ;;
+            both)
+                AWS_ENABLED=true
+                AZURE_ENABLED=true
+                ;;
+            *)
+                print_error "Unknown environment: $env (use aws, azure, or both)"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ "$AWS_ENABLED" = false ] && [ "$AZURE_ENABLED" = false ]; then
+        print_error "No valid environments selected (use aws, azure, or both)"
+        exit 1
+    fi
+}
+
+require_config_value() {
+    local key="$1"
+    local value="${!key}"
+    if [ -z "$value" ]; then
+        MISSING_CONFIG+=("$key")
+    fi
+}
+
+validate_config() {
+    MISSING_CONFIG=()
+
+    if [ "$DEPLOY_TARGET" = "local" ]; then
+        require_config_value "PROJECT_ROOT"
+        require_config_value "LOCAL_CONTAINER_NAME"
+        if [ ${#MISSING_CONFIG[@]} -gt 0 ]; then
+            print_error "Missing required configuration values: ${MISSING_CONFIG[*]}"
+            print_info "Update $SCRIPT_DIR/deploy.conf with the missing values."
+            exit 1
+        fi
+        return 0
+    fi
+
+    require_config_value "IMAGE_TAG"
+
+    if [ "$FROM_VM" = true ]; then
+        require_config_value "VM_USER"
+        require_config_value "VM_HOST"
+        require_config_value "VM_SOURCE_PATH"
+        require_config_value "LOCAL_DEST_PATH"
+    else
+        require_config_value "PROJECT_ROOT"
+    fi
+
+    if [ "$AWS_ENABLED" = true ]; then
+        require_config_value "AWS_REGION"
+        require_config_value "ECR_REGISTRY"
+        require_config_value "ECR_REPO"
+        require_config_value "ECS_CLUSTER"
+        require_config_value "ECS_SERVICE"
+        require_config_value "TASK_FAMILY"
+        if [ "$MODE" = "frontend" ] || [ "$MODE" = "verify" ] || [ "$MODE" = "check-invalidation" ] || [ "$MODE" = "full" ]; then
+            require_config_value "FRONTEND_DIR"
+        fi
+        if [ "$MODE" = "frontend" ] || [ "$MODE" = "verify" ] || [ "$MODE" = "check-invalidation" ] || [ "$MODE" = "full" ]; then
+            require_config_value "S3_BUCKET"
+            require_config_value "CLOUDFRONT_DIST_ID"
+        fi
+    fi
+
+    if [ "$AZURE_ENABLED" = true ]; then
+        require_config_value "AZURE_ACR_REGISTRY"
+        require_config_value "AZURE_IMAGE_REPO"
+        require_config_value "AZURE_PLATFORM"
+    fi
+
+    if [ ${#MISSING_CONFIG[@]} -gt 0 ]; then
+        print_error "Missing required configuration values: ${MISSING_CONFIG[*]}"
+        print_info "Update $SCRIPT_DIR/deploy.conf with the missing values."
+        exit 1
+    fi
+}
+
 # Progress bar display function
 show_progress_bar() {
     local label="$1"
@@ -241,13 +349,17 @@ ${GREEN}USAGE:${NC}
     $0 [TARGET] [MODE] [OPTIONS]
 
 ${GREEN}DEPLOYMENT TARGETS (choose one):${NC}
-    --remote                (default) Deploy to remote AWS environment (ECR, ECS, S3)
+    --remote                (default) Deploy to remote cloud environments (AWS and/or Azure)
     --local                 Update the local development container via docker-compose
+
+${GREEN}DEPLOYMENT ENVIRONMENTS:${NC}
+    --env <aws|azure|both>  Target cloud environments (default: azure)
+                            You can also pass comma-separated values (aws,azure)
 
 ${GREEN}MODES (for --remote target):${NC}
     (default)               Full deployment: Backend (ECR+ECS) + Frontend (S3+CloudFront)
-    --frontend              Frontend only: S3 sync + CloudFront invalidation
-    --backend               Backend only: Docker build + ECR push + ECS deploy
+    --frontend              Frontend only: S3 sync + CloudFront invalidation (AWS only)
+    --backend               Backend only: Docker build + ECR push and/or ACR push
     --ecs                   ECS update only: Deploy existing image to service
     --from-vm               Copy from VM first, then full deployment
     --verify-assets         Verify frontend assets (favicons, manifests, CDN fixes)
@@ -287,11 +399,14 @@ ${GREEN}EXAMPLES:${NC}
     # Full deployment from VM
     $0 --remote --from-vm
 
+    # Deploy backend to Azure ACR only
+    $0 --remote --backend --env azure
+
 ${GREEN}DEPLOYMENT MODES EXPLAINED:${NC}
 
     ${CYAN}Full (default):${NC}
       Parallel execution:
-      • Backend: Build Docker → Push to ECR → Update ECS → Monitor
+      • Backend: Build Docker → Push to ECR/ACR → Update ECS → Monitor
       • Frontend: Sync to S3 → Invalidate CloudFront
       ⏱️  Duration: ~8-12 minutes (backend + frontend run concurrently)
       ⚡ Up to 40% faster than sequential deployment
@@ -304,10 +419,10 @@ ${GREEN}DEPLOYMENT MODES EXPLAINED:${NC}
 
     ${CYAN}Backend (--backend):${NC}
       1. Build Docker image
-      2. Push to ECR
-      3. Update ECS task definition
-      4. Deploy to ECS service
-      5. Monitor deployment
+      2. Push to ECR and/or ACR
+      3. Update ECS task definition (AWS only)
+      4. Deploy to ECS service (AWS only)
+      5. Monitor deployment (AWS only)
       🐳 Duration: ~8-12 minutes
 
     ${CYAN}ECS (--ecs):${NC}
@@ -361,6 +476,7 @@ ${GREEN}CONFIGURATION:${NC}
 
     VM Host:      $VM_USER@$VM_HOST
     ECR:          $ECR_REGISTRY/$ECR_REPO
+    ACR:          $AZURE_ACR_REGISTRY/$AZURE_IMAGE_REPO
     S3 Bucket:    $S3_BUCKET
     CloudFront:   $CLOUDFRONT_DIST_ID
     ECS Cluster:  $ECS_CLUSTER
@@ -444,6 +560,10 @@ while [[ $# -gt 0 ]]; do
             IMAGE_TAG="$2"
             shift 2
             ;;
+        --env|--environments)
+            DEPLOY_ENVIRONMENTS="$2"
+            shift 2
+            ;;
         -d|--debug)
             VERBOSITY_LEVEL=2
             shift
@@ -462,6 +582,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+set_deploy_environments "$DEPLOY_ENVIRONMENTS"
+validate_config
 
 # Display banner
 clear
@@ -497,7 +620,13 @@ case $MODE in
         print_info "Mode: FRONTEND ONLY (S3 + CloudFront)"
         ;;
     backend)
-        print_info "Mode: BACKEND ONLY (ECR + ECS)"
+        if [ "$AWS_ENABLED" = true ] && [ "$AZURE_ENABLED" = true ]; then
+            print_info "Mode: BACKEND ONLY (ECR + ACR)"
+        elif [ "$AWS_ENABLED" = true ]; then
+            print_info "Mode: BACKEND ONLY (ECR + ECS)"
+        else
+            print_info "Mode: BACKEND ONLY (ACR)"
+        fi
         ;;
     ecs)
         print_info "Mode: ECS UPDATE ONLY"
@@ -521,6 +650,21 @@ case $MODE in
         fi
         ;;
 esac
+
+if [ "$AWS_ENABLED" = true ] && [ "$AZURE_ENABLED" = true ]; then
+    print_info "Environments: AWS + Azure"
+elif [ "$AWS_ENABLED" = true ]; then
+    print_info "Environments: AWS"
+else
+    print_info "Environments: Azure"
+fi
+
+if [ "$AWS_ENABLED" = false ]; then
+    if [ "$MODE" = "frontend" ] || [ "$MODE" = "ecs" ] || [ "$MODE" = "verify" ] || [ "$MODE" = "check-invalidation" ] || [ "$MODE" = "verify-ecs" ]; then
+        print_error "Selected mode requires AWS environment"
+        exit 1
+    fi
+fi
 
 if [ "$FAST_MODE" = true ]; then
     print_info "Fast mode: Skipping local container tests"
@@ -563,17 +707,28 @@ deploy_local() {
     fi
     print_success "Prerequisites satisfied"
 
+    print_info "Switching to project root: $PROJECT_ROOT"
+    if ! cd "$PROJECT_ROOT"; then
+        print_error "Project root not found: $PROJECT_ROOT"
+        return 1
+    fi
+
     if [ ! -f "docker-compose.yml" ]; then
         print_error "docker-compose.yml not found in current directory."
         return 1
     fi
 
     if [ "$TEST_MODE" = true ]; then
+        print_info "Test mode: Would stop/remove container '$LOCAL_CONTAINER_NAME'"
         print_info "Test mode: Would run '$compose_cmd up -d --build'"
         return 0
     fi
 
     echo ""
+    print_info "Stopping and removing container: $LOCAL_CONTAINER_NAME"
+    docker stop "$LOCAL_CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker rm "$LOCAL_CONTAINER_NAME" >/dev/null 2>&1 || true
+
     print_info "Building and restarting local container..."
     if $compose_cmd up -d --build; then
         print_success "Local container updated successfully"
@@ -591,6 +746,11 @@ deploy_local() {
 # FRONTEND DEPLOYMENT
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 deploy_frontend() {
+    if [ "$AWS_ENABLED" = false ]; then
+        print_error "Frontend deployment requires AWS environment"
+        return 1
+    fi
+
     print_header "FRONTEND DEPLOYMENT"
 
     # Update progress if in parallel mode
@@ -739,8 +899,8 @@ deploy_frontend() {
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # BACKEND DEPLOYMENT (Docker → ECR)
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-check_prerequisites() {
-    print_info "Checking prerequisites..."
+check_prerequisites_aws() {
+    print_info "Checking AWS prerequisites..."
     print_debug "Checking for required tools: docker, aws, jq"
 
     local missing_tools=()
@@ -783,60 +943,72 @@ check_prerequisites() {
         return 1
     fi
 
-    print_success "All prerequisites satisfied"
+    print_success "AWS prerequisites satisfied"
 }
 
-deploy_backend_build() {
-    print_header "BACKEND BUILD & PUSH TO ECR"
+check_prerequisites_azure() {
+    print_info "Checking Azure prerequisites..."
+    print_debug "Checking for required tools: docker, docker buildx"
 
-    # Update progress if in parallel mode
-    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "15" > "$BACKEND_PROGRESS_FILE"
+    local missing_tools=()
 
+    if ! command -v docker &> /dev/null; then
+        missing_tools+=("docker")
+        print_debug "Docker: NOT FOUND"
+    else
+        print_debug "Docker: found ($(docker --version 2>&1 | head -n1))"
+    fi
+
+    if ! docker buildx version &> /dev/null; then
+        missing_tools+=("docker-buildx")
+        print_debug "Docker buildx: NOT FOUND"
+    else
+        print_debug "Docker buildx: found"
+    fi
+
+    if [ ${#missing_tools[@]} -gt 0 ]; then
+        print_error "Missing required tools: ${missing_tools[*]}"
+        return 1
+    fi
+
+    if [ -z "$AZURE_ACR_REGISTRY" ] || [ -z "$AZURE_IMAGE_REPO" ]; then
+        print_error "Azure ACR registry/repo not configured"
+        return 1
+    fi
+
+    # Check Docker is running
+    if ! docker info &> /dev/null; then
+        print_error "Docker is not running"
+        return 1
+    fi
+
+    print_success "Azure prerequisites satisfied"
+}
+
+check_prerequisites() {
+    local ok=true
+
+    if [ "$AWS_ENABLED" = true ]; then
+        check_prerequisites_aws || ok=false
+    fi
+
+    if [ "$AZURE_ENABLED" = true ]; then
+        check_prerequisites_azure || ok=false
+    fi
+
+    if [ "$ok" = false ]; then
+        return 1
+    fi
+}
+
+deploy_backend_build_aws() {
     print_debug "ECR registry: $ECR_REGISTRY"
     print_debug "ECR repository: $ECR_REPO"
     print_debug "Image tag: $IMAGE_TAG"
 
-    # Check prerequisites
-    if ! check_prerequisites; then
-        return 1
-    fi
-
-    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "20" > "$BACKEND_PROGRESS_FILE"
-
-    local build_dir
-    if [ "$FROM_VM" = true ]; then
-        build_dir="$LOCAL_DEST_PATH/Innovate-For-Inclusion---MyAccessibilityBuddy"
-    else
-        build_dir="/home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy"
-    fi
-    print_debug "Build directory: $build_dir"
-
-    if [ ! -d "$build_dir" ]; then
-        print_error "Build directory not found: $build_dir"
-        return 1
-    fi
-
-    print_debug "Changing to build directory..."
-    cd "$build_dir"
-
-    # Check .env file exists
-    if [ ! -f "backend/.env" ]; then
-        print_error "backend/.env file not found"
-        print_info "Please create backend/.env with required environment variables"
-        return 1
-    fi
-    print_debug "Found backend/.env file"
-
-    if [ "$TEST_MODE" = true ]; then
-        print_info "Test mode: Would build and push Docker image"
-        print_info "Build directory: $build_dir"
-        print_info "Image: $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
-        return 0
-    fi
-
     # Build Docker image
     print_info "Building Docker image..."
-    print_info "Build context: $build_dir"
+    print_info "Build context: $BUILD_DIR"
     print_debug "Docker build command: docker build -t $ECR_REPO:$IMAGE_TAG ."
     [ -f "$BACKEND_PROGRESS_FILE" ] && echo "25" > "$BACKEND_PROGRESS_FILE"
 
@@ -933,10 +1105,94 @@ deploy_backend_build() {
     fi
 }
 
+deploy_backend_build_azure() {
+    print_header "BACKEND BUILD & PUSH TO ACR"
+    print_debug "ACR registry: $AZURE_ACR_REGISTRY"
+    print_debug "ACR repository: $AZURE_IMAGE_REPO"
+    print_debug "Image tag: $IMAGE_TAG"
+    print_debug "Platform: $AZURE_PLATFORM"
+
+    print_info "Building and pushing Docker image to ACR..."
+    print_info "Build context: $(pwd)"
+    print_debug "Docker buildx command: docker buildx build --platform $AZURE_PLATFORM -t $AZURE_ACR_REGISTRY/$AZURE_IMAGE_REPO:$IMAGE_TAG --push ."
+
+    if docker buildx build --platform "$AZURE_PLATFORM" \
+        -t "$AZURE_ACR_REGISTRY/$AZURE_IMAGE_REPO:$IMAGE_TAG" \
+        --push .; then
+        print_success "Image pushed to ACR successfully"
+        print_debug "Image available at: $AZURE_ACR_REGISTRY/$AZURE_IMAGE_REPO:$IMAGE_TAG"
+    else
+        print_error "ACR build/push failed"
+        return 1
+    fi
+}
+
+deploy_backend_build() {
+    print_header "BACKEND BUILD & PUSH"
+
+    # Update progress if in parallel mode
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "15" > "$BACKEND_PROGRESS_FILE"
+
+    # Check prerequisites
+    if ! check_prerequisites; then
+        return 1
+    fi
+
+    [ -f "$BACKEND_PROGRESS_FILE" ] && echo "20" > "$BACKEND_PROGRESS_FILE"
+
+    if [ "$FROM_VM" = true ]; then
+        BUILD_DIR="$LOCAL_DEST_PATH/$(basename "$VM_SOURCE_PATH")"
+    else
+        BUILD_DIR="$PROJECT_ROOT"
+    fi
+    print_debug "Build directory: $BUILD_DIR"
+
+    if [ ! -d "$BUILD_DIR" ]; then
+        print_error "Build directory not found: $BUILD_DIR"
+        return 1
+    fi
+
+    print_debug "Changing to build directory..."
+    cd "$BUILD_DIR"
+
+    # Check .env file exists
+    if [ ! -f "backend/.env" ]; then
+        print_error "backend/.env file not found"
+        print_info "Please create backend/.env with required environment variables"
+        return 1
+    fi
+    print_debug "Found backend/.env file"
+
+    if [ "$TEST_MODE" = true ]; then
+        print_info "Test mode: Would build and push Docker image"
+        print_info "Build directory: $BUILD_DIR"
+        if [ "$AWS_ENABLED" = true ]; then
+            print_info "AWS image: $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
+        fi
+        if [ "$AZURE_ENABLED" = true ]; then
+            print_info "Azure image: $AZURE_ACR_REGISTRY/$AZURE_IMAGE_REPO:$IMAGE_TAG"
+        fi
+        return 0
+    fi
+
+    if [ "$AWS_ENABLED" = true ]; then
+        deploy_backend_build_aws || return 1
+    fi
+
+    if [ "$AZURE_ENABLED" = true ]; then
+        deploy_backend_build_azure || return 1
+    fi
+}
+
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ECS DEPLOYMENT
 #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 deploy_ecs() {
+    if [ "$AWS_ENABLED" = false ]; then
+        print_error "ECS deployment requires AWS environment"
+        return 1
+    fi
+
     print_header "ECS SERVICE DEPLOYMENT"
 
     # Update progress if in parallel mode
@@ -1874,7 +2130,9 @@ case $MODE in
             copy_from_vm || exit 1
         fi
         deploy_backend_build || exit 1
-        deploy_ecs || exit 1
+        if [ "$AWS_ENABLED" = true ]; then
+            deploy_ecs || exit 1
+        fi
         ;;
 
     ecs)
@@ -1884,6 +2142,12 @@ case $MODE in
     *)  # full
         if [ "$FROM_VM" = true ]; then
             copy_from_vm || exit 1
+        fi
+
+        if [ "$AWS_ENABLED" = false ]; then
+            print_warning "AWS not selected - skipping frontend and ECS deployment"
+            deploy_backend_build || exit 1
+            exit 0
         fi
 
         # Run backend and frontend deployments in parallel for faster deployment

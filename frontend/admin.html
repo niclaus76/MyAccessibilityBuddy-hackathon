@@ -50,7 +50,8 @@
     <div class="container">
       <img src="assets/Admin-tool.png" alt="Administration tool" class="mb-3" style="max-width:180px;">
       <h1 class="fw-bold">Administration Tool</h1>
-      <p class="lead mb-0">Configuration parameters and administrative tools for My Accessibility Buddy.</p>
+      <p class="lead mb-2">Configuration parameters and administrative tools for My Accessibility Buddy.</p>
+      <p class="text-muted mb-0"><small>Revision: <span id="revisionNumber">Loading...</span></small></p>
     </div>
   </header>
 
@@ -586,6 +587,28 @@
 
       // Load initial configuration on page load
       loadConfig();
+    })();
+
+    // Revision Number Display
+    (function() {
+      const API_BASE = window.location.origin;
+      const revisionSpan = document.getElementById('revisionNumber');
+
+      async function loadRevision() {
+        try {
+          const response = await fetch(`${API_BASE}/api/health`);
+          if (!response.ok) {
+            throw new Error('Failed to load revision');
+          }
+          const data = await response.json();
+          revisionSpan.textContent = data.version || 'Unknown';
+        } catch (error) {
+          console.error('Error loading revision:', error);
+          revisionSpan.textContent = 'Error loading';
+        }
+      }
+
+      loadRevision();
     })();
 
     // Session Data Management

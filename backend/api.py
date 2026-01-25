@@ -2485,7 +2485,7 @@ def _run_analysis_with_progress(job_id: str, data: dict):
 
     # Check for errors
     if process.returncode != 0:
-        error_msg = stderr or stdout or "Unknown error"
+        error_msg = ''.join(stderr_lines) or ''.join(stdout_lines) or "Unknown error"
         log_message(f"[Job {job_id}] CLI execution failed: {error_msg}", "ERROR")
         # Don't fail yet - might still have generated a report
 
@@ -3261,6 +3261,14 @@ if frontend_dir.exists():
         if file_path.exists():
             return FileResponse(str(file_path), media_type="text/css")
         return {"error": f"Style {filename}.css not found"}
+
+    @app.get("/site.webmanifest")
+    async def serve_webmanifest():
+        """Serve web manifest file."""
+        file_path = frontend_dir / "site.webmanifest"
+        if file_path.exists():
+            return FileResponse(str(file_path), media_type="application/manifest+json")
+        return {"error": "site.webmanifest not found"}
 
     print(f"[API] Frontend served from: {frontend_dir}")
     print(f"[API] Access application at: http://localhost:8000/index.html (same-origin, cookies work)")
