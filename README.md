@@ -4,7 +4,7 @@
 
 An AI-powered, context-aware alternative text generator that uses surrounding page content to produce WCAG 2.2–compliant descriptions humans and machines can understand.
 
-# [TRY ME!](https://icy-bay-0b3394d10.4.azurestaticapps.net/)
+# [TRY ME!](https://myaccessibilitybuddy-api.kindwave-02701f04.westeurope.azurecontainerapps.io/index.html)
 
 ## Introduction
 Why does **context matters**? Are these two images the same?
