@@ -10,10 +10,12 @@ An AI-powered, context-aware alternative text generator that uses surrounding pa
 Why does **context matters**? Are these two images the same?
 
 ![Luna](frontend/assets/Luna_1.png)
+
 **Alternative text** for the first image is: "A golden retriever sitting on grass"
 
 
 ![Luna](frontend/assets/Luna_2.png)
+
 **Alternative text** for the second is: "**Luna**, a **2-year-old** golden retriever **available for adoption**, sitting on grass."
 
 **Alternative text is the translation of the image’s role in a given page**
