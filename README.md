@@ -6,21 +6,56 @@ An AI-powered, context-aware alternative text generator that uses surrounding pa
 
 # [TRY ME!](https://myaccessibilitybuddy-api.kindwave-02701f04.westeurope.azurecontainerapps.io/index.html)
 
-## Introduction
-Why does **context matters**? Are these two images the same?
+## Introduction: Why Context Matters in Alternative Text
+
+Alternative text is **not a literal description of pixels**.  
+It is the **semantic translation of an image’s role within a specific page**.
+
+An image has no fixed meaning on its own. Meaning emerges only when the image is interpreted **in context**.
+
+### Example: Same image, different contexts
+
+#### Context A. Generic illustration
+- **Page intent:** visual enrichment  
+- **User task:** none  
+- **Image role:** decorative or illustrative  
 
 ![Luna](frontend/assets/Luna_1.png)
 
-**Alternative text** for the first image is: "A golden retriever sitting on grass"
+**Alternative text:**  
+> A golden retriever sitting on grass.
 
+This description is sufficient. Adding more detail would introduce noise without adding value.
+
+#### Context B. Adoption listing
+- **Page intent:** inform and persuade  
+- **User task:** decide whether to adopt  
+- **Image role:** informative and decision-supporting  
 
 ![Luna](frontend/assets/Luna_2.png)
 
-**Alternative text** for the second is: "**Luna**, a **2-year-old** golden retriever **available for adoption**, sitting on grass."
+**Alternative text:**  
+> Luna, a 2-year-old golden retriever available for adoption, sitting on grass.
 
-**Alternative text is the translation of the image’s role in a given page**
+In this context, omitting the dog’s name, age, or adoption status would remove **essential meaning**.
 
-## Features
+## The core principle
+**Alternative text is the translation of an image’s role in a given page, not a description of the image itself.**
+
+This has three important implications:
+
+1. **The same image can require different alternative text**  
+   Reusing alt text without considering context often results in incorrect or misleading descriptions.
+
+2. **Object recognition is not enough**  
+   Computer vision can identify *what* is visible (e.g. “dog”, “golden retriever”),  
+   but it cannot determine *why the image is there*.
+
+3. **Context determines relevance**  
+   Page purpose, surrounding text, user intent, and task flow define  
+   what information must be included and what should be omitted
+
+## MyAccessibilityBuddy features
 
 ### Three Main Use Cases
 - 👨‍💼 **[For Webmasters](#for-webmasters-generate-wcag-compliant-alternate-text-for-images)**: Generate WCAG-compliant alt-text for individual images via Web UI or CLI
