@@ -290,6 +290,7 @@ PROGRESS_FILE_PATH = None
 def write_progress(percent, message, phase=None, current_image=None, total_images=None):
     """
     Write progress update to a JSON file for async API polling.
+    Also prints to stdout for subprocess streaming.
 
     Args:
         percent (int): Progress percentage (0-100)
@@ -299,6 +300,10 @@ def write_progress(percent, message, phase=None, current_image=None, total_image
         total_images (int): Total number of images to process
     """
     global PROGRESS_FILE_PATH
+
+    # Always print progress to stdout for subprocess streaming
+    if current_image is not None and total_images is not None:
+        print(f"Processing image {current_image} of {total_images}", flush=True)
 
     if not PROGRESS_FILE_PATH:
         return  # No progress file configured, skip

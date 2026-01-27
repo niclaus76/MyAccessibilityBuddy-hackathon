@@ -35,10 +35,13 @@
     "merge_separator": "\n\n---\n\n"
   },
 
+  "_comment_menu_position": "Control the burger menu position: 'fixed' keeps it in the top-right corner always visible, 'static' makes it part of the normal page flow at the top",
+  "menu_position": "static",
+
   "_comment_pages_visibility": "Control which pages are visible in the navigation menu. Set to false to hide a page from the burger menu and home page links. The page file remains on the server but is not reachable through navigation.",
   "pages_visibility": {
     "home": true,
-    "webmaster": true,
+    "content_creator": true,
     "accessibility_compliance": true,
     "prompt_optimization": true,
     "remediation": false,

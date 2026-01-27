@@ -1,7 +1,8 @@
 /**
- * Navigation visibility control based on config.advanced.json pages_visibility settings.
- * This script fetches the configuration and hides/shows navigation links and home page cards
- * based on the pages_visibility configuration.
+ * Navigation visibility and position control based on config settings.
+ * This script fetches the configuration and:
+ * - hides/shows navigation links and home page cards based on pages_visibility
+ * - applies menu position (fixed or static) based on menu_position
  */
 (function() {
     'use strict';
@@ -9,7 +10,7 @@
     // Map of page keys to their corresponding href patterns
     const pageHrefMap = {
         'home': 'index.html',
-        'webmaster': 'webmaster.html',
+        'content_creator': 'content-creator.html',
         'accessibility_compliance': 'accessibility-compliance.html',
         'prompt_optimization': 'prompt-optimization.html',
         'remediation': 'remediation.html',
@@ -19,12 +20,68 @@
     // Default visibility (all pages visible)
     const defaultVisibility = {
         home: true,
-        webmaster: true,
+        content_creator: true,
         accessibility_compliance: true,
         prompt_optimization: true,
         remediation: true,
         admin: true
     };
+
+    /**
+     * Apply menu position setting
+     * @param {string} position - 'fixed' or 'static'
+     */
+    function applyMenuPosition(position) {
+        const menuToggle = document.getElementById('menuToggle');
+        const navMenu = document.getElementById('primaryNav');
+        const overlay = document.getElementById('navOverlay');
+
+        if (!menuToggle) return;
+
+        if (position === 'static') {
+            // Static mode: menu button is part of normal flow, always visible at top
+            menuToggle.style.position = 'relative';
+            menuToggle.style.top = 'auto';
+            menuToggle.style.right = 'auto';
+            menuToggle.style.margin = '10px';
+            menuToggle.style.float = 'right';
+            menuToggle.style.zIndex = '1050';
+
+            // Add a container for the menu button if not already present
+            let menuContainer = document.getElementById('menuContainer');
+            if (!menuContainer) {
+                menuContainer = document.createElement('div');
+                menuContainer.id = 'menuContainer';
+                menuContainer.style.cssText = 'position: sticky; top: 0; background: white; z-index: 1050; padding: 10px 15px; border-bottom: 1px solid #dee2e6; margin-bottom: 10px; overflow: hidden;';
+                // Insert after the skip link or at the start of body
+                const skipLink = document.querySelector('.skip-link');
+                if (skipLink && skipLink.nextSibling) {
+                    document.body.insertBefore(menuContainer, skipLink.nextSibling);
+                } else {
+                    document.body.insertBefore(menuContainer, document.body.firstChild);
+                }
+            }
+            // Move the button into the container (overflow:hidden acts as clearfix)
+            menuContainer.appendChild(menuToggle);
+        } else {
+            // Fixed mode (default): menu button is fixed in top-right corner
+            menuToggle.style.position = 'fixed';
+            menuToggle.style.top = '20px';
+            menuToggle.style.right = '20px';
+            menuToggle.style.margin = '';
+            menuToggle.style.float = '';
+
+            // Remove container if it exists
+            const menuContainer = document.getElementById('menuContainer');
+            if (menuContainer) {
+                // Move button back to body before removing container
+                document.body.insertBefore(menuToggle, menuContainer);
+                menuContainer.remove();
+            }
+        }
+
+        console.log('[Navigation] Menu position applied:', position);
+    }
 
     /**
      * Apply page visibility settings to the DOM
@@ -75,9 +132,9 @@
     }
 
     /**
-     * Fetch configuration and apply page visibility
+     * Fetch configuration and apply settings
      */
-    async function initPageVisibility() {
+    async function initNavigation() {
         try {
             const response = await fetch('/api/available-providers');
             if (!response.ok) {
@@ -86,8 +143,13 @@
             }
 
             const data = await response.json();
-            console.log('[Navigation] Config received:', data.config_defaults?.pages_visibility);
 
+            // Apply menu position
+            if (data.config_defaults && data.config_defaults.menu_position) {
+                applyMenuPosition(data.config_defaults.menu_position);
+            }
+
+            // Apply page visibility
             if (data.config_defaults && data.config_defaults.pages_visibility) {
                 applyPageVisibility(data.config_defaults.pages_visibility);
             } else {
@@ -98,11 +160,14 @@
         }
     }
 
+    // Expose applyMenuPosition globally for admin page to use
+    window.applyMenuPosition = applyMenuPosition;
+
     // Initialize when DOM is ready
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initPageVisibility);
+        document.addEventListener('DOMContentLoaded', initNavigation);
     } else {
         // DOM is already ready, run immediately
-        initPageVisibility();
+        initNavigation();
     }
 })();

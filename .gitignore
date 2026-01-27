@@ -4,13 +4,10 @@
 # Virtual environment
 venv/
 
-# Working directories (keep only .gitkeep files)
-alt-text/*
-!alt-text/.gitkeep
-images/*
-!images/.gitkeep
-context/*
-!context/.gitkeep
+# Working directories
+alt-text/
+images/
+context/
 
 # Python cache
 __pycache__/
@@ -29,3 +26,6 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Cloud config
+development/5-clud-config/*

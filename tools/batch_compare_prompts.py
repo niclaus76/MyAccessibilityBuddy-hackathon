@@ -63,7 +63,13 @@ import subprocess
 import shutil
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List
+
+
+def get_cet_time():
+    """Get current time in CET (Central European Time) timezone."""
+    return datetime.now(ZoneInfo("Europe/Paris"))
 
 # ANSI color codes
 class Colors:
@@ -396,27 +402,38 @@ def run_batch_processing(use_geo=False):
         if OVERRIDE_ADVANCED_TRANSLATION:
             cmd.append("--advanced-translation")
 
-        # Change to backend directory and run the command
-        result = subprocess.run(
+        # Change to backend directory and run the command with streaming output
+        process = subprocess.Popen(
             cmd,
             cwd=BACKEND_DIR,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=3600  # 1 hour timeout
+            bufsize=1  # Line buffered
         )
 
-        if result.returncode != 0:
-            print_error(f"Batch processing failed with return code {result.returncode}")
-            if result.stderr:
-                print(f"Error output: {result.stderr}")
-            return None
-
-        # Extract session ID from output (looks for "Using session: cli-xxxxx")
+        # Stream output and capture for session ID extraction
         session_id = None
-        for line in result.stdout.split('\n'):
+        output_lines = []
+
+        # Read stdout line by line for real-time progress
+        for line in process.stdout:
+            output_lines.append(line)
+            # Pass through the line for progress tracking
+            print(line, end='', flush=True)
+            # Look for session ID
             if 'Using session:' in line:
                 session_id = line.split('Using session:')[1].strip()
-                break
+
+        # Wait for process to complete
+        process.wait()
+        stderr_output = process.stderr.read()
+
+        if process.returncode != 0:
+            print_error(f"Batch processing failed with return code {process.returncode}")
+            if stderr_output:
+                print(f"Error output: {stderr_output}")
+            return None
 
         print_success(f"Batch processing completed ({mode_label})")
         if session_id:
@@ -490,6 +507,7 @@ def generate_csv(all_results: Dict[str, Dict[str, Dict[str, str]]], output_path:
         output_path: Path to write the CSV file
     """
     print_header("Generating CSV Report")
+    print("Generating comparison report...", flush=True)
 
     # Get all unique image filenames
     all_images = set()
@@ -552,6 +570,15 @@ def generate_html_report(all_results: Dict[str, Dict[str, Dict[str, str]]], outp
         output_path: Path to write the HTML file
     """
     print_header("Generating HTML Report")
+
+    # Load config to get provider/model settings
+    config_steps = {}
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            config_steps = config.get('steps', {})
+    except Exception:
+        pass  # Use empty dict if config can't be loaded
 
     # Get all unique image filenames
     all_images = set()
@@ -819,7 +846,23 @@ def generate_html_report(all_results: Dict[str, Dict[str, Dict[str, str]]], outp
         <p><strong>Languages:</strong> {', '.join(TEST_LANGUAGES)}</p>
         <p><strong>Test Images:</strong> {', '.join(TEST_IMAGES)}</p>
         <p><strong>GEO Boost Testing:</strong> {'Enabled (both modes tested)' if TEST_GEO_BOOST else 'Disabled (standard only)'}</p>
-        <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        <p><strong>Generated:</strong> {get_cet_time().strftime('%Y-%m-%d %H:%M:%S')} CET</p>
+
+        <div class="stats-section">
+            <h3>Model Configuration</h3>
+            <div class="stat-item">
+                <span class="stat-label">Vision</span>
+                <span class="stat-value">{OVERRIDE_VISION_PROVIDER or config_steps.get('vision', {}).get('provider', 'N/A')} / {OVERRIDE_VISION_MODEL or config_steps.get('vision', {}).get('model', 'N/A')}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Processing</span>
+                <span class="stat-value">{OVERRIDE_PROCESSING_PROVIDER or config_steps.get('processing', {}).get('provider', 'N/A')} / {OVERRIDE_PROCESSING_MODEL or config_steps.get('processing', {}).get('model', 'N/A')}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Translation</span>
+                <span class="stat-value">{OVERRIDE_TRANSLATION_PROVIDER or config_steps.get('translation', {}).get('provider', 'N/A')} / {OVERRIDE_TRANSLATION_MODEL or config_steps.get('translation', {}).get('model', 'N/A')}</span>
+            </div>
+        </div>
 
         <div class="stats-section">
             <h3>Prompts Tested</h3>
@@ -860,6 +903,30 @@ def generate_html_report(all_results: Dict[str, Dict[str, Dict[str, str]]], outp
             # Fallback to relative path if file not found
             image_html = f'<img src="../../input/images/{image}" alt="Test image: {image}" class="image-preview" onerror="this.style.display=\'none\'">'
 
+        # Try to load context for this image
+        context_text = ""
+        if CONTEXT_DIR and CONTEXT_DIR.exists():
+            # Context file has same base name as image but with .txt extension
+            image_base = Path(image).stem
+            context_file = CONTEXT_DIR / f"{image_base}.txt"
+            if context_file.exists():
+                try:
+                    with open(context_file, 'r', encoding='utf-8') as cf:
+                        context_text = cf.read().strip()
+                except Exception:
+                    pass
+
+        context_html = ""
+        if context_text:
+            # Escape HTML and preserve line breaks
+            import html
+            escaped_context = html.escape(context_text).replace('\n', '<br>')
+            context_html = f"""
+        <div class="field" style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+            <strong>Context:</strong>
+            <p style="margin: 8px 0 0 0; font-style: italic;">{escaped_context}</p>
+        </div>"""
+
         html_content += f"""
     <article class="image-card" role="article" aria-labelledby="image-{image.replace('.', '-')}">
         <h3 id="image-{image.replace('.', '-')}">{image}</h3>
@@ -867,7 +934,7 @@ def generate_html_report(all_results: Dict[str, Dict[str, Dict[str, str]]], outp
         <div class="field">
             {image_html}
         </div>
-
+        {context_html}
         <table class="comparison-table">
             <thead>
                 <tr>
@@ -1047,7 +1114,7 @@ def main():
     print_info("Cleaning up previous test sessions...")
     clear_output_directory()
 
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    timestamp = get_cet_time().strftime("%Y-%m-%dT%H-%M-%S")
     geo_suffix = "_geo_comparison" if TEST_GEO_BOOST else ""
     output_csv = OUTPUT_REPORTS_DIR / f"prompt_comparison_{timestamp}{geo_suffix}.csv"
 
@@ -1075,6 +1142,9 @@ def main():
                     print_header(f"Processing: {prompt['label']} - {mode_info} ({i}/{total_prompts}, mode {mode_idx}/{len(modes_to_test)})")
                 else:
                     print_header(f"Processing with: {prompt['label']} ({i}/{total_prompts})")
+
+                # Output simple progress line for backend parsing (no color codes)
+                print(f"Processing with: {prompt['label']} ({i}/{total_prompts})", flush=True)
 
                 # Update configuration
                 update_config_prompt(prompt['file'])

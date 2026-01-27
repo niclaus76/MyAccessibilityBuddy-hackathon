@@ -136,13 +136,39 @@
     // Fetch config defaults and available providers from API
     async function loadAvailableProviders() {
         try {
-            const response = await fetch(`${API_BASE_URL}/available-providers`, {
-                credentials: 'include'
-            });
-            const data = await response.json();
+            // Fetch both available providers and their connection status
+            const [providersResponse, statusResponse] = await Promise.all([
+                fetch(`${API_BASE_URL}/available-providers`, { credentials: 'include' }),
+                fetch(`${API_BASE_URL}/provider-status`, { credentials: 'include' })
+            ]);
+            const data = await providersResponse.json();
+            let statusData = {};
 
-            modelOptions = data.providers || {};
-            availableProviders = Object.keys(modelOptions);
+            try {
+                statusData = await statusResponse.json();
+                console.log('[PROMPT-OPT] Provider status:', statusData);
+            } catch (e) {
+                console.warn('[PROMPT-OPT] Could not parse provider status, showing all enabled providers');
+            }
+
+            // Filter to only include providers with 'connected' status
+            // If status check failed or returned empty, fall back to all enabled providers
+            // Note: provider-status API returns { providers: {...}, checked_at: "..." }
+            const providerStatuses = statusData.providers || statusData;
+            const hasStatusData = Object.keys(providerStatuses).length > 0;
+            const connectedProviders = {};
+
+            for (const [provider, models] of Object.entries(data.providers || {})) {
+                // Include if: no status data available, OR status is 'connected'
+                if (!hasStatusData || providerStatuses[provider]?.status === 'connected') {
+                    connectedProviders[provider] = models;
+                }
+            }
+
+            modelOptions = connectedProviders;
+            availableProviders = Object.keys(connectedProviders);
+
+            console.log('[PROMPT-OPT] Filtered providers:', availableProviders);
 
             if (data.config_defaults) {
                 configDefaults = data.config_defaults;
@@ -765,22 +791,6 @@
                     <li><strong>Languages:</strong> ${data.summary.languages || 0}</li>
                     <li><strong>Success Rate:</strong> ${data.summary.success_rate || 0}%</li>
                 </ul>
-            `;
-        }
-
-        if (currentReportPath) {
-            summaryHTML += `
-                <p class="text-muted small mt-3">
-                    <strong>Report Location:</strong> <code>${escapeHtml(currentReportPath)}</code>
-                </p>
-            `;
-        }
-
-        if (currentCsvPath) {
-            summaryHTML += `
-                <p class="text-muted small">
-                    <strong>CSV Data:</strong> <code>${escapeHtml(currentCsvPath)}</code>
-                </p>
             `;
         }
 

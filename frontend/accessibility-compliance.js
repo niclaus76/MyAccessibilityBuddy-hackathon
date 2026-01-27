@@ -72,13 +72,39 @@
     // Fetch config defaults and available providers from API
     async function loadAvailableProviders() {
         try {
-            const response = await fetch(`${API_BASE_URL}/available-providers`, {
-                credentials: 'include'
-            });
-            const data = await response.json();
+            // Fetch both available providers and their connection status
+            const [providersResponse, statusResponse] = await Promise.all([
+                fetch(`${API_BASE_URL}/available-providers`, { credentials: 'include' }),
+                fetch(`${API_BASE_URL}/provider-status`, { credentials: 'include' })
+            ]);
+            const data = await providersResponse.json();
+            let statusData = {};
 
-            modelOptions = data.providers;
-            availableProviders = Object.keys(data.providers);
+            try {
+                statusData = await statusResponse.json();
+                console.log('[COMPLIANCE] Provider status:', statusData);
+            } catch (e) {
+                console.warn('[COMPLIANCE] Could not parse provider status, showing all enabled providers');
+            }
+
+            // Filter to only include providers with 'connected' status
+            // If status check failed or returned empty, fall back to all enabled providers
+            // Note: provider-status API returns { providers: {...}, checked_at: "..." }
+            const providerStatuses = statusData.providers || statusData;
+            const hasStatusData = Object.keys(providerStatuses).length > 0;
+            const connectedProviders = {};
+
+            for (const [provider, models] of Object.entries(data.providers || {})) {
+                // Include if: no status data available, OR status is 'connected'
+                if (!hasStatusData || providerStatuses[provider]?.status === 'connected') {
+                    connectedProviders[provider] = models;
+                }
+            }
+
+            modelOptions = connectedProviders;
+            availableProviders = Object.keys(connectedProviders);
+
+            console.log('[COMPLIANCE] Filtered providers:', availableProviders);
 
             // Store config defaults if provided
             if (data.config_defaults) {
@@ -811,7 +837,7 @@
             progressEstimate.textContent = `Estimated time: ~${duration}`;
         }
         if (estimatePreview) {
-            estimatePreview.textContent = `(time: ${duration})`;
+            estimatePreview.textContent = `(duration: ${duration})`;
         }
     }
 
@@ -896,7 +922,7 @@
 
         // Reset duration timer
         if (estimatePreview) {
-            estimatePreview.textContent = '(time: --:--)';
+            estimatePreview.textContent = '(duration: --:--)';
         }
         if (progressEstimate) {
             progressEstimate.textContent = 'Estimated time: --:--';

@@ -56,15 +56,41 @@
     // Fetch config defaults and available providers from API
     async function loadAvailableProviders() {
         try {
-            const response = await fetch(`${API_BASE_URL}/available-providers`, {
-                credentials: 'include'
-            });
-            const data = await response.json();
+            // Fetch both available providers and their connection status
+            const [providersResponse, statusResponse] = await Promise.all([
+                fetch(`${API_BASE_URL}/available-providers`, { credentials: 'include' }),
+                fetch(`${API_BASE_URL}/provider-status`, { credentials: 'include' })
+            ]);
+            const data = await providersResponse.json();
+            let statusData = {};
 
-            modelOptions = data.providers;
+            try {
+                statusData = await statusResponse.json();
+                console.log('[PROVIDERS] Provider status:', statusData);
+            } catch (e) {
+                console.warn('[PROVIDERS] Could not parse provider status, showing all enabled providers');
+            }
 
-            // Build list of available providers (only enabled ones)
-            availableProviders = Object.keys(data.providers);
+            // Filter to only include providers with 'connected' status
+            // If status check failed or returned empty, fall back to all enabled providers
+            // Note: provider-status API returns { providers: {...}, checked_at: "..." }
+            const providerStatuses = statusData.providers || statusData;
+            const hasStatusData = Object.keys(providerStatuses).length > 0;
+            const connectedProviders = {};
+
+            for (const [provider, models] of Object.entries(data.providers || {})) {
+                // Include if: no status data available, OR status is 'connected'
+                if (!hasStatusData || providerStatuses[provider]?.status === 'connected') {
+                    connectedProviders[provider] = models;
+                }
+            }
+
+            modelOptions = connectedProviders;
+
+            // Build list of available providers (only connected ones)
+            availableProviders = Object.keys(connectedProviders);
+
+            console.log('[PROVIDERS] Filtered providers:', availableProviders);
 
             // Store config defaults if provided
             if (data.config_defaults) {
@@ -576,7 +602,7 @@
             progressEstimate.textContent = `Estimated time: ~${duration}`;
         }
         if (estimatePreview) {
-            estimatePreview.textContent = `(time: ${duration})`;
+            estimatePreview.textContent = `(duration: ${duration})`;
         }
     }
 
@@ -982,7 +1008,7 @@
                     // Create download link
                     const url = window.URL.createObjectURL(blob);
                     const timestamp = new Date().toISOString().slice(0,19).replace(/:/g,'-');
-                    const filename = `${timestamp}-webmaster-report.html`;
+                    const filename = `${timestamp}-content-creator-report.html`;
 
                     const a = document.createElement('a');
                     a.href = url;
@@ -1270,7 +1296,7 @@
 
         // Reset duration timer
         if (estimatePreview) {
-            estimatePreview.textContent = '(time: --:--)';
+            estimatePreview.textContent = '(duration: --:--)';
         }
         if (progressEstimate) {
             progressEstimate.textContent = 'Estimated time: --:--';

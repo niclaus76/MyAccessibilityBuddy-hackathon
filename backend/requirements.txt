@@ -21,6 +21,7 @@ CairoSVG>=2.8.2
 openai>=2.8.1
 anthropic>=0.40.0  # Claude (Anthropic) API client
 google-genai>=0.1.0  # Google Gemini API client (new SDK)
+google-generativeai>=0.8.0  # Google Gemini API client (legacy SDK fallback)
 ollama>=0.3.0  # Ollama client for local models
 # ecb-llm-client>=0.8.6  # Optional: ECB internal package, install separately if needed or uncomment this row
 

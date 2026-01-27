@@ -92,7 +92,7 @@ class ProxyHeadersMiddleware(BaseHTTPMiddleware):
 app = FastAPI(
     title="MyAccessibilityBuddy API",
     description="WCAG 2.2 compliant alt-text generation API",
-    version="5.0.1",
+    version="1.0.7",
     docs_url="/api/docs",
     redoc_url="/api/redoc"
 )
@@ -751,7 +751,7 @@ async def health_check():
 
     return HealthResponse(
         status="healthy",
-        version="5.0.1",
+        version="1.0.7",
         llm_provider=settings.get("llm_provider", "OpenAI"),
         service="MyAccessibilityBuddy"
     )
@@ -806,12 +806,13 @@ async def get_available_providers():
     current_config['time_estimation'] = CONFIG.get('time_estimation', {})
     current_config['pages_visibility'] = CONFIG.get('pages_visibility', {
         'home': True,
-        'webmaster': True,
+        'content_creator': True,
         'accessibility_compliance': True,
         'prompt_optimization': True,
         'remediation': True,
         'admin': True
     })
+    current_config['menu_position'] = CONFIG.get('menu_position', 'fixed')
 
     return {
         'providers': available_providers,
@@ -1492,7 +1493,7 @@ async def save_reviewed_alt_text(fastapi_request: Request, request: SaveReviewed
 @app.post("/api/generate-report")
 async def generate_report_endpoint(request: Request, clear_after: bool = True):
     """
-    Generate HTML report for webmaster tool.
+    Generate HTML report for content creator tool.
 
     Args:
         request: FastAPI Request object
@@ -1542,7 +1543,7 @@ async def generate_report_endpoint(request: Request, clear_after: bool = True):
 
         # Generate timestamp for filename (match other report formats: date first, then type)
         timestamp = datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
-        output_filename = f"{timestamp}-webmaster-report.html"
+        output_filename = f"{timestamp}-content-creator-report.html"
 
         # Use session-specific alt-text folder
         alt_text_folder = session_folders['alt_text']
@@ -1866,12 +1867,13 @@ async def clear_all_sessions(request: Request):
                 for item in os.listdir(base_path):
                     item_path = os.path.join(base_path, item)
 
-                    # Only delete session folders (timestamp-uuid format: YYYYMMDD-HHMMSS-uuid)
+                    # Only delete session folders (timestamp-uuid format: YYYY-MM-DDTHH-MM-SS-uuid)
                     # Also support legacy web- or cli- prefixed folders for backward compatibility
                     is_session_folder = (
                         item.startswith('web-') or
                         item.startswith('cli-') or
-                        (len(item) > 15 and item[8] == '-' and item[0:8].isdigit())
+                        # Match format: YYYY-MM-DDTHH-MM-SS-uuid (e.g., 2026-01-27T00-32-19-4b6cfab2...)
+                        (len(item) > 20 and item[4] == '-' and item[7] == '-' and item[10] == 'T' and item[0:4].isdigit())
                     )
                     if os.path.isdir(item_path) and is_session_folder:
                         session_ids_found.add(item)
@@ -1913,6 +1915,102 @@ async def clear_all_sessions(request: Request):
         raise
     except Exception as e:
         log_message(f"Clear all sessions error: {str(e)}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/folder-contents")
+async def get_folder_contents():
+    """
+    Get contents of input, output, and logs folders for admin view.
+
+    Returns:
+    {
+        "input": {
+            "images": [{"name": "web-xxx", "type": "folder", "files": 5}, ...],
+            "context": [...]
+        },
+        "output": {
+            "alt_text": [...],
+            "reports": [...]
+        },
+        "logs": [...]
+    }
+    """
+    import os
+    from datetime import datetime
+
+    def get_folder_info(base_path, folder_name):
+        """Get list of items in a folder with metadata."""
+        folder_path = os.path.join(base_path, folder_name) if folder_name else base_path
+        items = []
+
+        if not os.path.exists(folder_path):
+            return items
+
+        try:
+            for item in sorted(os.listdir(folder_path)):
+                # Skip hidden files (starting with .) and report_templates folder
+                if item.startswith('.') or item == 'report_templates':
+                    continue
+
+                item_path = os.path.join(folder_path, item)
+                try:
+                    stat_info = os.stat(item_path)
+                    modified_time = datetime.fromtimestamp(stat_info.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+
+                    if os.path.isdir(item_path):
+                        # Count files in directory
+                        file_count = sum(len(files) for _, _, files in os.walk(item_path))
+                        items.append({
+                            "name": item,
+                            "type": "folder",
+                            "files": file_count,
+                            "modified": modified_time
+                        })
+                    else:
+                        # Get file size
+                        size_bytes = stat_info.st_size
+                        if size_bytes < 1024:
+                            size_str = f"{size_bytes} B"
+                        elif size_bytes < 1024 * 1024:
+                            size_str = f"{size_bytes / 1024:.1f} KB"
+                        else:
+                            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+
+                        items.append({
+                            "name": item,
+                            "type": "file",
+                            "size": size_str,
+                            "modified": modified_time
+                        })
+                except Exception:
+                    # Skip items we can't stat
+                    pass
+        except Exception as e:
+            log_message(f"Error reading folder {folder_path}: {e}", "WARNING")
+
+        return items
+
+    try:
+        base_images = get_absolute_folder_path('images')
+        base_context = get_absolute_folder_path('context')
+        base_alt_text = get_absolute_folder_path('alt_text')
+        base_reports = get_absolute_folder_path('reports')
+        base_logs = get_absolute_folder_path('logs')
+
+        return {
+            "input": {
+                "images": get_folder_info(base_images, None),
+                "context": get_folder_info(base_context, None)
+            },
+            "output": {
+                "alt_text": get_folder_info(base_alt_text, None),
+                "reports": get_folder_info(base_reports, None)
+            },
+            "logs": get_folder_info(base_logs, None)
+        }
+    except Exception as e:
+        log_message(f"Get folder contents error: {str(e)}", "ERROR")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3216,6 +3314,53 @@ async def update_alt_text_length_config(config: AltTextLengthConfig):
         'geo_boost_increase_percent': config.geo_boost_increase_percent,
         'geo_boost_limit': geo_boost_limit,
         'message': 'Configuration updated successfully (runtime only, not persisted to file)'
+    }
+
+
+@app.get("/api/menu-position")
+async def get_menu_position():
+    """
+    Get current menu position configuration.
+
+    Returns:
+        Dictionary with menu_position value ('fixed' or 'static')
+    """
+    from app import CONFIG
+    return {
+        'menu_position': CONFIG.get('menu_position', 'fixed')
+    }
+
+
+class MenuPositionConfig(BaseModel):
+    menu_position: str
+
+
+@app.post("/api/menu-position")
+async def set_menu_position(config: MenuPositionConfig):
+    """
+    Update menu position configuration.
+
+    Request body:
+    {
+        "menu_position": "fixed" or "static"
+    }
+
+    Returns:
+        Updated configuration
+    """
+    from app import CONFIG
+
+    if config.menu_position not in ['fixed', 'static']:
+        raise HTTPException(status_code=400, detail="menu_position must be 'fixed' or 'static'")
+
+    # Update CONFIG in memory
+    CONFIG['menu_position'] = config.menu_position
+
+    log_message(f"Menu position configuration updated: {config.menu_position}", "INFORMATION")
+
+    return {
+        'menu_position': config.menu_position,
+        'message': 'Menu position updated successfully (runtime only, not persisted to file)'
     }
 
 

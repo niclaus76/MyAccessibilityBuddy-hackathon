@@ -13,7 +13,6 @@
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
-  <link rel="manifest" href="site.webmanifest">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.8.2/dist/css/bootstrap-italia.min.css" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <style>
@@ -39,7 +38,7 @@
       <button class="btn btn-link p-0" id="menuClose" aria-label="Close navigation">✕</button>
     </div>
     <a class="btn btn-outline-primary w-100" href="index.html">Home</a>
-    <a class="btn btn-outline-primary w-100" href="webmaster.html">Webmaster Tool</a>
+    <a class="btn btn-outline-primary w-100" href="content-creator.html">Content Creator Tool</a>
     <a class="btn btn-outline-primary w-100" href="accessibility-compliance.html">Website Accessibility Tool</a>
     <a class="btn btn-outline-primary w-100" href="prompt-optimization.html">Prompt Optimization</a>
     <a class="btn btn-outline-primary w-100" href="remediation.html">Remediation Tool</a>
@@ -57,11 +56,16 @@
 
   <main id="main-content" class="pb-5">
     <div class="container">
-      <!-- LLM Provider Status -->
+      <!-- LLM Provider Status (Collapsible) -->
       <div class="card shadow-sm border-0 mb-4">
         <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h5 text-primary mb-0">LLM Provider Status</h2>
+          <div class="d-flex justify-content-between align-items-center">
+            <button class="btn btn-link text-primary text-decoration-none p-0 d-flex align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#providerStatusCollapse" aria-expanded="true" aria-controls="providerStatusCollapse">
+              <svg id="providerCollapseIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-2" style="transition: transform 0.3s; transform: rotate(90deg);">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <h2 class="h5 text-primary mb-0">LLM Provider Status</h2>
+            </button>
             <button type="button" class="btn btn-outline-primary btn-sm" id="refreshProvidersBtn">
               <span class="spinner-border spinner-border-sm d-none me-1" id="refreshSpinner" role="status" aria-hidden="true"></span>
               <svg id="refreshIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-1">
@@ -73,113 +77,176 @@
               Refresh
             </button>
           </div>
-          <p class="mb-3">Real-time connectivity status for configured AI providers.</p>
-          <p class="text-muted small mb-3" id="lastCheckedTime">Last checked: --</p>
+          <p class="mb-0 mt-2 text-muted small">Real-time connectivity status for configured AI providers.</p>
 
-          <div class="row g-3" id="providersGrid">
-            <!-- Provider cards will be dynamically inserted here -->
-            <div class="col-12 text-center py-4">
-              <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading provider status...</span>
+          <div class="collapse show mt-3" id="providerStatusCollapse">
+            <p class="text-muted small mb-3" id="lastCheckedTime">Last checked: --</p>
+            <div class="row g-3" id="providersGrid">
+              <!-- Provider cards will be dynamically inserted here -->
+              <div class="col-12 text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">Loading provider status...</span>
+                </div>
+                <p class="text-muted mt-2">Loading provider status...</p>
               </div>
-              <p class="text-muted mt-2">Loading provider status...</p>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Alt-Text Length Configuration -->
+      <!-- Alt-Text Length Configuration (Collapsible) -->
       <div class="card shadow-sm border-0 mb-4">
         <div class="card-body">
-          <h2 class="h5 text-primary mb-3">Alt-Text Length Configuration</h2>
-          <p class="mb-4">Configure the maximum character length for generated alt-text. Changes apply to the current session only.</p>
-
-          <!-- Status Message -->
-          <div id="statusMessage" class="alert d-none" role="alert"></div>
-
-          <div class="row g-3 mb-4">
-            <div class="col-12">
-              <label for="maxAltTextLength" class="form-label fw-semibold">Maximum Alt-Text Length</label>
-              <input
-                type="number"
-                class="form-control"
-                id="maxAltTextLength"
-                min="1"
-                max="500"
-                aria-describedby="maxAltTextHelp"
-                placeholder="125">
-              <small id="maxAltTextHelp" class="form-text text-muted">Maximum number of characters (default: 125)</small>
-            </div>
-          </div>
-
-          <div class="row g-3 mb-4">
-            <div class="col-md-6">
-              <label for="geoBoostIncreasePercent" class="form-label fw-semibold">GEO Boost Increase (%)</label>
-              <input
-                type="number"
-                class="form-control"
-                id="geoBoostIncreasePercent"
-                min="0"
-                max="100"
-                aria-describedby="geoBoostHelp"
-                placeholder="20">
-              <small id="geoBoostHelp" class="form-text text-muted">Percentage increase for alt-text length when GEO boost is enabled (default: 20%). Example: 125 chars + 20% = 150 chars</small>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Calculated GEO Boost Limit</label>
-              <input
-                type="text"
-                class="form-control"
-                id="calculatedGeoLimit"
-                readonly
-                aria-describedby="calculatedGeoHelp"
-                placeholder="150">
-              <small id="calculatedGeoHelp" class="form-text text-muted">Max alt-text length when GEO boost is ON (auto-calculated)</small>
-            </div>
-          </div>
-
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-primary" id="saveParamsBtn">
-              <span class="spinner-border spinner-border-sm d-none" id="saveSpinner" role="status" aria-hidden="true"></span>
-              Save Parameters
+          <div class="d-flex justify-content-between align-items-center">
+            <button class="btn btn-link text-primary text-decoration-none p-0 d-flex align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#altTextConfigCollapse" aria-expanded="false" aria-controls="altTextConfigCollapse">
+              <svg id="altTextCollapseIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-2" style="transition: transform 0.3s;">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <h2 class="h5 text-primary mb-0">Alt-Text Length Configuration</h2>
             </button>
-            <button type="button" class="btn btn-outline-secondary" id="resetParamsBtn">Reset to Config Values</button>
+          </div>
+          <p class="mb-0 mt-2 text-muted small">Configure the maximum character length for generated alt-text.</p>
+
+          <div class="collapse mt-3" id="altTextConfigCollapse">
+            <!-- Status Message -->
+            <div id="statusMessage" class="alert d-none" role="alert"></div>
+
+            <div class="row g-3 mb-4">
+              <div class="col-12">
+                <label for="maxAltTextLength" class="form-label fw-semibold">Maximum Alt-Text Length</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="maxAltTextLength"
+                  min="1"
+                  max="500"
+                  aria-describedby="maxAltTextHelp"
+                  placeholder="125">
+                <small id="maxAltTextHelp" class="form-text text-muted">Maximum number of characters (default: 125)</small>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+              <div class="col-md-6">
+                <label for="geoBoostIncreasePercent" class="form-label fw-semibold">GEO Boost Increase (%)</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="geoBoostIncreasePercent"
+                  min="0"
+                  max="100"
+                  aria-describedby="geoBoostHelp"
+                  placeholder="20">
+                <small id="geoBoostHelp" class="form-text text-muted">Percentage increase for alt-text length when GEO boost is enabled (default: 20%). Example: 125 chars + 20% = 150 chars</small>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Calculated GEO Boost Limit</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="calculatedGeoLimit"
+                  readonly
+                  aria-describedby="calculatedGeoHelp"
+                  placeholder="150">
+                <small id="calculatedGeoHelp" class="form-text text-muted">Max alt-text length when GEO boost is ON (auto-calculated)</small>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-primary" id="saveParamsBtn">
+                <span class="spinner-border spinner-border-sm d-none" id="saveSpinner" role="status" aria-hidden="true"></span>
+                Save Parameters
+              </button>
+              <button type="button" class="btn btn-outline-secondary" id="resetParamsBtn">Reset to Config Values</button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Session Data Management -->
+      <!-- UI Settings (Collapsible) -->
       <div class="card shadow-sm border-0 mb-4">
         <div class="card-body">
-          <h2 class="h5 text-primary mb-3">Session Data Management</h2>
-          <p class="mb-4">Clear session data including uploaded images, generated alt-text, and reports.</p>
-
-          <!-- Clear Session Status Message -->
-          <div id="clearStatusMessage" class="alert d-none" role="alert"></div>
-
-          <div class="mb-4">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="clearAllCheckbox" aria-describedby="clearAllHelp">
-              <label class="form-check-label fw-semibold" for="clearAllCheckbox">
-                Clear all sessions
-              </label>
-            </div>
-            <small id="clearAllHelp" class="form-text text-muted">
-              When unchecked, only your current session data is cleared. When checked, ALL session data from all users will be permanently deleted.
-            </small>
+          <div class="d-flex justify-content-between align-items-center">
+            <button class="btn btn-link text-primary text-decoration-none p-0 d-flex align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#uiSettingsCollapse" aria-expanded="false" aria-controls="uiSettingsCollapse">
+              <svg id="uiSettingsCollapseIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-2" style="transition: transform 0.3s;">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <h2 class="h5 text-primary mb-0">UI Settings</h2>
+            </button>
           </div>
+          <p class="mb-0 mt-2 text-muted small">Configure user interface appearance and behavior.</p>
 
-          <button type="button" class="btn btn-danger" id="clearSessionBtn">
-            <span class="spinner-border spinner-border-sm me-1 d-none" id="clearSpinner" role="status" aria-hidden="true"></span>
-            <svg id="clearIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-1">
-              <path d="M3 6h18"></path>
-              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-              <line x1="10" y1="11" x2="10" y2="17"></line>
-              <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
-            <span id="clearBtnText">Clear</span>
-          </button>
+          <div class="collapse mt-3" id="uiSettingsCollapse">
+            <!-- Menu Position Status Message -->
+            <div id="menuPositionStatusMessage" class="alert d-none" role="alert"></div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Navigation Menu Position</label>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="menuPosition" id="menuPositionFixed" value="fixed">
+                <label class="form-check-label" for="menuPositionFixed">
+                  <strong>Fixed (top-right corner)</strong>
+                  <small class="d-block text-muted">The burger menu stays fixed in the top-right corner of the screen, always visible while scrolling.</small>
+                </label>
+              </div>
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="radio" name="menuPosition" id="menuPositionStatic" value="static">
+                <label class="form-check-label" for="menuPositionStatic">
+                  <strong>Static (top of page)</strong>
+                  <small class="d-block text-muted">The burger menu is positioned at the top of the page as part of the normal document flow.</small>
+                </label>
+              </div>
+            </div>
+
+            <button type="button" class="btn btn-primary" id="saveMenuPositionBtn">
+              <span class="spinner-border spinner-border-sm d-none" id="menuPositionSpinner" role="status" aria-hidden="true"></span>
+              Save Menu Position
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session Data Management (Collapsible) -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <button class="btn btn-link text-primary text-decoration-none p-0 d-flex align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#sessionDataCollapse" aria-expanded="false" aria-controls="sessionDataCollapse">
+              <svg id="sessionDataCollapseIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-2" style="transition: transform 0.3s;">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <h2 class="h5 text-primary mb-0">Session Data Management</h2>
+            </button>
+          </div>
+          <p class="mb-0 mt-2 text-muted small">Clear session data including uploaded images, generated alt-text, and reports.</p>
+
+          <div class="collapse mt-3" id="sessionDataCollapse">
+            <!-- Clear Session Status Message -->
+            <div id="clearStatusMessage" class="alert d-none" role="alert"></div>
+
+            <div class="mb-4">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="clearAllCheckbox" aria-describedby="clearAllHelp">
+                <label class="form-check-label fw-semibold" for="clearAllCheckbox">
+                  Clear all sessions
+                </label>
+              </div>
+              <small id="clearAllHelp" class="form-text text-muted">
+                When unchecked, only your current session data is cleared. When checked, ALL session data from all users will be permanently deleted.
+              </small>
+            </div>
+
+            <button type="button" class="btn btn-danger" id="clearSessionBtn">
+              <span class="spinner-border spinner-border-sm me-1 d-none" id="clearSpinner" role="status" aria-hidden="true"></span>
+              <svg id="clearIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-1">
+                <path d="M3 6h18"></path>
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+              <span id="clearBtnText">Clear</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -225,12 +292,113 @@
         </div>
       </div>
 
+      <!-- Folder Contents Section (Collapsible) -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <button class="btn btn-link text-primary text-decoration-none p-0 d-flex align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#folderContentsCollapse" aria-expanded="false" aria-controls="folderContentsCollapse">
+              <svg id="folderCollapseIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-2" style="transition: transform 0.3s;">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <h2 class="h5 text-primary mb-0">Folder Contents</h2>
+            </button>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="refreshFoldersBtn">
+              <span class="spinner-border spinner-border-sm d-none me-1" id="foldersSpinner" role="status" aria-hidden="true"></span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-1">
+                <path d="M21 2v6h-6"></path>
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                <path d="M3 22v-6h6"></path>
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <p class="mb-0 mt-2 text-muted small">Click to expand and view contents of input, output, and log folders.</p>
+
+          <div class="collapse mt-3" id="folderContentsCollapse">
+
+          <!-- Input Folders -->
+          <div class="mb-4">
+            <h3 class="h6 text-secondary mb-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              Input Folders
+            </h3>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="border rounded p-3 bg-light">
+                  <h4 class="h6 mb-2">images/</h4>
+                  <div id="inputImagesContent" class="small" style="max-height: 200px; overflow-y: auto;">
+                    <span class="text-muted">Loading...</span>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="border rounded p-3 bg-light">
+                  <h4 class="h6 mb-2">context/</h4>
+                  <div id="inputContextContent" class="small" style="max-height: 200px; overflow-y: auto;">
+                    <span class="text-muted">Loading...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Output Folders -->
+          <div class="mb-4">
+            <h3 class="h6 text-secondary mb-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              Output Folders
+            </h3>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="border rounded p-3 bg-light">
+                  <h4 class="h6 mb-2">alt-text/</h4>
+                  <div id="outputAltTextContent" class="small" style="max-height: 200px; overflow-y: auto;">
+                    <span class="text-muted">Loading...</span>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="border rounded p-3 bg-light">
+                  <h4 class="h6 mb-2">reports/</h4>
+                  <div id="outputReportsContent" class="small" style="max-height: 200px; overflow-y: auto;">
+                    <span class="text-muted">Loading...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Logs Folder -->
+          <div>
+            <h3 class="h6 text-secondary mb-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
+              Logs Folder
+            </h3>
+            <div class="border rounded p-3 bg-light">
+              <div id="logsContent" class="small" style="max-height: 200px; overflow-y: auto;">
+                <span class="text-muted">Loading...</span>
+              </div>
+            </div>
+          </div>
+          </div><!-- End of collapse -->
+        </div>
+      </div>
+
       <!-- Coming Soon Section -->
       <div class="card shadow-sm border-0 mb-4">
         <div class="card-body">
           <h2 class="h5 text-primary">Additional Configuration</h2>
-          <p class="mb-3">More configuration options will be available here soon.</p>
-          <p class="mb-0">Need alt text generation now? Use the <a href="webmaster.html">Webmaster Tool</a>.</p>
+          <p class="mb-0">More configuration options will be available here soon.</p>
         </div>
       </div>
     </div>
@@ -239,7 +407,8 @@
   <footer class="bg-light border-top py-4 text-center">
     <div class="container">
       <p class="mb-1 fw-bold">For testing purposes only</p>
-      <p class="mb-0" style="font-size: 0.9rem;">Use with non-confidential images. Avoid uploading personal or sensitive data. AI suggestions require human review before use.</p>
+      <p class="mb-2" style="font-size: 0.9rem;">Use with non-confidential images. Avoid uploading personal or sensitive data. AI suggestions require human review before use.</p>
+      <p class="text-muted mb-0" style="font-size: 0.8rem;">Version 1.0.7</p>
     </div>
   </footer>
 
@@ -611,6 +780,95 @@
       loadRevision();
     })();
 
+    // Menu Position Settings
+    (function() {
+      const API_BASE = window.location.origin;
+      const menuPositionFixed = document.getElementById('menuPositionFixed');
+      const menuPositionStatic = document.getElementById('menuPositionStatic');
+      const saveMenuPositionBtn = document.getElementById('saveMenuPositionBtn');
+      const menuPositionSpinner = document.getElementById('menuPositionSpinner');
+      const menuPositionStatusMessage = document.getElementById('menuPositionStatusMessage');
+
+      // Show status message
+      function showMenuPositionStatus(message, type = 'success') {
+        menuPositionStatusMessage.textContent = message;
+        menuPositionStatusMessage.className = `alert alert-${type}`;
+        menuPositionStatusMessage.classList.remove('d-none');
+
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+          menuPositionStatusMessage.classList.add('d-none');
+        }, 5000);
+      }
+
+      // Load current menu position
+      async function loadMenuPosition() {
+        try {
+          const response = await fetch(`${API_BASE}/api/available-providers`, {
+            credentials: 'include'
+          });
+          if (!response.ok) {
+            throw new Error('Failed to load configuration');
+          }
+          const data = await response.json();
+          const position = data.config_defaults?.menu_position || 'fixed';
+
+          if (position === 'static') {
+            menuPositionStatic.checked = true;
+          } else {
+            menuPositionFixed.checked = true;
+          }
+        } catch (error) {
+          console.error('Error loading menu position:', error);
+          menuPositionFixed.checked = true; // Default to fixed
+        }
+      }
+
+      // Save menu position
+      async function saveMenuPosition() {
+        const position = menuPositionStatic.checked ? 'static' : 'fixed';
+
+        saveMenuPositionBtn.disabled = true;
+        menuPositionSpinner.classList.remove('d-none');
+
+        try {
+          const response = await fetch(`${API_BASE}/api/menu-position`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ menu_position: position })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to save menu position');
+          }
+
+          // Apply the change immediately using the navigation.js function
+          if (typeof window.applyMenuPosition === 'function') {
+            window.applyMenuPosition(position);
+          }
+
+          showMenuPositionStatus(`Menu position set to "${position}". The change will apply across all pages.`, 'success');
+
+        } catch (error) {
+          console.error('Error saving menu position:', error);
+          showMenuPositionStatus(`Error: ${error.message}`, 'danger');
+        } finally {
+          saveMenuPositionBtn.disabled = false;
+          menuPositionSpinner.classList.add('d-none');
+        }
+      }
+
+      // Event listeners
+      saveMenuPositionBtn.addEventListener('click', saveMenuPosition);
+
+      // Load initial value
+      loadMenuPosition();
+    })();
+
     // Session Data Management
     (function() {
       const API_BASE = window.location.origin;
@@ -648,6 +906,7 @@
             headers: {
               'Content-Type': 'application/json',
             },
+            credentials: 'include',
             body: JSON.stringify({})
           });
 
@@ -692,6 +951,7 @@
             headers: {
               'Content-Type': 'application/json',
             },
+            credentials: 'include',
             body: JSON.stringify({ force: true })
           });
 
@@ -734,6 +994,124 @@
 
       // Handle confirmation button in modal
       confirmClearAllBtn.addEventListener('click', clearAllSessions);
+
+      // ===== Folder Contents Section =====
+      const refreshFoldersBtn = document.getElementById('refreshFoldersBtn');
+      const foldersSpinner = document.getElementById('foldersSpinner');
+      const inputImagesContent = document.getElementById('inputImagesContent');
+      const inputContextContent = document.getElementById('inputContextContent');
+      const outputAltTextContent = document.getElementById('outputAltTextContent');
+      const outputReportsContent = document.getElementById('outputReportsContent');
+      const logsContent = document.getElementById('logsContent');
+
+      // Render folder items as HTML
+      function renderFolderItems(items) {
+        if (!items || items.length === 0) {
+          return '<span class="text-muted fst-italic">Empty</span>';
+        }
+
+        return items.map(item => {
+          if (item.type === 'folder') {
+            return `
+              <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                <span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1 text-warning">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                  <strong>${item.name}</strong>
+                </span>
+                <span class="text-muted">${item.files} files</span>
+              </div>
+            `;
+          } else {
+            return `
+              <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                <span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1 text-secondary">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                  </svg>
+                  ${item.name}
+                </span>
+                <span class="text-muted">${item.size}</span>
+              </div>
+            `;
+          }
+        }).join('');
+      }
+
+      // Fetch and display folder contents
+      async function loadFolderContents() {
+        const btn = refreshFoldersBtn;
+        const spinner = foldersSpinner;
+        const icon = btn.querySelector('svg');
+
+        btn.disabled = true;
+        spinner.classList.remove('d-none');
+        icon.classList.add('d-none');
+
+        try {
+          const response = await fetch(`${API_BASE}/api/folder-contents`, {
+            credentials: 'include'
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to fetch folder contents');
+          }
+
+          const data = await response.json();
+
+          // Update UI
+          inputImagesContent.innerHTML = renderFolderItems(data.input?.images);
+          inputContextContent.innerHTML = renderFolderItems(data.input?.context);
+          outputAltTextContent.innerHTML = renderFolderItems(data.output?.alt_text);
+          outputReportsContent.innerHTML = renderFolderItems(data.output?.reports);
+          logsContent.innerHTML = renderFolderItems(data.logs);
+
+        } catch (error) {
+          console.error('Error loading folder contents:', error);
+          const errorHtml = `<span class="text-danger">Error loading contents</span>`;
+          inputImagesContent.innerHTML = errorHtml;
+          inputContextContent.innerHTML = errorHtml;
+          outputAltTextContent.innerHTML = errorHtml;
+          outputReportsContent.innerHTML = errorHtml;
+          logsContent.innerHTML = errorHtml;
+        } finally {
+          btn.disabled = false;
+          spinner.classList.add('d-none');
+          icon.classList.remove('d-none');
+        }
+      }
+
+      // Load folder contents on page load
+      loadFolderContents();
+
+      // Refresh button click handler
+      refreshFoldersBtn.addEventListener('click', loadFolderContents);
+
+      // Collapse icon rotation for all collapsible sections
+      const collapseConfigs = [
+        { collapse: 'providerStatusCollapse', icon: 'providerCollapseIcon' },
+        { collapse: 'altTextConfigCollapse', icon: 'altTextCollapseIcon' },
+        { collapse: 'uiSettingsCollapse', icon: 'uiSettingsCollapseIcon' },
+        { collapse: 'sessionDataCollapse', icon: 'sessionDataCollapseIcon' },
+        { collapse: 'folderContentsCollapse', icon: 'folderCollapseIcon' }
+      ];
+
+      collapseConfigs.forEach(config => {
+        const collapseElement = document.getElementById(config.collapse);
+        const collapseIcon = document.getElementById(config.icon);
+
+        if (collapseElement && collapseIcon) {
+          collapseElement.addEventListener('show.bs.collapse', () => {
+            collapseIcon.style.transform = 'rotate(90deg)';
+          });
+
+          collapseElement.addEventListener('hide.bs.collapse', () => {
+            collapseIcon.style.transform = 'rotate(0deg)';
+          });
+        }
+      });
     })();
   </script>
   <script src="navigation.js"></script>

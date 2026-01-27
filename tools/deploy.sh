@@ -597,6 +597,15 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 echo ""
 
+# Prompt for image tag if not set in config or CLI
+if [ -z "$IMAGE_TAG" ]; then
+    read -r -p "Enter Docker image tag: " IMAGE_TAG
+    if [ -z "$IMAGE_TAG" ]; then
+        print_error "Docker image tag is required"
+        exit 1
+    fi
+fi
+
 # Show mode and options
 if [ "$TEST_MODE" = true ]; then
     print_warning "TEST MODE - Preview only, no actual deployment"
