@@ -18,3 +18,4 @@
 2026-01-27 08:41:10 [INFO] Building and pushing Docker image to ACR...
 2026-01-27 08:41:10 [INFO] Build context: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy
 2026-01-27 08:41:10 [DEBUG] Docker buildx command: docker buildx build --platform linux/amd64 -t myaccessibilitybuddyacr.azurecr.io/myaccessibilitybuddy-api:1-0-0-7 --push .
+2026-01-27 09:36:06 [ERROR] ACR build/push failed

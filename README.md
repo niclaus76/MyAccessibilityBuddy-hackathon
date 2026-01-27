@@ -6,6 +6,8 @@ An AI-powered, context-aware alternative text generator that uses surrounding pa
 
 # [TRY ME!](https://myaccessibilitybuddy-api.kindwave-02701f04.westeurope.azurecontainerapps.io/index.html)
 
+# [WATCH THE VIDEO](https://drive.google.com/file/d/1QvMoWxaeYi4j9aw-eXGoQMLnd0z7o87X/view?usp=drive_link)
+
 ## Introduction: Why Context Matters in Alternative Text
 
 Alternative text is **not a literal description of pixels**.  
