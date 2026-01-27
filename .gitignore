@@ -27,5 +27,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Cloud config
-development/5-clud-config/*
+# Cloud config (contains API keys - never commit)
+development/5-cloud-config/
