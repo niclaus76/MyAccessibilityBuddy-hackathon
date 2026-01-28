@@ -3434,7 +3434,7 @@ else:
         """Redirect to API documentation."""
         return {
             "message": "AutoAltText API",
-            "version": "5.0.1",
+            "version": "1.0.9",
             "docs": "/api/docs",
             "health": "/api/health"
         }
