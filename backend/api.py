@@ -92,7 +92,7 @@ class ProxyHeadersMiddleware(BaseHTTPMiddleware):
 app = FastAPI(
     title="MyAccessibilityBuddy API",
     description="WCAG 2.2 compliant alt-text generation API",
-    version="1.0.7",
+    version="1.0.9",
     docs_url="/api/docs",
     redoc_url="/api/redoc"
 )
@@ -751,7 +751,7 @@ async def health_check():
 
     return HealthResponse(
         status="healthy",
-        version="1.0.7",
+        version="1.0.9",
         llm_provider=settings.get("llm_provider", "OpenAI"),
         service="MyAccessibilityBuddy"
     )
@@ -1491,16 +1491,18 @@ async def save_reviewed_alt_text(fastapi_request: Request, request: SaveReviewed
 
 
 @app.post("/api/generate-report")
-async def generate_report_endpoint(request: Request, clear_after: bool = True):
+async def generate_report_endpoint(request: Request, clear_after: bool = True, return_path: bool = False):
     """
     Generate HTML report for content creator tool.
 
     Args:
         request: FastAPI Request object
         clear_after: If True, clears session data after generating report
+        return_path: If True, returns JSON with report path instead of file download
 
     Returns:
-        FileResponse: HTML report file for download
+        FileResponse: HTML report file for download (if return_path=False)
+        JSON: Report path and metadata (if return_path=True)
 
     Raises:
         HTTPException: If report generation fails or no images to report
@@ -1597,15 +1599,23 @@ async def generate_report_endpoint(request: Request, clear_after: bool = True):
                     # Log but don't fail - clearing is optional cleanup
                     print(f"Warning: Could not clear session data: {e}")
 
-            # Return file for download
-            return FileResponse(
-                path=report_path,
-                media_type='text/html',
-                filename=os.path.basename(report_path),
-                headers={
-                    "Content-Disposition": f'attachment; filename="{os.path.basename(report_path)}"'
+            # Return JSON with path or file for download
+            if return_path:
+                return {
+                    "success": True,
+                    "report_path": report_path,
+                    "filename": os.path.basename(report_path),
+                    "message": "Report generated successfully"
                 }
-            )
+            else:
+                return FileResponse(
+                    path=report_path,
+                    media_type='text/html',
+                    filename=os.path.basename(report_path),
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{os.path.basename(report_path)}"'
+                    }
+                )
 
         finally:
             # Restore original config

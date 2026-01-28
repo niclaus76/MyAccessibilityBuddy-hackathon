@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="description" content="About My Accessibility Buddy - AI-powered accessibility tools for WCAG 2.2 compliance">
+  <meta name="theme-color" content="#0066cc">
+  <title>About - My Accessibility Buddy</title>
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.8.2/dist/css/bootstrap-italia.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .nav-fab { position: fixed; top: 20px; right: 20px; z-index: 1080; }
+    .nav-menu { position: fixed; top: 0; right: 0; width: 280px; height: 100%; background: #ffffff; box-shadow: -4px 0 16px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.3s ease; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 1100; overflow-y: auto; font-size: 0.7rem; }
+    .nav-menu .btn { font-size: 0.7rem; padding: 0.5rem 0.75rem; }
+    .nav-menu .fw-bold { font-size: 0.75rem; }
+    .nav-menu.active { transform: translateX(0); }
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); opacity: 0; visibility: hidden; transition: opacity 0.3s ease; z-index: 1090; pointer-events: none; }
+    .overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+    .skip-link { position:absolute; left:-999px; top:auto; width:1px; height:1px; overflow:hidden; } .skip-link:focus { position:fixed; top:0; left:0; width:auto; height:auto; padding:0.5rem 1rem; background:#0066cc; color:#fff; z-index:1060; }
+    .section-card { border: none; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); transition: transform 0.25s ease, box-shadow 0.25s ease; }
+    .section-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,0,0,0.12); }
+    .section-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <button class="btn btn-outline-primary nav-fab" id="menuToggle" aria-expanded="false" aria-controls="primaryNav" aria-label="Open navigation menu">
+    <span aria-hidden="true">&#9776;</span>
+  </button>
+  <div class="overlay" id="navOverlay" aria-hidden="true"></div>
+  <nav class="nav-menu" id="primaryNav" aria-label="Main navigation" role="dialog" aria-modal="false">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="fw-bold text-primary">Navigation</span>
+      <button class="btn btn-link p-0" id="menuClose" aria-label="Close navigation">&#10005;</button>
+    </div>
+    <a class="btn btn-outline-primary w-100" href="index.html">Home</a>
+    <a class="btn btn-outline-primary w-100" href="content-creator.html">Content Creator Tool</a>
+    <a class="btn btn-outline-primary w-100" href="accessibility-compliance.html">Website accessibility tool</a>
+    <a class="btn btn-outline-primary w-100" href="prompt-optimization.html">Prompt Optimization</a>
+    <a class="btn btn-outline-primary w-100" href="remediation.html">Remediation Tool</a>
+    <a class="btn btn-outline-primary w-100" href="admin.html">Administration Tool</a>
+    <a class="btn btn-outline-primary w-100" href="about.html">About</a>
+  </nav>
+
+  <header class="py-5 text-center">
+    <div class="container">
+      <a href="about.html"><img src="assets/MyAccessibilityBuddy-logo.png" alt="My Accessibility Buddy - About" style="max-width: 250px;" class="mb-3"></a>
+      <h1 class="fw-bold" style="font-size: 2rem;">My Accessibility Buddy</h1>
+      <p class="lead mb-1">AI-Powered Accessibility Tools Suite</p>
+      <p class="text-muted mb-0">WCAG 2.2-focused tools for compliant alternative text, compliance checks, and remediation.</p>
+    </div>
+  </header>
+
+  <main id="main-content" class="pb-5">
+    <div class="container" style="max-width: 860px;">
+
+      <!-- Technological Innovation -->
+      <div class="card section-card mb-4">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="section-icon bg-primary text-white">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
+            </div>
+            <div>
+              <h2 class="h5 text-primary mb-3">Technological Innovation</h2>
+              <p class="mb-2">The system injects <strong>page context</strong> into the prompt to generate accessibility descriptions that preserve the meaning of the image.</p>
+              <p class="mb-2"><strong>GEO boost</strong> adds to the standard prompt instruction that forces the model to produce Generative Engine Optimization-friendly wording, maximizing semantic density for AI consumption.</p>
+              <p class="mb-0"><strong>Privacy is by design</strong>: The architecture allows descriptions to be generated using local, enterprise, or commercial models, keeping sensitive content within organizational boundaries.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Technical Feasibility -->
+      <div class="card section-card mb-4">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="section-icon bg-success text-white">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+            </div>
+            <div>
+              <h2 class="h5 text-success mb-3">Technical Feasibility</h2>
+              <p class="mb-2"><strong>Already functional</strong> on Azure and designed for real editorial workflows.</p>
+              <p class="mb-2"><strong>Runs anywhere via Docker</strong>, with no dependency on a single cloud or vendor.</p>
+              <p class="mb-0">Works with commercial and local AI models, supporting <strong>privacy and compliance</strong> needs.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Business Model -->
+      <div class="card section-card mb-4">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="section-icon text-white" style="background-color: #e67e22;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="1" x2="12" y2="23"></line>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              </svg>
+            </div>
+            <div>
+              <h2 class="h5 mb-3" style="color: #e67e22;">Business Model</h2>
+              <p class="mb-2">We estimated <strong>85% time saved</strong> to generate alt-text. 20% info are lost if you don't have alternative text on your page.</p>
+              <p class="mb-2">Automating the decision of what is decorative vs. informative, <strong>you save thousands of human hours in manual auditing</strong>.</p>
+              <p class="mb-0">Target users include <strong>public institutions and large content publishers</strong> subject to WCAG and European Accessibility Act requirements. By automating repetitive accessibility tasks while preserving human oversight, the solution reduces editorial effort, lowers compliance costs, and supports sustainable adoption at scale.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Social Impact -->
+      <div class="card section-card mb-4">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="section-icon text-white" style="background-color: #8e44ad;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+            </div>
+            <div>
+              <h2 class="h5 mb-3" style="color: #8e44ad;">Social Impact</h2>
+              <p class="mb-2">Both <strong>visually impaired users and AI</strong> have the possibility to receive descriptions that explain context and intent, not just objects as part of the inclusivity goal.</p>
+              <p class="mb-0">It allows the users to navigate (a telephone contract page freely), for example, which not only empowers the user but also reduces the cost without calling a human representative.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Social Innovation -->
+      <div class="card section-card mb-4">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="section-icon bg-info text-white">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+              </svg>
+            </div>
+            <div>
+              <h2 class="h5 text-info mb-3">Social Innovation</h2>
+              <p class="mb-2">Integrated at creation, turning accessibility from a task into a seamless standard.</p>
+              <p class="mb-2">Real-time analysis that makes images meaningful to both humans and machines.</p>
+              <p class="mb-2"><strong>Accessibility becomes a normal practice rather than a compliance task</strong>.</p>
+              <p class="mb-0">Inclusion scales without sacrificing quality or human oversight.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer id="footer" class="bg-light border-top py-4 text-center">
+    <div class="container">
+      <p class="mb-1 fw-bold">For testing purposes only</p>
+      <p class="mb-2" style="font-size: 0.9rem;">Use with non-confidential images. Avoid uploading personal or sensitive data. AI suggestions require human review before use.</p>
+      <p class="text-muted mb-0" style="font-size: 0.8rem;">Version 1.0.9</p>
+    </div>
+  </footer>
+
+  <script>
+    (function() {
+      const toggleBtn = document.getElementById('menuToggle');
+      const closeBtn = document.getElementById('menuClose');
+      const nav = document.getElementById('primaryNav');
+      const overlay = document.getElementById('navOverlay');
+      let lastFocusedElement = null;
+
+      function setMenu(open) {
+        nav.classList.toggle('active', open);
+        overlay.classList.toggle('active', open);
+        toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        nav.setAttribute('aria-modal', open ? 'true' : 'false');
+
+        if (open) {
+          lastFocusedElement = document.activeElement;
+          setTimeout(() => {
+            const firstFocusable = nav.querySelector('button, a');
+            if (firstFocusable) firstFocusable.focus();
+          }, 100);
+          document.body.style.overflow = 'hidden';
+        } else {
+          if (lastFocusedElement) {
+            lastFocusedElement.focus();
+          } else {
+            toggleBtn.focus();
+          }
+          document.body.style.overflow = '';
+        }
+      }
+
+      nav.addEventListener('keydown', (e) => {
+        if (!nav.classList.contains('active')) return;
+
+        if (e.key === 'Tab') {
+          const focusableElements = nav.querySelectorAll('button, a');
+          const firstFocusable = focusableElements[0];
+          const lastFocusable = focusableElements[focusableElements.length - 1];
+
+          if (e.shiftKey) {
+            if (document.activeElement === firstFocusable) {
+              e.preventDefault();
+              lastFocusable.focus();
+            }
+          } else {
+            if (document.activeElement === lastFocusable) {
+              e.preventDefault();
+              firstFocusable.focus();
+            }
+          }
+        }
+      });
+
+      toggleBtn.addEventListener('click', () => setMenu(!nav.classList.contains('active')));
+      closeBtn.addEventListener('click', () => setMenu(false));
+      overlay.addEventListener('click', () => setMenu(false));
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && nav.classList.contains('active')) {
+          setMenu(false);
+        }
+      });
+    })();
+  </script>
+  <script src="navigation.js"></script>
+</body>
+</html>

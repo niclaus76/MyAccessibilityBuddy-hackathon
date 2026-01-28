@@ -1,21 +1,22 @@
-2026-01-27 08:41:07 [INFO] DEBUG MODE - Detailed progress messages
-2026-01-27 08:41:07 [INFO] Mode: FULL DEPLOYMENT (Backend + Frontend)
-2026-01-27 08:41:07 [INFO] Environments: Azure
-2026-01-27 08:41:07 [INFO] Docker image tag: 1-0-0-7
-2026-01-27 08:41:09 [WARNING] AWS not selected - skipping frontend and ECS deployment
-2026-01-27 08:41:09 [INFO] Checking Azure prerequisites...
-2026-01-27 08:41:09 [DEBUG] Checking for required tools: docker, docker buildx
-2026-01-27 08:41:09 [DEBUG] Docker: found (Docker version 29.1.3, build f52814d)
-2026-01-27 08:41:10 [DEBUG] Docker buildx: found
-2026-01-27 08:41:10 [SUCCESS] Azure prerequisites satisfied
-2026-01-27 08:41:10 [DEBUG] Build directory: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy
-2026-01-27 08:41:10 [DEBUG] Changing to build directory...
-2026-01-27 08:41:10 [DEBUG] Found backend/.env file
-2026-01-27 08:41:10 [DEBUG] ACR registry: myaccessibilitybuddyacr.azurecr.io
-2026-01-27 08:41:10 [DEBUG] ACR repository: myaccessibilitybuddy-api
-2026-01-27 08:41:10 [DEBUG] Image tag: 1-0-0-7
-2026-01-27 08:41:10 [DEBUG] Platform: linux/amd64
-2026-01-27 08:41:10 [INFO] Building and pushing Docker image to ACR...
-2026-01-27 08:41:10 [INFO] Build context: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy
-2026-01-27 08:41:10 [DEBUG] Docker buildx command: docker buildx build --platform linux/amd64 -t myaccessibilitybuddyacr.azurecr.io/myaccessibilitybuddy-api:1-0-0-7 --push .
-2026-01-27 09:36:06 [ERROR] ACR build/push failed
+2026-01-28 12:13:13 [INFO] DEBUG MODE - Detailed progress messages
+2026-01-28 12:13:13 [INFO] Mode: FULL DEPLOYMENT (Backend + Frontend)
+2026-01-28 12:13:13 [INFO] Environments: Azure
+2026-01-28 12:13:13 [INFO] Docker image tag: 1-0-8b
+2026-01-28 12:13:17 [WARNING] AWS not selected - skipping frontend and ECS deployment
+2026-01-28 12:13:17 [INFO] Checking Azure prerequisites...
+2026-01-28 12:13:17 [DEBUG] Checking for required tools: docker, docker buildx
+2026-01-28 12:13:17 [DEBUG] Docker: found (Docker version 29.1.3, build f52814d)
+2026-01-28 12:13:17 [DEBUG] Docker buildx: found
+2026-01-28 12:13:17 [SUCCESS] Azure prerequisites satisfied
+2026-01-28 12:13:17 [DEBUG] Build directory: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy
+2026-01-28 12:13:17 [DEBUG] Changing to build directory...
+2026-01-28 12:13:17 [DEBUG] Found backend/.env file
+2026-01-28 12:13:17 [DEBUG] ACR registry: myaccessibilitybuddyacr.azurecr.io
+2026-01-28 12:13:17 [DEBUG] ACR repository: myaccessibilitybuddy-api
+2026-01-28 12:13:17 [DEBUG] Image tag: 1-0-8b
+2026-01-28 12:13:17 [DEBUG] Platform: linux/amd64
+2026-01-28 12:13:17 [INFO] Building and pushing Docker image to ACR...
+2026-01-28 12:13:17 [INFO] Build context: /home/developer/Innovate-For-Inclusion---MyAccessibilityBuddy
+2026-01-28 12:13:17 [DEBUG] Docker buildx command: docker buildx build --platform linux/amd64 -t myaccessibilitybuddyacr.azurecr.io/myaccessibilitybuddy-api:1-0-8b --push .
+2026-01-28 12:13:53 [SUCCESS] Image pushed to ACR successfully
+2026-01-28 12:13:53 [DEBUG] Image available at: myaccessibilitybuddyacr.azurecr.io/myaccessibilitybuddy-api:1-0-8b

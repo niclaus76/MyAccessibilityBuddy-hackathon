@@ -40,12 +40,13 @@
 
         if (position === 'static') {
             // Static mode: menu button is part of normal flow, always visible at top
-            menuToggle.style.position = 'relative';
-            menuToggle.style.top = 'auto';
-            menuToggle.style.right = 'auto';
-            menuToggle.style.margin = '10px';
-            menuToggle.style.float = 'right';
-            menuToggle.style.zIndex = '1050';
+            // Use setProperty with 'important' to override CSS stylesheet rules
+            menuToggle.style.setProperty('position', 'relative', 'important');
+            menuToggle.style.setProperty('top', 'auto', 'important');
+            menuToggle.style.setProperty('right', 'auto', 'important');
+            menuToggle.style.setProperty('margin', '10px', 'important');
+            menuToggle.style.setProperty('float', 'right', 'important');
+            menuToggle.style.setProperty('z-index', '1050', 'important');
 
             // Add a container for the menu button if not already present
             let menuContainer = document.getElementById('menuContainer');
@@ -65,11 +66,11 @@
             menuContainer.appendChild(menuToggle);
         } else {
             // Fixed mode (default): menu button is fixed in top-right corner
-            menuToggle.style.position = 'fixed';
-            menuToggle.style.top = '20px';
-            menuToggle.style.right = '20px';
-            menuToggle.style.margin = '';
-            menuToggle.style.float = '';
+            menuToggle.style.setProperty('position', 'fixed', 'important');
+            menuToggle.style.setProperty('top', '20px', 'important');
+            menuToggle.style.setProperty('right', '20px', 'important');
+            menuToggle.style.removeProperty('margin');
+            menuToggle.style.removeProperty('float');
 
             // Remove container if it exists
             const menuContainer = document.getElementById('menuContainer');

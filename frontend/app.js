@@ -15,6 +15,7 @@
     let isAuthenticated = false;
     let loginUrl = null;
     let currentAbortController = null; // For aborting ongoing requests
+    let currentReportPath = null; // Store the current report path for view/download
 
     // Model options for each provider (will be loaded from API)
     let modelOptions = {};
@@ -880,187 +881,231 @@
         return card;
     }
 
-    // Save all reviewed alt texts
-    async function saveAllReviewedAltTexts() {
-        const saveAllBtn = document.getElementById('saveAllBtn');
-        const saveAllBtnText = document.getElementById('saveAllBtnText');
+    // Save and generate report, then perform action
+    async function saveAndGenerateReport(action) {
+        const viewReportBtn = document.getElementById('viewReportBtn');
+        const downloadReportBtn = document.getElementById('downloadReportBtn');
+        const viewReportBtnText = document.getElementById('viewReportBtnText');
+        const downloadReportBtnText = document.getElementById('downloadReportBtnText');
         const saveAllMessage = document.getElementById('saveAllMessage');
         const saveAllSuccessMsg = document.getElementById('saveAllSuccessMsg');
         const saveAllErrorMsg = document.getElementById('saveAllErrorMsg');
 
-        saveAllBtnText.textContent = 'Saving...';
-        saveAllBtn.disabled = true;
-        saveAllMessage.classList.add('d-none');
-        saveAllSuccessMsg.textContent = '';
-        saveAllErrorMsg.textContent = '';
+        // Disable buttons during processing
+        if (viewReportBtn) viewReportBtn.disabled = true;
+        if (downloadReportBtn) downloadReportBtn.disabled = true;
 
-        let savedCount = 0;
-        let errorCount = 0;
-        const errors = [];
+        const originalViewText = viewReportBtnText ? viewReportBtnText.textContent : 'View HTML Report';
+        const originalDownloadText = downloadReportBtnText ? downloadReportBtnText.textContent : 'Download Report';
 
-        const maxChars = getAltTextLimit();
-        // Check for over-length warnings
-        const warnings = [];
-        for (const lang of Object.keys(languageResults)) {
-            const textarea = document.getElementById(`resultText_${lang}`);
-            if (textarea) {
+        if (saveAllMessage) {
+            saveAllMessage.classList.add('d-none');
+            saveAllSuccessMsg.textContent = '';
+            saveAllErrorMsg.textContent = '';
+        }
+
+        try {
+            // Update button text to show progress
+            if (action === 'view' && viewReportBtnText) {
+                viewReportBtnText.textContent = 'Saving...';
+            } else if (action === 'download' && downloadReportBtnText) {
+                downloadReportBtnText.textContent = 'Saving...';
+            }
+
+            const maxChars = getAltTextLimit();
+            // Check for over-length warnings
+            const warnings = [];
+            for (const lang of Object.keys(languageResults)) {
+                const textarea = document.getElementById(`resultText_${lang}`);
+                if (textarea) {
+                    const reviewedText = textarea.value;
+                    const textToSave = reviewedText === '(Empty alt text for decorative image)' ? '' : reviewedText;
+                    if (textToSave.length > maxChars) {
+                        const langName = languageNames[lang] || lang;
+                        warnings.push(`${langName}: ${textToSave.length} characters`);
+                    }
+                }
+            }
+
+            if (warnings.length > 0) {
+                const confirmSave = confirm(
+                    `⚠️ Warning: Some alt texts exceed ${maxChars} characters:\n\n${warnings.join('\n')}\n\n` +
+                    `Longer alt text may not be ideal for screen reader users.\n\n` +
+                    `Do you want to save them anyway?`
+                );
+                if (!confirmSave) {
+                    return;
+                }
+            }
+
+            // Save all reviewed alt-texts
+            let savedCount = 0;
+            let errorCount = 0;
+            const errors = [];
+
+            for (const lang of Object.keys(languageResults)) {
+                const result = languageResults[lang];
+                if (!result || !result.imageId) {
+                    errorCount++;
+                    errors.push(`${lang}: No image ID available`);
+                    continue;
+                }
+
+                const textarea = document.getElementById(`resultText_${lang}`);
+                if (!textarea) {
+                    errorCount++;
+                    errors.push(`${lang}: Textarea not found`);
+                    continue;
+                }
+
                 const reviewedText = textarea.value;
                 const textToSave = reviewedText === '(Empty alt text for decorative image)' ? '' : reviewedText;
-                if (textToSave.length > maxChars) {
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/save-reviewed-alt-text`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            image_id: result.imageId,
+                            reviewed_alt_text: textToSave,
+                            language: lang,
+                            reviewed_alt_text_length: textToSave.length
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        errorCount++;
+                        const langName = languageNames[lang] || lang;
+                        const errorMsg = data.detail || data.error || `HTTP ${response.status}`;
+                        errors.push(`${langName}: ${errorMsg}`);
+                    } else if (data.success) {
+                        savedCount++;
+                    } else {
+                        errorCount++;
+                        const langName = languageNames[lang] || lang;
+                        errors.push(`${langName}: ${data.error || 'Unknown error'}`);
+                    }
+                } catch (error) {
+                    errorCount++;
                     const langName = languageNames[lang] || lang;
-                    warnings.push(`${langName}: ${textToSave.length} characters`);
+                    errors.push(`${langName}: ${error.message}`);
                 }
             }
-        }
 
-        if (warnings.length > 0) {
-            const confirmSave = confirm(
-                `⚠️ Warning: Some alt texts exceed ${maxChars} characters:\n\n${warnings.join('\n')}\n\n` +
-                `Longer alt text may not be ideal for screen reader users.\n\n` +
-                `Do you want to save them anyway?`
-            );
-            if (!confirmSave) {
-                saveAllBtnText.textContent = 'Save All Reviews';
-                saveAllBtn.disabled = false;
+            if (savedCount === 0 && errorCount === 0) {
+                announceToScreenReader('No alt-text to save. Please generate alt-text first.');
+                if (saveAllMessage) {
+                    saveAllErrorMsg.textContent = 'No alt-text to save. Please generate alt-text first.';
+                    saveAllMessage.classList.remove('d-none');
+                    setTimeout(() => saveAllMessage.classList.add('d-none'), 3000);
+                }
                 return;
             }
-        }
 
-        // Save each language
-        for (const lang of Object.keys(languageResults)) {
-            const result = languageResults[lang];
-            if (!result || !result.imageId) {
-                errorCount++;
-                errors.push(`${lang}: No image ID available`);
-                continue;
-            }
-
-            const textarea = document.getElementById(`resultText_${lang}`);
-            if (!textarea) {
-                errorCount++;
-                errors.push(`${lang}: Textarea not found`);
-                continue;
-            }
-
-            const reviewedText = textarea.value;
-            const textToSave = reviewedText === '(Empty alt text for decorative image)' ? '' : reviewedText;
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/save-reviewed-alt-text`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        image_id: result.imageId,
-                        reviewed_alt_text: textToSave,
-                        language: lang,
-                        reviewed_alt_text_length: textToSave.length
-                    })
-                });
-
-                const data = await response.json();
-
-                // Check HTTP status first, then check response body
-                if (!response.ok) {
-                    errorCount++;
-                    const langName = languageNames[lang] || lang;
-                    // Handle FastAPI HTTPException format (detail field) or custom error format
-                    const errorMsg = data.detail || data.error || `HTTP ${response.status}`;
-                    errors.push(`${langName}: ${errorMsg}`);
-                } else if (data.success) {
-                    savedCount++;
-                } else {
-                    errorCount++;
-                    const langName = languageNames[lang] || lang;
-                    errors.push(`${langName}: ${data.error || 'Unknown error'}`);
+            if (errorCount > 0 && savedCount === 0) {
+                announceToScreenReader(`Failed to save all languages`);
+                if (saveAllMessage) {
+                    saveAllErrorMsg.textContent = `✗ Failed to save: ${errors.join(', ')}`;
+                    saveAllMessage.classList.remove('d-none');
                 }
-            } catch (error) {
-                errorCount++;
-                const langName = languageNames[lang] || lang;
-                errors.push(`${langName}: ${error.message}`);
+                return;
             }
-        }
 
-        // Show results
-        if (errorCount === 0) {
-            saveAllSuccessMsg.textContent = `✓ Successfully saved all ${savedCount} language(s)!`;
-            saveAllMessage.classList.remove('d-none');
+            // Update button text
+            if (action === 'view' && viewReportBtnText) {
+                viewReportBtnText.textContent = 'Generating report...';
+            } else if (action === 'download' && downloadReportBtnText) {
+                downloadReportBtnText.textContent = 'Generating report...';
+            }
 
-            // Generate and download report
-            try {
-                saveAllBtnText.textContent = 'Generating report...';
+            // Generate report
+            const clearAfterCheckbox = document.getElementById('clearAfterReportCheckbox');
+            const clearAfter = clearAfterCheckbox ? clearAfterCheckbox.checked : true;
 
-                // Get user preference for clearing files
-                const clearAfterCheckbox = document.getElementById('clearAfterReportCheckbox');
-                const clearAfter = clearAfterCheckbox ? clearAfterCheckbox.checked : true;
+            const reportResponse = await fetch(`${API_BASE_URL}/generate-report?clear_after=${clearAfter}&return_path=true`, {
+                method: 'POST',
+                credentials: 'include'
+            });
 
-                const reportResponse = await fetch(`${API_BASE_URL}/generate-report?clear_after=${clearAfter}`, {
-                    method: 'POST',
-                    credentials: 'include'
-                });
+            if (!reportResponse.ok) {
+                throw new Error('Report generation failed');
+            }
 
-                if (reportResponse.ok) {
-                    // Convert response to blob
-                    const blob = await reportResponse.blob();
+            const reportData = await reportResponse.json();
+            currentReportPath = reportData.report_path;
 
-                    // Create download link
-                    const url = window.URL.createObjectURL(blob);
-                    const timestamp = new Date().toISOString().slice(0,19).replace(/:/g,'-');
-                    const filename = `${timestamp}-content-creator-report.html`;
-
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    a.style.display = 'none';
-                    document.body.appendChild(a);
-                    a.click();
-
-                    // Cleanup
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-
-                    // Update success message based on clear preference
-                    if (clearAfter) {
-                        saveAllSuccessMsg.textContent = `✓ Successfully saved all ${savedCount} language(s) and generated report! Previous images cleared.`;
-                        announceToScreenReader(`Report generated and download started. Previous images have been cleared. Check your downloads folder for ${filename}`);
-                    } else {
-                        saveAllSuccessMsg.textContent = `✓ Successfully saved all ${savedCount} language(s) and generated report! Images preserved for next report.`;
-                        announceToScreenReader(`Report generated and download started. Images preserved for accumulation. Check your downloads folder for ${filename}`);
-                    }
+            // Show success message
+            if (saveAllMessage) {
+                if (errorCount > 0) {
+                    saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s)`;
+                    saveAllErrorMsg.textContent = `✗ Failed: ${errors.join(', ')}`;
                 } else {
-                    // Report generation failed but saves succeeded
-                    console.error('Report generation failed:', await reportResponse.text());
-                    saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s) (report generation failed)`;
+                    saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s) and generated report!`;
                 }
-            } catch (error) {
-                // Report generation error - don't block success message for saves
-                console.error('Error generating report:', error);
-                saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s) (report generation unavailable)`;
+                saveAllMessage.classList.remove('d-none');
+                setTimeout(() => saveAllMessage.classList.add('d-none'), 5000);
             }
 
-            setTimeout(() => {
-                saveAllMessage.classList.add('d-none');
-            }, 5000); // Longer timeout to show report message
-        } else if (savedCount > 0) {
-            saveAllSuccessMsg.textContent = `✓ Saved ${savedCount} language(s)`;
-            saveAllErrorMsg.textContent = `✗ Failed to save ${errorCount} language(s): ${errors.join(', ')}`;
-            saveAllMessage.classList.remove('d-none');
-        } else {
-            saveAllErrorMsg.textContent = `✗ Failed to save all languages: ${errors.join(', ')}`;
-            saveAllMessage.classList.remove('d-none');
-        }
+            announceToScreenReader(`Saved ${savedCount} language(s) and generated report.`);
 
-        saveAllBtnText.textContent = 'Save and generate report';
-        saveAllBtn.disabled = false;
+            // Perform the action
+            if (action === 'view') {
+                const url = `${API_BASE_URL}/view-report?path=${encodeURIComponent(currentReportPath)}`;
+                window.open(url, '_blank');
+                announceToScreenReader('Report opened in new tab');
+            } else if (action === 'download') {
+                const link = document.createElement('a');
+                link.href = `${API_BASE_URL}/download-report?path=${encodeURIComponent(currentReportPath)}`;
+                link.download = currentReportPath.split('/').pop();
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                announceToScreenReader('Report download started');
+            }
+
+        } catch (error) {
+            console.error('Error:', error);
+            announceToScreenReader('Error generating report');
+            if (saveAllMessage) {
+                saveAllErrorMsg.textContent = 'Error generating report. Please try again.';
+                saveAllMessage.classList.remove('d-none');
+                setTimeout(() => saveAllMessage.classList.add('d-none'), 3000);
+            }
+        } finally {
+            // Re-enable buttons and restore text
+            if (viewReportBtn) viewReportBtn.disabled = false;
+            if (downloadReportBtn) downloadReportBtn.disabled = false;
+            if (viewReportBtnText) viewReportBtnText.textContent = originalViewText;
+            if (downloadReportBtnText) downloadReportBtnText.textContent = originalDownloadText;
+        }
     }
 
-    // Set up Save All button handler after DOM is loaded
+    // View Report in New Tab
+    function viewReportInNewTab() {
+        saveAndGenerateReport('view');
+    }
+
+    // Download Report
+    function downloadReport() {
+        saveAndGenerateReport('download');
+    }
+
+    // Set up report button handlers after DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
-        const saveAllBtn = document.getElementById('saveAllBtn');
-        if (saveAllBtn) {
-            saveAllBtn.addEventListener('click', saveAllReviewedAltTexts);
+        const viewReportBtn = document.getElementById('viewReportBtn');
+        const downloadReportBtn = document.getElementById('downloadReportBtn');
+
+        if (viewReportBtn) {
+            viewReportBtn.addEventListener('click', viewReportInNewTab);
+        }
+        if (downloadReportBtn) {
+            downloadReportBtn.addEventListener('click', downloadReport);
         }
     });
 

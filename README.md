@@ -125,8 +125,9 @@ docker compose ps
 # API Docs: http://localhost:8000/api/docs
 
 # 5. Stop, build and restart after conf update
-docker stop myaccessibilitybuddy && docker rm myaccessibilitybuddy
-docker compose build myaccessibilitybuddy && docker compose up
+docker compose down
+docker compose build --no-cache myaccessibilitybuddy
+docker compose up -d
 ```
 ## Configuration
 Edit `backend/config/config.json` for basic settings.
@@ -377,5 +378,5 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR I
 ## Project Information
 
 **Created for**: Innovate for Inclusion Hackathon
-**Version**: 1.0.5 (see [CHANGELOG.md](CHANGELOG.md) for details)
+**Version**: 1.0.9 (see [CHANGELOG.md](CHANGELOG.md) for details)
 **Last Updated**: January 2026

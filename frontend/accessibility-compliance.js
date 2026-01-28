@@ -44,6 +44,7 @@
     const resultsSection = document.getElementById('resultsSection');
     const reportSummary = document.getElementById('reportSummary');
     const downloadReportBtn = document.getElementById('downloadReportBtn');
+    const viewReportBtn = document.getElementById('viewReportBtn');
     const screenReaderAnnouncements = document.getElementById('screenReaderAnnouncements');
     const analysisStatus = document.getElementById('analysisStatus');
     const errorMessages = document.getElementById('errorMessages');
@@ -323,6 +324,11 @@
         downloadReportBtn.addEventListener('click', () => {
             console.log('[COMPLIANCE] Download button clicked');
             downloadReport();
+        });
+
+        viewReportBtn.addEventListener('click', () => {
+            console.log('[COMPLIANCE] View report button clicked');
+            viewReportInNewTab();
         });
     }
 
@@ -1065,6 +1071,23 @@
             showError('Failed to download report. Please try again or check the console for details.');
             announceToScreenReader('Error: Failed to download report', true);
         }
+    }
+
+    // View Report in New Tab
+    function viewReportInNewTab() {
+        if (!currentReportPath) {
+            showError('No report available to view. Please run an analysis first.');
+            announceToScreenReader('Error: No report available to view', true);
+            return;
+        }
+
+        console.log('[COMPLIANCE] Viewing report:', currentReportPath);
+
+        const url = `${API_BASE_URL}/view-report?path=${encodeURIComponent(currentReportPath)}`;
+        window.open(url, '_blank');
+
+        announceToScreenReader('Report opened in new tab');
+        console.log('[COMPLIANCE] Report opened in new tab');
     }
 
     // Show Error
