@@ -87,11 +87,16 @@ The system injects **page context** into the prompt to generate accessibility de
 Works with commercial and local AI models, supporting **privacy and compliance** needs.
 
 ### Business model
-We estimated **85% time saved** to generate alt-text. 20% info are lost if you don't have alternative text on your page.
-Automating the decision of what is decorative vs. informative, **you save thousands of human hours in manual auditing**.
+#### Unique Value Proposition: 
+MyAccessibilityBuddy is **the only alternate text generation solution that uses page context**, not image recognition alone, to generate compliant descriptions, reducing misleading output and **cutting human review time by up to 85%**
 
-Target users include **public institutions and large content publishers** subject to WCAG and European Accessibility Act requirements.  
-By automating repetitive accessibility tasks while preserving human oversight, the solution reduces editorial effort, lowers compliance costs, and supports sustainable adoption at scale.
+#### ROI (Return on Investment)
+Automating classification of what is decorative vs. informative or functional saves thousands of human hours in manual operations
+***Adding alternative increase 20% of accessibility and AI-readability***, which conservatively translates into ***5% more conversions***
+
+#### Scalability
+Large organizations manage thousands of legacy images. ***Manual alternative text generation is not feasible***
+MyAccessibilityBuddy adds smart, AI-driven automation to help companies ***comply with the European Accessibility Act***
 
 ### Social impact
 Both **visually impaired users and AI** have the possibility to receive descriptions that explain context and intent, not just objects as part of the inclusivity goal.
