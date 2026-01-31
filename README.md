@@ -60,7 +60,7 @@ This has three important implications:
 ## MyAccessibilityBuddy features
 
 ### Three Main Use Cases
-- 👨‍💼 **[For Webmasters](#for-webmasters-generate-wcag-compliant-alternate-text-for-images)**: Generate WCAG-compliant alt-text for individual images via Web UI or CLI
+- 👨‍💼 **[For Content Creator](#for-content-creator-generate-wcag-compliant-alternate-text-for-images)**: Generate WCAG-compliant alt-text for individual images via Web UI or CLI
 - 🔍 **[For Accessibility Compliance](#for-accessibility-compliance-test-generate-complete-alternative-text-reports-of-web-pages)**: Analyze entire websites and generate comprehensive accessibility reports
 - 🔬 **[For AI Engineers](#for-ai-engineers-batch-prompt-comparison-tool)**: Compare and optimize prompt templates with batch testing tools
 
@@ -142,9 +142,9 @@ Edit `backend/config/config.advanced.json` for advanced settings.
 
 ## Use cases
 
-### For webmasters: generate WCAG compliant alternate text for images
+### For content creator: generate WCAG compliant alternate text for images
 
-Generate compliant alt-text for single images using the web interface or API. Perfect for content creators and webmasters who need quick, accessible descriptions.
+Generate compliant alt-text for single images using the web interface or API. Perfect for content creators who need quick, accessible descriptions.
 
 #### Quick Start
 
